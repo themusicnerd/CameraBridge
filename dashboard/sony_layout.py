@@ -11,7 +11,8 @@ def build(defs):
         node(params,'param',oid=oid,name=oid,type='STRING',value=value,widget=widget,access=0 if oid=='camera' else 1,maxlength=256)
     node(params,'param',oid='speed',type='INT32',value=24,access=1,constrainttype='INT_RANGE',constraint='1;49;')
     for key,p in defs.items():
-        node(params,'param',oid=key,name=p.label,type='INT32',value=p.low,access=0,constrainttype='INT_RANGE',constraint=f'{p.low};{min(p.high,2147483647)};')
+        if key in ('shutter','zoom'):node(params,'param',oid=key,name=p.label,type='STRING',value=str(p.low),access=0,maxlength=32)
+        else:node(params,'param',oid=key,name=p.label,type='INT32',value=p.low,access=0,constrainttype='INT_RANGE',constraint=f'{p.low};{min(p.high,2147483647)};')
         n=script(root,"changed('"+key+"');",'onchange');n.set('oid',key);n.set('element','0')
     node(meta,'timer',id='bridge_tick',rate=200,autostart='true');node(meta,'timertask',timerid='bridge_tick',tasktype='ogscript').text='tick();'
     script(root,"highlightPage('Lens');poll();",'onload');script(root,'stop();','onclose')

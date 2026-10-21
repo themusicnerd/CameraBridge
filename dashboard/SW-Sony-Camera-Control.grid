@@ -15,6 +15,7 @@ var cbLastFeedback = 0;
 var cbHandover = false;
 var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
+var cbConstraints = {};
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -138,11 +139,15 @@ function poll() {
         try {
             for(var key in c.parameters) {
                 var p=c.parameters[key];
+                if(CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported &amp;&amp; p.low&lt;=p.high) {
+                    var range=String(p.low)+';'+String(p.high)+';';
+                    if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
+                }
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
-                    params.setAccess(key,1);params.setValue(key,0,p.value);
+                    params.setAccess(key,1);params.setValue(key,0,CB_MANUFACTURER=='Sony' &amp;&amp; (key=='shutter'||key=='zoom')?String(p.value):p.value);
                 }
                 var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed' &amp;&amp; p.writable!==false;
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
@@ -174,9 +179,9 @@ function tick() {
       <param oid="red_gain" name="Red gain (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
       <param oid="blue_gain" name="Blue gain (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
       <param oid="gain" name="Gain dB (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
-      <param oid="shutter" name="Shutter speed (Sony native)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;2147483647;" />
+      <param oid="shutter" name="Shutter speed (Sony native)" type="STRING" value="0" access="0" maxlength="32" />
       <param oid="colour_temperature" name="White balance temperature" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;65535;" />
-      <param oid="zoom" name="Zoom scale (readback)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;2147483647;" />
+      <param oid="zoom" name="Zoom scale (readback)" type="STRING" value="0" access="0" maxlength="32" />
     </params>
     <timer id="bridge_tick" rate="200" autostart="true" />
     <timertask timerid="bridge_tick" tasktype="ogscript">tick();</timertask>

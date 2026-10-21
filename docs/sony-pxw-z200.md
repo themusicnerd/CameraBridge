@@ -40,6 +40,7 @@ Available controls include iris mode, focus mode, white balance mode, red gain, 
 The SDK reports each property's current value, available values and write permission.
 The web interface uses these values for its controls.
 Native fader requests snap to an available camera value.
+Native fader limits follow the SDK's available range.
 Unavailable controls remain read-only.
 Camera mode can restrict a normally supported control.
 

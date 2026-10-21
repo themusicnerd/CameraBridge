@@ -22,6 +22,7 @@ var cbLastFeedback = 0;
 var cbHandover = false;
 var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
+var cbConstraints = {};
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 && new Date().getTime()<cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -145,11 +146,15 @@ function poll() {
         try {
             for(var key in c.parameters) {
                 var p=c.parameters[key];
+                if(CB_MANUFACTURER=='Sony' && key!='shutter' && key!='zoom' && p.supported && p.low<=p.high) {
+                    var range=String(p.low)+';'+String(p.high)+';';
+                    if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
+                }
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' && !cbPending.hasOwnProperty(key) && (!cbEdit[key] || new Date().getTime()-cbEdit[key]>1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
-                    params.setAccess(key,1);params.setValue(key,0,p.value);
+                    params.setAccess(key,1);params.setValue(key,0,CB_MANUFACTURER=='Sony' && (key=='shutter'||key=='zoom')?String(p.value):p.value);
                 }
                 var enabled=!!cbToken && !c.locked && p.confirmation=='confirmed' && p.writable!==false;
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled && m && m.confirmation=='confirmed' && (','+pair[1]+',').indexOf(','+m.value+',')>=0;}
