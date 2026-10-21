@@ -6,6 +6,8 @@ Use Python 3.11+ and run from the project directory. There are no third-party pa
 
 The development service may already be running in this chat at <http://127.0.0.1:8088>. Create a user in a separate terminal if needed. A second server instance will fail to bind rather than take over existing listeners. Ctrl+C stops the foreground service and attempts camera neutral commands. No Windows service, scheduled task or startup entry is installed automatically.
 
+Use `--lab --visca-lab` to include the local TCP controller endpoints on 19010/19011. Remote simulator preset stores additionally require `--visca-allow-store`. The Windows launcher enables the VISCA lab but leaves remote stores disabled by default. Regenerate the native panels with `python dashboard/build_panels.py` after moving the project so manufacturer-logo URLs are valid at the new location. See `ross-lab-protocol.md` for the end-to-end controller demonstration.
+
 ## Generic x86-64 Linux
 
 Check `uname -m`, `python3 --version`, storage, user permissions, loopback and listening ports. Copy source to an approved user-owned directory, e.g. `~/camerabridge`. Create private configuration and runtime directories:

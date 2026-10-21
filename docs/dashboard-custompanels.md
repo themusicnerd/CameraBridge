@@ -12,6 +12,8 @@ Unknown or mode-inapplicable parameters are read-only. Communication failures an
 
 The Panasonic UI has 20 preset buttons and a one-shot overwrite confirmation. PTZ button press requests one bounded jog and release/mouse-exit requests stop; holding a button does not renew forever. This deliberately limits a lost-release event. Long continuous positioner integration is separate and pending.
 
+The Aura redesign adds native page navigation, a camera rail, vertical lens/paint strips, manufacturer artwork, persistent shot names and a separate TD1C integration page. It uses a large eight-direction touch pad, with an explicit touch-enable control. Camera selection waits for the old stop request before applying the new target. See `aura-design.md`; regenerate panels after moving the directory to update logo URLs.
+
 ## Acceptance checklist
 
 1. Open each file in installed DashBoard; inspect the debug pane for XML and script errors.

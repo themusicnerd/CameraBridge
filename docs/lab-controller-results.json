@@ -1,0 +1,228 @@
+{
+  "scope": "Local software lab only; no physical Ross/camera validation",
+  "result": "PASS: raw TCP controller demo with intentional simulator preset store enabled",
+  "ross": {
+    "state": "LAB VISCA/TCP \u2014 hardware unverified",
+    "preset_follow": "simulator input only",
+    "selected": "pana2",
+    "selection_epoch": 2,
+    "neutral_ready": false
+  },
+  "cameras": [
+    {
+      "id": "pana1",
+      "health": "simulated",
+      "moving": false
+    },
+    {
+      "id": "pana2",
+      "health": "simulated",
+      "moving": false
+    },
+    {
+      "id": "marshall1",
+      "health": "simulated",
+      "moving": false
+    }
+  ],
+  "events": [
+    {
+      "time": 1792569164.6677823,
+      "camera": "pana1",
+      "kind": "lab-preset-selection",
+      "previous": null,
+      "epoch": 1
+    },
+    {
+      "time": 1792569164.678724,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 06 01 01 01 03 03 ff"
+    },
+    {
+      "time": 1792569164.6896942,
+      "camera": "pana1",
+      "kind": "visca-lab-accepted",
+      "command": "pan_tilt"
+    },
+    {
+      "time": 1792569164.6896942,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 04 07 00 ff"
+    },
+    {
+      "time": 1792569164.83125,
+      "camera": "pana1",
+      "kind": "visca-lab-accepted",
+      "command": "zoom"
+    },
+    {
+      "time": 1792569164.83125,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 06 01 08 06 02 01 ff"
+    },
+    {
+      "time": 1792569164.9619634,
+      "camera": "pana1",
+      "kind": "visca-lab-accepted",
+      "command": "pan_tilt"
+    },
+    {
+      "time": 1792569164.962961,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 04 07 22 ff"
+    },
+    {
+      "time": 1792569165.0946434,
+      "camera": "pana1",
+      "kind": "visca-lab-accepted",
+      "command": "zoom"
+    },
+    {
+      "time": 1792569165.5160222,
+      "camera": "pana1",
+      "kind": "stop"
+    },
+    {
+      "time": 1792569165.5160222,
+      "camera": "pana2",
+      "kind": "lab-preset-selection",
+      "previous": "pana1",
+      "epoch": 2
+    },
+    {
+      "time": 1792569165.51702,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 04 07 27 ff"
+    },
+    {
+      "time": 1792569165.5279903,
+      "camera": "pana2",
+      "kind": "visca-rx",
+      "hex": "81 01 06 01 01 01 03 03 ff"
+    },
+    {
+      "time": 1792569165.5279903,
+      "camera": "pana2",
+      "kind": "visca-lab-accepted",
+      "command": "pan_tilt"
+    },
+    {
+      "time": 1792569165.5279903,
+      "camera": "pana2",
+      "kind": "visca-rx",
+      "hex": "81 01 04 07 00 ff"
+    },
+    {
+      "time": 1792569165.659641,
+      "camera": "pana2",
+      "kind": "visca-lab-accepted",
+      "command": "zoom"
+    },
+    {
+      "time": 1792569165.6606753,
+      "camera": "pana2",
+      "kind": "visca-rx",
+      "hex": "81 01 06 01 08 06 01 02 ff"
+    },
+    {
+      "time": 1792569165.7917142,
+      "camera": "pana2",
+      "kind": "visca-lab-accepted",
+      "command": "pan_tilt"
+    },
+    {
+      "time": 1792569165.7917142,
+      "camera": "pana2",
+      "kind": "visca-rx",
+      "hex": "81 01 04 07 32 ff"
+    },
+    {
+      "time": 1792569165.9219537,
+      "camera": "pana2",
+      "kind": "visca-lab-accepted",
+      "command": "zoom"
+    },
+    {
+      "time": 1792569165.9219537,
+      "camera": "pana2",
+      "kind": "visca-rx",
+      "hex": "81 01 06 01 01 01 03 03 ff"
+    },
+    {
+      "time": 1792569166.0531514,
+      "camera": "pana2",
+      "kind": "visca-lab-accepted",
+      "command": "pan_tilt"
+    },
+    {
+      "time": 1792569166.0531514,
+      "camera": "pana2",
+      "kind": "visca-rx",
+      "hex": "81 01 04 07 00 ff"
+    },
+    {
+      "time": 1792569166.1845627,
+      "camera": "pana2",
+      "kind": "visca-lab-accepted",
+      "command": "zoom"
+    },
+    {
+      "time": 1792569166.1845627,
+      "camera": "pana2",
+      "kind": "visca-rx",
+      "hex": "81 01 04 3f 01 13 ff"
+    },
+    {
+      "time": 1792569166.5780778,
+      "camera": "pana2",
+      "kind": "stop"
+    },
+    {
+      "time": 1792569166.7097256,
+      "camera": "pana2",
+      "kind": "preset",
+      "number": 20,
+      "store": true
+    },
+    {
+      "time": 1792569166.7097256,
+      "camera": "pana2",
+      "kind": "visca-lab-accepted",
+      "command": "preset"
+    },
+    {
+      "time": 1792569166.710734,
+      "camera": "pana2",
+      "kind": "visca-rx",
+      "hex": "81 01 04 3f 02 13 ff"
+    },
+    {
+      "time": 1792569167.1044664,
+      "camera": "pana2",
+      "kind": "stop"
+    },
+    {
+      "time": 1792569167.2361147,
+      "camera": "pana2",
+      "kind": "preset",
+      "number": 20,
+      "store": false
+    },
+    {
+      "time": 1792569167.2361147,
+      "camera": "pana2",
+      "kind": "visca-lab-accepted",
+      "command": "preset"
+    },
+    {
+      "time": 1792569167.6301517,
+      "camera": "pana2",
+      "kind": "stop"
+    }
+  ]
+}

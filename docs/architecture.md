@@ -18,4 +18,6 @@ One shared `SerialBus` instance is required per physical RS485 bus. Its lock cov
 
 The service uses only the Python standard library. Python was chosen for protocol work, portability and zero downloaded application dependencies. Go is attractive for a single executable and predictable deployment; no CPU/RAM comparison has yet been measured. Porting a tested protocol core is preferable to presenting estimated resource usage as measurements. The supplied Linux unit limits CPU/RAM; these are policy settings, not measured consumption.
 
+An optional lab-only serial VISCA/TCP ingress now shares the Engine and a PresetFollower. Its separate reader/consumer paths bound and coalesce movement traffic, reject stale frames and preserve command barriers. The follower fences selection epochs and requires fresh neutral input after handover/stop. Its bus inputs are authenticated simulator events, not inferred switcher state. Production targets and non-loopback listeners are rejected.
+
 Current limitations: the stdlib HTTP server is a local engineering service, not an internet-facing hardened server; no WebSocket transport; no applied live configuration reload; diagnostic events are bounded in memory; exhaustive lifecycle/fault tests remain outstanding. Use a trusted management network and an HTTPS reverse proxy for remote operation.

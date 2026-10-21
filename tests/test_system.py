@@ -142,6 +142,23 @@ class IntegrationTests(unittest.TestCase):
         finally:api.shutdown();api.server_close()
 
 class PanelTests(unittest.TestCase):
+    def test_aura_pages_logos_and_no_overflow(self):
+        from urllib.parse import urlparse
+        from urllib.request import url2pathname
+        for manufacturer in ('Panasonic','Marshall'):
+            root=ET.parse(ROOT/'dashboard'/f'SW-{manufacturer}-Camera-Control.grid').getroot()
+            logo=root.find('.//image');self.assertIsNotNone(logo)
+            self.assertEqual(pathlib.Path(url2pathname(urlparse(logo.get('src')).path)).name,manufacturer.lower()+'.png')
+            self.assertTrue(pathlib.Path(url2pathname(urlparse(logo.get('src')).path)).is_file())
+            for parent in root.iter('abs'):
+                width=int(parent.get('width','1366'));height=int(parent.get('height','800'))
+                for child in parent:
+                    if child.get('left') is not None and child.get('width') is not None:
+                        self.assertLessEqual(int(child.get('left'))+int(child.get('width')),width)
+                    if child.get('top') is not None and child.get('height') is not None:
+                        self.assertLessEqual(int(child.get('top'))+int(child.get('height')),height)
+            self.assertIsNotNone(root.find(".//abs[@id='page_config']"))
+            if manufacturer=='Panasonic':self.assertIsNotNone(root.find(".//abs[@id='page_td1c']"))
     def test_two_native_panels_contract(self):
         for manufacturer in ('Panasonic','Marshall'):
             tree=ET.parse(ROOT/'dashboard'/f'SW-{manufacturer}-Camera-Control.grid');root=tree.getroot()

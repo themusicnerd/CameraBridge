@@ -18,6 +18,7 @@ const decode = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g
       console,JSON,Date,Math,String,Number,encodeURIComponent,
       params:{getValue:(k)=>values[k],setValue:(k,i,v)=>{values[k]=v;},setAccess:()=>{}},
       ogscript:{
+        setStyle:(id,style)=>{assert.ok(elements.has(id),`missing style target ${id}`);},
         rename:(id,text)=>{assert.ok(elements.has(id),`missing UI id ${id}`);labels[id]=text;},
         asyncPost:(url,body,callback)=>{
           const task=fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body}).then(r=>r.text()).then(callback);
@@ -26,6 +27,7 @@ const decode = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g
       }
     });
     new vm.Script(api,{filename:manufacturer+'.api'}).runInContext(context);
+    vm.runInContext("highlightPage(CB_MANUFACTURER==='Panasonic'?'PTZ':'Paint');",context);
     let count=0;
     for(const match of xml.matchAll(/<(?:ogscript|task|timertask)\b[^>]*>([\s\S]*?)<\/(?:ogscript|task|timertask)>/g)){
       new vm.Script(decode(match[1]),{filename:manufacturer+'.handler'+count});count++;

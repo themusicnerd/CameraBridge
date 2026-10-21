@@ -4,7 +4,9 @@ All write/control APIs require an authenticated session. Users are provisioned i
 
 Operator/admin roles are enforced for configuration and lockout. Trusted management CIDRs are checked before API dispatch. Cookies are not used; bearer tokens or explicitly supplied ogScript session tokens are required. Cross-origin requests are rejected. Browser login tokens are not stored in localStorage. Responses are no-store and anti-framing headers are set. Login attempts are rate limited per client address. HTTP requests have bounded body size, socket timeouts and a 24-thread limit.
 
-LAB allows unauthenticated **read-only state** only from loopback. Every control still requires login. CGI simulators are intentionally unauthenticated loopback-only services and contain no real credentials. Lab mode refuses non-loopback binding and non-simulated cameras.
+LAB allows unauthenticated **read-only state** only from loopback. Every REST/ogScript control still requires login. CGI simulators are intentionally unauthenticated loopback-only services and contain no real credentials. Lab mode refuses non-loopback binding and non-simulated cameras.
+
+The explicitly enabled lab serial-VISCA/TCP listeners implement a protocol with no user-login field. They are isolated loopback test ingress, accept simulated Panasonic targets only and are never exposed as the authenticated REST API. Remote preset stores require an additional startup flag. Simulator bus-selection and service-stop API endpoints still require an administrator session. A future hardware listener needs separately reviewed management-host restrictions and protocol acceptance; it is not enabled here.
 
 No request bodies, Authorization headers or camera credentials are logged. Diagnostic events contain parameter IDs/values and generic exception class names. The diagnostics download omits the user database and sessions. Process discovery records executable names rather than full arguments. Configuration currently has no camera credential fields or authenticated-camera support; do not put passwords into host URLs.
 

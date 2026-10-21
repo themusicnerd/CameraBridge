@@ -46,6 +46,9 @@ class Engine:
         self.events=collections.deque(maxlen=500)
         self.revision=0
         self.threads=[]
+        self.ross_status={'state':'unverified','preset_follow':'not connected'}
+        names_path=self.storage/'preset-names.json'
+        self.preset_names=json.loads(names_path.read_text()) if names_path.exists() else {}
         for c in configuration['cameras']:
             if not c.get('enabled',True):continue
             lab=c['driver']=='marshall-lab'
@@ -80,9 +83,9 @@ class Engine:
                     status='stale' if age is not None and age>max(10,self.config.get('poll_seconds',4)*3) and v['confirmation']=='confirmed' else v['confirmation']
                     parameters[key]=dict(c['defs'][key].metadata(),**v)
                     parameters[key].update(confirmation=status,age_seconds=age)
-                result.append(dict(c['config'],parameters=parameters,health=c['health'],error=c['error'],locked=c['locked'],
+                result.append(dict(c['config'],parameters=parameters,preset_names=dict(self.preset_names.get(cid,{})),health=c['health'],error=c['error'],locked=c['locked'],
                     owner=c['owner'] if c['lease_until']>time.monotonic() else None,generation=c['generation'],moving=c['moving'],active_preset=c['active_preset']))
-            return {'revision':self.revision,'time':now,'cameras':result,'ross':{'state':'unverified','preset_follow':'not connected'},'events':list(self.events)}
+            return {'revision':self.revision,'time':now,'cameras':result,'ross':dict(self.ross_status),'events':list(self.events)}
 
     def claim(self,c,owner):
         if not isinstance(owner,str) or not 1<=len(owner)<=100:raise ValueError('Invalid owner')
@@ -104,6 +107,16 @@ class Engine:
             return {'locked':c['locked']}
         with self.lock:
             self.claim(c,owner)
+            if action=='label_preset':
+                from .protocol import preset
+                preset(data['number'])
+                name=data['name']
+                if not isinstance(name,str) or not 1<=len(name)<=80:raise ValueError('Shot name must contain 1..80 characters')
+                self.preset_names.setdefault(cid,{})[str(data['number'])]=name
+                target=self.storage/'preset-names.json';temporary=target.with_suffix('.tmp')
+                temporary.write_text(json.dumps(self.preset_names,indent=2));temporary.replace(target)
+                self.event(cid,'shot-name',number=data['number'])
+                return {'status':'name saved'}
             if action=='write':
                 key=data['parameter'];value=c['defs'][key].validate(data['value'])
                 self.check_mode(c,key)

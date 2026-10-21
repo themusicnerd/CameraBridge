@@ -156,6 +156,14 @@ class Handler(BaseHTTPRequestHandler):
                 if data['action']=='lock' and role!='admin':raise PermissionError('Administrator required for lockout')
                 # Ownership is bound to the authenticated session, never a client supplied owner.
                 self.send(self.server.engine.command(data['camera'],data['action'],data.get('data',{}),token[:24]));return
+            if path=='/api/lab/ross/bus':
+                if not self.server.lab or role!='admin' or not hasattr(self.server.engine,'ross_follower'):
+                    raise PermissionError('Enabled VISCA lab and administrator required')
+                self.send(self.server.engine.ross_follower.bus_event(data['bus'],data['camera']));return
+            if path=='/api/service/stop':
+                if not self.server.lab or role!='admin':raise PermissionError('Local laboratory administrator required')
+                self.send({'status':'lab service stopping'})
+                threading.Thread(target=self.server.shutdown,daemon=True).start();return
             if path=='/api/logout':
                 with self.server.auth.lock:self.server.auth.sessions.pop(token,None)
                 self.send({'status':'logged out'});return
@@ -172,7 +180,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--config',default=str(ROOT/'config.example.json'));p.add_argument('--storage',default=str(ROOT/'runtime'))
-    p.add_argument('--lab',action='store_true');p.add_argument('--init-user');p.add_argument('--ensure-admin',action='store_true');p.add_argument('--role',choices=['admin','operator'],default='admin');a=p.parse_args()
+    p.add_argument('--lab',action='store_true');p.add_argument('--visca-lab',action='store_true');p.add_argument('--visca-allow-store',action='store_true')
+    p.add_argument('--init-user');p.add_argument('--ensure-admin',action='store_true');p.add_argument('--role',choices=['admin','operator'],default='admin');a=p.parse_args()
+    if a.visca_lab and not a.lab:p.error('--visca-lab requires --lab; physical gateway acceptance is pending')
+    if a.visca_allow_store and not a.visca_lab:p.error('--visca-allow-store requires --visca-lab')
     storage=pathlib.Path(a.storage);storage.mkdir(parents=True,exist_ok=True)
     auth=Auth(storage/'credentials.sqlite')
     if a.ensure_admin:
@@ -191,10 +202,19 @@ def main():
             if c['driver']=='panasonic':
                 sim=server(port=c['port']);threading.Thread(target=sim.serve_forever,daemon=True).start();simulators.append(sim)
     engine=Engine(config,storage);service=Server((config.get('bind','127.0.0.1'),config.get('port',8088)),engine,auth,a.lab)
-    engine.start();print(f'CameraBridge: http://{service.server_address[0]}:{service.server_address[1]} (LAB={a.lab})',flush=True)
+    engine.start();gateways=[]
+    if a.visca_lab:
+        from .ross import PresetFollower,LabViscaServer
+        engine.ross_follower=PresetFollower(engine)
+        for i,c in enumerate(c for c in config['cameras'] if c.get('enabled',True) and c['manufacturer']=='Panasonic'):
+            gateway=LabViscaServer(('127.0.0.1',19010+i),engine,c['id'],engine.ross_follower,a.visca_allow_store)
+            threading.Thread(target=gateway.serve_forever,daemon=True).start();gateways.append(gateway)
+            print(f'LAB serial VISCA/TCP: {gateway.server_address[0]}:{gateway.server_address[1]} -> {c["id"]}',flush=True)
+    print(f'CameraBridge: http://{service.server_address[0]}:{service.server_address[1]} (LAB={a.lab})',flush=True)
     try:service.serve_forever(poll_interval=.2)
     except KeyboardInterrupt:pass
     finally:
+        for gateway in gateways:gateway.shutdown();gateway.server_close()
         engine.close();service.server_close()
         for sim in simulators:sim.shutdown();sim.server_close()
 

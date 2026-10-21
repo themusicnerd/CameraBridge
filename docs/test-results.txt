@@ -1,3 +1,10 @@
+test_fragmented_tcp_preset_focus_and_disconnect_stop (tests.test_ross.RossLabTests.test_fragmented_tcp_preset_focus_and_disconnect_stop) ... ok
+test_gateway_close_drains_and_stops_active_controller (tests.test_ross.RossLabTests.test_gateway_close_drains_and_stops_active_controller) ... ok
+test_hardware_and_nonloopback_are_rejected (tests.test_ross.RossLabTests.test_hardware_and_nonloopback_are_rejected) ... ok
+test_preset_name_persists (tests.test_ross.RossLabTests.test_preset_name_persists) ... ok
+test_preset_only_handover_and_stale_motion (tests.test_ross.RossLabTests.test_preset_only_handover_and_stale_motion) ... ok
+test_direction_speed_and_preset_index (tests.test_ross.ViscaCodecTests.test_direction_speed_and_preset_index) ... ok
+test_reject_unsupported_or_malformed (tests.test_ross.ViscaCodecTests.test_reject_unsupported_or_malformed) ... ok
 test_auth_api_and_csrf (tests.test_system.IntegrationTests.test_auth_api_and_csrf) ... ok
 test_feedback_age_is_not_live (tests.test_system.IntegrationTests.test_feedback_age_is_not_live) ... ok
 test_http_readback_and_external_change (tests.test_system.IntegrationTests.test_http_readback_and_external_change) ... ok
@@ -8,6 +15,7 @@ test_snapshot_excludes_unknown (tests.test_system.IntegrationTests.test_snapshot
 test_stop_discards_queued_motion (tests.test_system.IntegrationTests.test_stop_discards_queued_motion) ... ok
 test_watchdog_stops_without_ui (tests.test_system.IntegrationTests.test_watchdog_stops_without_ui) ... ok
 test_wb_query_mapping (tests.test_system.IntegrationTests.test_wb_query_mapping) ... ok
+test_aura_pages_logos_and_no_overflow (tests.test_system.PanelTests.test_aura_pages_logos_and_no_overflow) ... ok
 test_two_native_panels_contract (tests.test_system.PanelTests.test_two_native_panels_contract) ... ok
 test_config_validation (tests.test_system.ProtocolTests.test_config_validation) ... ok
 test_directions_and_neutral (tests.test_system.ProtocolTests.test_directions_and_neutral) ... ok
@@ -19,6 +27,6 @@ test_preset_and_ranges (tests.test_system.ProtocolTests.test_preset_and_ranges) 
 test_secret_config_rejected (tests.test_system.ProtocolTests.test_secret_config_rejected) ... ok
 
 ----------------------------------------------------------------------
-Ran 19 tests in 27.613s
+Ran 27 tests in 42.877s
 
 OK
