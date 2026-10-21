@@ -50,19 +50,19 @@ Do not move the executable alone.
 Windows hash command:
 
 ```powershell
-Get-FileHash .\CameraBridge-0.2.0rc2-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\CameraBridge-0.2.0rc3-windows-x64.zip -Algorithm SHA256
 ```
 
 Linux hash command:
 
 ```sh
-sha256sum CameraBridge-0.2.0rc2-linux-x64.tar.gz
+sha256sum CameraBridge-0.2.0rc3-linux-x64.tar.gz
 ```
 
 macOS hash command:
 
 ```sh
-shasum -a 256 CameraBridge-0.2.0rc2-macos-arm64.tar.gz
+shasum -a 256 CameraBridge-0.2.0rc3-macos-arm64.tar.gz
 ```
 
 Select the Intel archive name if the Mac has an Intel processor.

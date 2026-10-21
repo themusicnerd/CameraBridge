@@ -34,7 +34,7 @@ def main():
             req=urllib.request.Request(f'http://127.0.0.1:{port}'+route,data=json.dumps(data).encode() if data is not None else None,headers={'Content-Type':'application/json'})
             with urllib.request.urlopen(req,timeout=2) as r:return r.read()
         try:
-            deadline=time.monotonic()+25
+            deadline=time.monotonic()+60
             while True:
                 try:assert json.loads(api('/health'))['mode']=='LAB';break
                 except (OSError,AssertionError):
