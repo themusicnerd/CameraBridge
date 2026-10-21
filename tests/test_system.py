@@ -11,7 +11,7 @@ from backend.protocol import PANASONIC,movement,preset
 from backend.drivers import Panasonic,Marshall,SerialBus
 from backend.simulator import server as simulator
 from backend.core import Engine
-from backend.server import Auth,Server,validate_config,ROOT
+from backend.server import Auth,Server,validate_config,ROOT,provision_user
 
 def wait_for(predicate,timeout=5):
     deadline=time.monotonic()+timeout
@@ -21,6 +21,20 @@ def wait_for(predicate,timeout=5):
     raise AssertionError('Timed out waiting for expected state')
 
 class ProtocolTests(unittest.TestCase):
+    def test_interactive_provisioning_retries_without_exposing_password(self):
+        from unittest.mock import patch
+        from contextlib import redirect_stdout
+        from io import StringIO
+        with tempfile.TemporaryDirectory() as directory:
+            auth=Auth(pathlib.Path(directory)/'auth.sqlite')
+            output=StringIO()
+            with patch('backend.server.getpass.getpass',side_effect=['','a','b','password','password']),redirect_stdout(output):
+                provision_user(auth,'test','admin')
+            self.assertIn('cannot be empty',output.getvalue())
+            self.assertIn('passwords differ',output.getvalue())
+            self.assertIn('SUCCESS',output.getvalue())
+            self.assertNotIn('New password: password',output.getvalue())
+            self.assertEqual(auth.login('test','password','test-client')[1],'admin')
     def test_directions_and_neutral(self):
         self.assertEqual(movement(-49,49,1,-1),['#PTS0199','#Z51','#F49'])
         self.assertEqual(movement(),['#PTS5050','#Z50','#F50'])

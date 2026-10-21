@@ -23,7 +23,7 @@ class Auth:
         with closing(sqlite3.connect(path)) as db, db:db.execute('CREATE TABLE IF NOT EXISTS users (name TEXT PRIMARY KEY,salt BLOB,hash BLOB,role TEXT)')
         self.sessions={};self.failures={};self.lock=threading.Lock()
     def add(self,name,password,role):
-        if len(password)<12:raise ValueError('Use at least 12 characters')
+        if not isinstance(password,str) or not password:raise ValueError('Password cannot be empty')
         if role not in ('operator','admin'):raise ValueError('Invalid role')
         salt=secrets.token_bytes(16);digest=hashlib.pbkdf2_hmac('sha256',password.encode(),salt,250000)
         with closing(sqlite3.connect(self.path)) as db, db:db.execute('INSERT OR REPLACE INTO users VALUES(?,?,?,?)',(name,salt,digest,role))
@@ -42,6 +42,22 @@ class Auth:
     def role(self,token):
         with self.lock:entry=self.sessions.get(token)
         return entry[0] if entry and entry[1]>time.monotonic() else None
+
+def provision_user(auth,name,role):
+    """Interactive provisioning: show validation failures without exposing input."""
+    print('Create CameraBridge account: '+name+' ('+role+')',flush=True)
+    print('Choose a non-empty password. Input is hidden. Repeat the same password.',flush=True)
+    while True:
+        password=getpass.getpass('New password: ')
+        if not password:
+            print('Not saved: password cannot be empty. Try again.',flush=True)
+            continue
+        if password!=getpass.getpass('Repeat password: '):
+            print('Not saved: passwords differ. Try again.',flush=True)
+            continue
+        auth.add(name,password,role)
+        print('SUCCESS: account saved as a salted password hash.',flush=True)
+        return
 
 def validate_config(c):
     if not isinstance(c,dict) or not isinstance(c.get('cameras'),list):raise ValueError('Missing cameras')
@@ -162,13 +178,9 @@ def main():
     if a.ensure_admin:
         with closing(sqlite3.connect(auth.path)) as db:has_users=db.execute('SELECT COUNT(*) FROM users').fetchone()[0]>0
         if not has_users:
-            password=getpass.getpass('Create CameraBridge admin password (12+ characters): ')
-            if password!=getpass.getpass('Repeat password: '):raise SystemExit('Passwords differ')
-            auth.add('admin',password,'admin')
+            provision_user(auth,'admin','admin')
     if a.init_user:
-        password=getpass.getpass('New CameraBridge password (12+ characters): ')
-        if password!=getpass.getpass('Repeat password: '):raise SystemExit('Passwords differ')
-        auth.add(a.init_user,password,a.role);print('User stored as salted password hash.');return
+        provision_user(auth,a.init_user,a.role);return
     config=validate_config(json.loads(pathlib.Path(a.config).read_text(encoding='utf-8')))
     if a.lab and (not ipaddress.ip_address(config['bind']).is_loopback or any(not c.get('simulator') for c in config['cameras'])):
         raise SystemExit('LAB requires loopback binding and simulator cameras only')

@@ -15,7 +15,7 @@ python -m backend.server --init-user admin
 python -m backend.server --lab
 ```
 
-The first command prompts for a password and stores only a salted PBKDF2 hash. Run it while the service is running if an account has not yet been created. Passwords must be at least 12 characters. An additional operator account can be created with `--init-user operator --role operator`.
+The first command prompts for a password and stores only a salted PBKDF2 hash. Run it while the service is running if an account has not yet been created. Non-empty passwords are accepted; there is no minimum length requirement. An additional operator account can be created with `--init-user operator --role operator`.
 
 Open <http://127.0.0.1:8088>. The service starts two independent Panasonic CGI emulators (18080 and 18081) plus an explicitly synthetic Marshall lab model. Check those ports are free first. All lab listeners bind to loopback.
 
@@ -46,4 +46,4 @@ python tools/host_diagnostic.py --output host-report.json
 
 See `docs/feature-matrix.md` for implementation and hardware-validation status, `docs/dashboard-custompanels.md` for panel acceptance, and `docs/installation.md` for deployment and rollback.
 
-Both panels load in local DashBoard 9.15.2. Instrumented copies confirmed recurring native timer requests and successful feedback callbacks after updating native parameter/label values. Visual layout, touch operation and authenticated controls remain pending: the Windows screenshot helper times out, and the local admin password has not yet been provisioned. See `docs/native-dashboard-validation.md` for the evidence and its limits.
+Both panels load in local DashBoard 9.15.2. Instrumented copies confirmed recurring native timer requests and successful feedback callbacks after updating native parameter/label values. The development admin account is provisioned and live backend login is verified. Visual layout, touch operation and authenticated native controls remain pending because the Windows screenshot helper times out. See `docs/native-dashboard-validation.md` for the evidence and its limits.

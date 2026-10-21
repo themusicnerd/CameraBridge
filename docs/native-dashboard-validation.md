@@ -31,7 +31,7 @@ The success paths occurred repeatedly. The accessibility tree also identified th
 ## Still pending
 
 - Visual layout, clipping, touchscreen hit targets and actual TD1C scaling. Window capture continues to fail with `FrameArrived timed out: timed out waiting on channel`.
-- Manual sign-in and authenticated native controls. Account count was zero at the last check; a local password prompt has been opened for the operator.
+- Manual sign-in and authenticated native controls. The development administrator account has since been provisioned with the operator's chosen password. Live backend login is verified; native UI interaction remains pending.
 - Motion/preset safety through real native interaction, real-camera control, exact Marshall serial protocols, and Carbonite/Preset-bus delegation.
 
 The temporary probe files and observer are development intermediates under `work/`, not shipped panels or production dependencies. Their success does not change the unverified hardware status in the feature matrix.

@@ -37,7 +37,7 @@ Status meanings: **tested** = exercised by local automated tests, **hardware pen
 
 ## Test evidence
 
-`python -m unittest discover -v`: 18 tests passed in 27.383 seconds on bundled Python 3.12.14, Windows AMD64, 21 October 2026. Tests use emulators, not physical cameras. There are no manufacturer hardware captures in the fixtures directory; the Panasonic fixture is explicitly labelled manufacturer-documented examples.
+`python -m unittest discover -v`: 19 tests passed in 27.613 seconds on bundled Python 3.12.14, Windows AMD64, 21 October 2026. This includes interactive account-provisioning retries and acceptance of non-empty short development passwords. Tests use emulators, not physical cameras. There are no manufacturer hardware captures in the fixtures directory; the Panasonic fixture is explicitly labelled manufacturer-documented examples.
 
 `node tests/panel_smoke.cjs`: Panasonic's 85 handlers and Marshall's 49 handlers parse in V8, and each generated panel API retrieves live lab state and updates its expected parameter/label IDs. This caught and corrected missing zoom/focus feedback labels. It does not establish Rhino or native rendering compatibility. See `test-results.txt` for the final test run.
 

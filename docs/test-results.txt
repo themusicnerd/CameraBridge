@@ -12,20 +12,13 @@ test_two_native_panels_contract (tests.test_system.PanelTests.test_two_native_pa
 test_config_validation (tests.test_system.ProtocolTests.test_config_validation) ... ok
 test_directions_and_neutral (tests.test_system.ProtocolTests.test_directions_and_neutral) ... ok
 test_documented_fixtures (tests.test_system.ProtocolTests.test_documented_fixtures) ... ok
+test_interactive_provisioning_retries_without_exposing_password (tests.test_system.ProtocolTests.test_interactive_provisioning_retries_without_exposing_password) ... ok
 test_malformed_readback (tests.test_system.ProtocolTests.test_malformed_readback) ... ok
 test_marshall_fail_closed (tests.test_system.ProtocolTests.test_marshall_fail_closed) ... ok
 test_preset_and_ranges (tests.test_system.ProtocolTests.test_preset_and_ranges) ... ok
 test_secret_config_rejected (tests.test_system.ProtocolTests.test_secret_config_rejected) ... ok
 
 ----------------------------------------------------------------------
-Ran 18 tests in 27.231s
-
-OK
-
-Native POST compatibility recheck:
-test_auth_api_and_csrf (tests.test_system.IntegrationTests.test_auth_api_and_csrf) ... ok
-
-----------------------------------------------------------------------
-Ran 1 test in 2.823s
+Ran 19 tests in 27.613s
 
 OK
