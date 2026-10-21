@@ -1,5 +1,7 @@
 name: Check desktop startup
 on:
+  push:
+    paths: ['.github/workflows/desktop-check.yml', 'tools/smoke_tray.py']
   workflow_dispatch:
     inputs:
       runner:
@@ -11,7 +13,7 @@ permissions:
   contents: read
 jobs:
   desktop:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
