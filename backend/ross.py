@@ -16,6 +16,10 @@ class ViscaError(ValueError):
     def __init__(self,message,code=0x02):super().__init__(message);self.code=code
 
 def decode(frame):
+    # Sony serial VISCA network administration, one virtual camera per endpoint.
+    if frame==bytes.fromhex('88 30 01 FF'):return 'address_set',{}
+    if frame in (bytes.fromhex('88 01 00 01 FF'),bytes.fromhex('81 01 00 01 FF')):
+        return 'interface_clear',{'broadcast':frame[0]==0x88}
     if len(frame)<4 or len(frame)>16 or frame[0]!=0x81 or frame[-1]!=0xff:
         raise ViscaError('Only address1 serial VISCA frames are supported')
     body=frame[1:-1]
@@ -173,6 +177,13 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                 self.server.engine.event(self.server.camera,'visca-rx',hex=frame.hex(' '))
                 try:
                     if kind=='invalid':raise ViscaError('Invalid frame')
+                    if kind=='address_set':
+                        self.request.sendall(bytes.fromhex('88 30 02 FF'))
+                        self.server.engine.event(self.server.camera,'visca-lab-initialized',command=kind);continue
+                    if kind=='interface_clear':
+                        self.server.follower.halt(self.server.camera)
+                        self.request.sendall(bytes.fromhex('88 01 00 01 FF' if data['broadcast'] else '90 50 FF'))
+                        self.server.engine.event(self.server.camera,'visca-lab-initialized',command=kind);continue
                     if kind=='focus_query':
                         c=self.server.engine.cameras[self.server.camera]
                         with c['io']:value=c['driver'].query('focus_auto')

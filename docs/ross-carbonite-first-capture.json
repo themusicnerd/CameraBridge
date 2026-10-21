@@ -1,0 +1,32 @@
+{
+  "frame": "192.168.96.123",
+  "endpoint": "192.168.96.61:19010",
+  "tcp_connection_verified": true,
+  "original_driver": "Cambot_1.0",
+  "current_driver": "PIVOTCam_1.1",
+  "device": "slot 0 Beauty",
+  "input": 1,
+  "channel": 1,
+  "unique_received_tcp_chunks": {
+    "02 30 30 30 20 4e 43 03": 698,
+    "88 30 01 ff": 15,
+    "81 09 04 4a ff": 30,
+    "81 09 04 4c ff": 30,
+    "81 09 04 35 ff": 30,
+    "81 09 04 39 ff": 30,
+    "81 09 04 38 ff": 30,
+    "81 09 04 4b ff": 29
+  },
+  "unique_reply_tcp_chunks": {
+    "88 30 02 ff": 1,
+    "90 60 02 ff": 149,
+    "90 50 03 ff": 30
+  },
+  "note": "TCP chunks are not necessarily complete protocol frames. Includes earlier driver attempts.",
+  "address_initialization_verified": true,
+  "focus_mode_inquiry_verified": true,
+  "positioner_motion_verified": false,
+  "real_bus_following_verified": false,
+  "custom_controls_verified": false,
+  "next_step": "Select Input 1 camera control, move/release XY and twist zoom, repeat after neutral, then capture expendable preset store/recall and halt."
+}

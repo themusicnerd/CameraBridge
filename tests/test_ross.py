@@ -19,6 +19,10 @@ class ViscaCodecTests(unittest.TestCase):
         self.assertEqual(decode(bytes.fromhex('81 01 04 07 20 FF')),('zoom',{'zoom':1}))
         self.assertEqual(decode(bytes.fromhex('81 01 06 01 01 01 02 02 FF')),('pan_tilt',{'pan':1,'tilt':-1}))
         self.assertEqual(decode(bytes.fromhex('81 01 04 3F 02 13 FF')),('preset',{'number':20,'store':False}))
+    def test_serial_network_initialization(self):
+        self.assertEqual(decode(bytes.fromhex('88 30 01 FF')),('address_set',{}))
+        self.assertEqual(decode(bytes.fromhex('88 01 00 01 FF')),('interface_clear',{'broadcast':True}))
+        self.assertEqual(decode(bytes.fromhex('81 01 00 01 FF')),('interface_clear',{'broadcast':False}))
     def test_reject_unsupported_or_malformed(self):
         for frame in ['81 01 06 01 19 14 01 01 FF','82 01 04 07 00 FF','81 01 04 07 28 FF','81 01 06 04 FF','81 01 04 3F 00 01 FF']:
             with self.assertRaises(ValueError):decode(bytes.fromhex(frame))
@@ -71,6 +75,9 @@ class RossLabTests(unittest.TestCase):
             return reply
         try:
             with socket.create_connection(service.server_address,timeout=3) as client:
+                self.assertEqual(packet(client,'88 30 01 FF',4),bytes.fromhex('88 30 02 FF'))
+                self.assertEqual(packet(client,'88 01 00 01 FF',5),bytes.fromhex('88 01 00 01 FF'))
+                self.assertEqual(packet(client,'81 01 00 01 FF',3),bytes.fromhex('90 50 FF'))
                 self.assertEqual(packet(client,'81 01 06 01 01 01 03 03 FF'),bytes.fromhex('90 41 FF 90 51 FF'))
                 self.assertEqual(packet(client,'81 01 04 07 00 FF'),bytes.fromhex('90 41 FF 90 51 FF'))
                 self.assertEqual(packet(client,'81 01 04 07 27 FF'),bytes.fromhex('90 41 FF 90 51 FF'))

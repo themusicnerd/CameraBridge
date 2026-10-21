@@ -1,6 +1,6 @@
 # Carbonite / TouchDrive acceptance still required
 
-User-authorized development equipment: Carbonite Ultra 192.168.96.123 and TD1C 192.168.96.122. No switcher device slot, camera/input mapping, Custom Control or TD1C software installation has been changed by CameraBridge work so far.
+User-authorized development equipment: Carbonite Ultra 192.168.96.123 and TD1C 192.168.96.122. The user created the first test camera/input mapping. CameraBridge subsequently corrected/recreated slot 0 Beauty as PIVOTCam_1.1 at 192.168.96.61:19010 and restored Input 1, channel 1, inversion No. Other slots and Custom Controls were not edited. Native CameraBridge panels are deployed in the TD DashBoard, with the backend on Windows. Initialization and focus-mode inquiry have real bidirectional capture; positioner, shot actions and actual bus following remain unverified.
 
 ## Documented Custom Control configuration
 

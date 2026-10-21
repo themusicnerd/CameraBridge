@@ -19,13 +19,14 @@ The default example cameras create loopback listeners:
 | 127.0.0.1:19010 | pana1 CGI emulator |
 | 127.0.0.1:19011 | pana2 CGI emulator |
 
-Both remain inside the shared backend/state manager. The server rejects non-loopback binds and physical camera targets. Do not enter these localhost endpoints as a Carbonite LAN device and expect connectivity. A future trusted-LAN hardware acceptance listener is separate work.
+Both remain inside the shared backend/state manager. The server rejects non-loopback binds and physical camera targets. Do not enter these localhost endpoints as a Carbonite LAN device and expect connectivity. The separate frame-restricted LAN development relay described below is available for simulator testing.
 
 For intentional lab preset-store tests, add `--visca-allow-store` to the service. Without it, raw controller preset stores are rejected. Native panel preset stores retain their own OVERWRITE confirmation. The current development validation run explicitly enabled simulator stores.
 
 ## Implemented subset and safety
 
 - Address1, FF-terminated frames, maximum 16 bytes, TCP fragmentation and concatenation handling.
+- Sony serial VISCA AddressSet broadcast (88 30 01 FF -> 88 30 02 FF) for one virtual camera, plus broadcast/addressed IF_Clear. Interface clear stops motion. These replies follow Sony E0421001M, pages 6-7.
 - Variable pan/tilt, standard/variable zoom and focus, focus auto/manual and focus-mode inquiry.
 - Preset recall/store with zero-based wire number mapped to operator shot 1..100.
 - ACK/completion/error framing for this lab subset. Preset completion is immediate because the emulator applies a preset synchronously. It is **not** a valid physical completion implementation.
@@ -54,3 +55,23 @@ python tools/visca_lab_demo.py --store
 Enter the CameraBridge account password interactively. The tool authenticates selection through the API, then sends raw TCP controller frames. It checks pan/tilt plus zoom, Program-only non-retargeting, old-camera stop, stale-target rejection and preset 20 recall/store. No credentials are embedded in the tool or logged.
 
 The live local demonstration passed on 21 October 2026. Regression tests also cover fragmented frames, focus inquiry, store rejection, persistent names, wrong-target/hardware rejection and neutral handover. This is software/simulator evidence, not a test of the TD1C positioner or Carbonite Custom Controls.
+
+
+## Carbonite LAN development test, 21 October 2026
+
+A separate `tools/ross_dev_relay.py` now exposes a simulator-only test endpoint:
+
+```powershell
+python tools/ross_dev_relay.py --bind 192.168.96.61 --frame 192.168.96.123 --port 19010 --output runtime/ross-carbonite-pana1.jsonl
+```
+
+The loopback backend/gateway restrictions remain in place. This relay accepts only the specified frame IP, one active controller, validates the target is a loopback Panasonic emulator in LAB mode before connection, and logs both directions with a 2 MB capture limit. Non-VISCA initial framing is captured and disconnected without forwarding or fabricated responses. Seven focused tests cover framing rejection, duplex fragmentation, peer rejection, target guards, capture limit and disconnect/shutdown cleanup.
+
+The user's original slot 0 Beauty device used Cambot_1.0 and emitted STX `000 NC` ETX (`02 30 30 30 20 4e 43 03`). Changing the driver and saving did not replace the old session. CameraBridge recreated only this test slot as PIVOTCam_1.1 and restored Input 1 -> Beauty-S0, channel 1, inversion No. Carbonite then sent AddressSet `88 30 01 FF`; the implemented reply `88 30 02 FF` allowed it to advance to periodic VISCA inquiries. Focus-mode inquiry `81 09 04 38 FF` receives simulator state `90 50 03 FF` (manual). Additional observed paint inquiries (35, 39, 4A, 4B, 4C) are unsupported and receive syntax error `90 60 02 FF`; no paint feedback is fabricated. See `ross-carbonite-first-capture.json`. Positioner motion, actual Preset-bus following and native camera CC remain unverified.
+
+Panasonic 1 has been selected explicitly as the fixed lab target for this first-device test. That is a test fixture, not inferred switcher bus state. The existing neutral interlock still requires both pan/tilt and zoom stop commands after handover or a fault before accepting motion. The watchdog remains 900 ms. Raw preset stores follow the underlying lab server's explicit store flag (enabled in this development run); use recall/movement only for the initial controller check.
+
+An additional Windows firewall rule, if approved, is named `CameraBridge Carbonite simulator test`, scoped to remote192.168.96.123, local192.168.96.61, TCP19010. The connection succeeded before this additional rule was confirmed. Rollback: stop the relay and, if present, remove only that rule with `netsh advfirewall firewall delete rule name="CameraBridge Carbonite simulator test"`. The TD panel host uses a separate TCP8089 rule.
+
+
+The backend was restarted to load initialization support; simulator positions and in-memory presets reset. Both native panel sessions were signed in again. No physical camera was attached. The primary initialization specification is [Sony E0421001M](https://pro.sony/support/res/manuals/E042/3230148ee903c204b912cca5c2c3f5aa/E0421001M.pdf), pages 6-7.
