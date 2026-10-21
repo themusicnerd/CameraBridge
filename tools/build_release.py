@@ -48,6 +48,15 @@ collection = COLLECT(gui, cli, a.binaries, a.datas, strip=False, upx=False, name
         wrapper=bundle/'CameraBridge-cli'
         wrapper.write_text('#!/bin/sh\nexec "$(dirname "$0")/CameraBridge.app/Contents/MacOS/CameraBridge-cli" "$@"\n',encoding='utf-8');wrapper.chmod(0o755)
     else:shutil.copytree(ROOT/'dist/CameraBridge',bundle,dirs_exist_ok=True,symlinks=True)
+    if expected=='windows':
+        # The separate Sony child process needs its own MSVC runtime search path.
+        # Reuse the redistributable DLLs already shipped with the Qt application.
+        sony=bundle/'_internal/sony';found=set()
+        for directory in (bundle/'_internal',bundle/'_internal/PySide6'):
+            for dll in directory.glob('*.dll'):
+                if '140' in dll.name and dll.name.lower().startswith(('msvcp','vcruntime')):
+                    shutil.copy2(dll,sony/dll.name);found.add(dll.name.lower())
+        if not {'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll'}<=found:raise SystemExit('Missing bundled Sony MSVC runtime dependency')
     shutil.copytree(ROOT/'docs',bundle/'docs',dirs_exist_ok=True)
     shutil.copytree(ROOT/'deployment',bundle/'deployment',dirs_exist_ok=True)
     for name in ('README.md','CHANGELOG.md','THIRD-PARTY-NOTICES.md','config.example.json'):

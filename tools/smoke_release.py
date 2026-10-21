@@ -31,6 +31,8 @@ def main():
         assert (root/'panels/CameraBridge-Panasonic.grid').is_file()
         assert (root/'panels/CameraBridge-Sony.grid').is_file()
         helper=pathlib.Path(exe).parent/'_internal/sony'/('CameraBridge-Sony.exe' if __import__('sys').platform=='win32' else 'CameraBridge-Sony')
+        if __import__('sys').platform=='win32':
+            assert {'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll'}<={p.name.lower() for p in helper.parent.glob('*.dll')}
         probe=subprocess.run([str(helper)],input='version\nquit\n',text=True,capture_output=True,timeout=15,check=True,cwd=helper.parent)
         assert '"adapter":1' in probe.stdout
         proc=subprocess.Popen(common+['--lab'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
