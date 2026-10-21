@@ -56,7 +56,7 @@ def main():
     if 'GRANT OF LICENSE' not in text:raise SystemExit('Could not obtain Sony SDK license text')
     (target/'SONY-SDK-LICENSE.txt').write_text(text,encoding='utf-8')
     for name,entry in [('libssh2','libssh2/COPYING'),('libusb','libusb/COPYING'),('openssl','openssl/LICENSE.txt')]:
-        source=sample.parent/'SourceCodeOfOpenSourceSoftware'/(name+'.zip')
+        source=(sample.parent if a.sdk_root else build/'sdk')/'SourceCodeOfOpenSourceSoftware'/(name+'.zip')
         if not source.exists():raise SystemExit('Missing Sony SDK open source license archive')
         with zipfile.ZipFile(source) as z:
             licenses=target/'licenses';licenses.mkdir(exist_ok=True)
