@@ -16,13 +16,12 @@ Keep passwords out of saved grid files.
 
 ## Open the web interface
 
-1. Select **Open CameraBridge** in the panel header.
+1. Select **Open setup** in the panel header.
 2. Sign in to the browser interface.
 
 The button uses the backend URL on the Config page.
-It first requests a DashBoard browser window.
-The connected TouchDrive shows a blank browser component during the current test.
-Use its displayed URL in Chromium until that platform issue is corrected.
+The button displays a native help window with the configured setup address.
+Select the address link, or enter the address in Chromium if the system does not launch a browser.
 It does not put a password or session token in the URL.
 If the browser does not open, use the address in the panel status message.
 

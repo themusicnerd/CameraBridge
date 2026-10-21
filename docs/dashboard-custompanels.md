@@ -22,7 +22,7 @@ Closing the panel attempts a stop.
 2. Open the generated grid files in DashBoard.
 3. Check native feedback and each page.
 
-For a release package, use `CameraBridge panels --output PATH` instead.
+For a release package, use `CameraBridge-cli panels --output PATH` instead.
 That command sets image paths for the selected output directory.
 For a TouchDrive, use the panel host to replace local image paths with HTTP paths.
 

@@ -50,8 +50,8 @@ Use the [installation procedure](docs/installation.md) for prerequisites and ope
 
 On Windows, use `.\CameraBridge-cli.exe` in place of `CameraBridge`.
 On Linux and macOS, use `./CameraBridge-cli`.
-Select **Open CameraBridge** in either panel to open its configured service in a DashBoard browser window.
-Some TouchDrive browser components are unavailable. Use the displayed address if the window is blank.
+Select **Open setup** in either panel to open its configured service address link.
+Select the displayed link, or enter that address in the browser.
 The browser requires a separate sign-in.
 
 ## Current scope

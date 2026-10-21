@@ -55,8 +55,6 @@ def build(manufacturer,defs):
         'virtualwidth':'1366','virtualheight':'800','width':'1366','height':'800','gridaspect':'false','gridsize':'10',
         'keepalive':'false','style':f'bg#{BG};fg#e2e4e9;size:16;'})
     node(root,'api').text=f"var CB_MANUFACTURER = '{manufacturer}';\n"+COMMON
-    popup=node(root,'popup',id='bridge_popup',left=920,top=12,width=1,height=1,name='CameraBridge setup')
-    node(popup,'abs',id='bridge_content',width=1200,height=760)
     meta=node(root,'meta');params=node(meta,'params')
     for oid,name,value,widget,access in [('bridge','Backend URL','http://127.0.0.1:8088',3,1),('username','Username','',3,1),('password','Password','',4,1),('camera','Camera ID','pana1' if pana else 'marshall1',3,0),('confirmation','Type OVERWRITE','',3,1),('shot_name','Shot name','',3,1)]:
         node(params,'param',oid=oid,name=name,type='STRING',value=value,widget=widget,access=access,maxlength=256)
@@ -81,7 +79,9 @@ def build(manufacturer,defs):
     label(header,'AW-HE130 · PTZ & paint' if pana else 'CV226 / CV228 · paint & setup',16,45,325,24,colour='abb1bd',size=14)
     pages=['PTZ','Presets','Paint','TD1C','Config'] if pana else ['Paint','Image','Exposure','OSD','Config']
     for i,name in enumerate(pages):node(header,'reveal',id='nav_'+name.lower(),name=name,targetid='page_'+name.lower(),left=350+i*112,top=12,width=104,height=56,style=f'bg#{PURPLE if i==0 else BUTTON};fg#ffffff;bdr:none;size:16;')
-    button(header,'Open\nCameraBridge',920,12,180,'openBridge();',56,BLUE,'open_bridge')
+    launcher=node(header,'abs',id='bridge_launcher',left=920,top=12,width=180,height=56)
+    help_button=node(launcher,'help',id='open_bridge',left=0,top=0,width=180,height=56,name='Open setup',title='CameraBridge setup',popupwidth=600,popupheight=180,style=f'bg#{BLUE};fg#ffffff;size:16;')
+    help_button.text='<html>Set the backend URL on Config. Select Open CameraBridge again after feedback loads.</html>' 
     logo_width=164 if pana else 177
     node(header,'image',src=(HERE/'assets'/('panasonic.png' if pana else 'marshall.png')).as_uri(),left=1328-logo_width,top=15,width=logo_width,height=48)
     label(root,'Camera identification pending',164,100,1178,26,'identity',size=18)

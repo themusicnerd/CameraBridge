@@ -14,7 +14,7 @@ This table separates software tests from physical equipment acceptance.
 | Actual Preset-bus following | Simulator event state machine only | Real bus feedback adapter |
 | Native Panasonic and Marshall panels | Native TD layout, login and write tests | Physical camera use |
 | Large touch controls | 1920 × 1080 VNC checks | Operator touch acceptance |
-| Open CameraBridge button | Panel script and host route tests; blank TD browser component | TouchDrive browser integration |
+| Open setup link | Panel script and host route tests; native address popup | External TouchDrive browser launch |
 | Camera setup | Browser add, edit, remove, numbering and export test | Physical installation acceptance |
 | Numbered PIVOTCam endpoints | Fixed target, controller restriction and shot tests | Physical Panasonic acceptance |
 | Sony PXW-Z200 | Disabled configuration entry; official SDK research | SDK access, driver and hardware tests |

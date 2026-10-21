@@ -13,7 +13,7 @@
 - Add disabled Sony PXW-Z200 entries and record the SDK access requirement.
 - Store packaged application data outside the application directory.
 - Add a panel export command with local manufacturer images.
-- Add **Open CameraBridge** to both native panels.
+- Add **Open setup** to both native panels.
 - Serve the CameraBridge web interface through the restricted TouchDrive host.
 - Add installation, operation, API, configuration and release procedures.
 - Correct obsolete test and platform statements.

@@ -50,7 +50,10 @@ The workflow publishes a development prerelease only after all four build jobs p
 Each build job runs source tests, a desktop lifecycle test and a packaged-program test.
 The desktop test checks close-to-tray, reopening, port changes and graceful process shutdown.
 The package test checks account creation, panel export, web assets, login, CGI readback and clean shutdown.
-A manual workflow run uploads test artifacts without publishing a release.
+The workflow uploads tested packages directly to a draft release.
+It does not require GitHub Actions artifact storage.
+The release remains a draft until all four platform jobs pass.
+For a manual release run, select an existing version tag.
 
 The private repository uses the account's GitHub Actions allowance.
 Build success does not establish physical camera acceptance.

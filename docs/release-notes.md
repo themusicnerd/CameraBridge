@@ -26,7 +26,7 @@ Follow your organization's software approval procedure before execution.
 - Add disabled Sony PXW-Z200 entries; Sony control is not implemented.
 - Keep the service running when the control panel closes.
 - Add an explicit Quit command to the tray menu.
-- Add Open CameraBridge to both camera panels.
+- Add Open setup to both camera panels.
 - Add the web interface to the restricted TouchDrive host.
 - Retain large native fader handles and touch targets.
 - Add complete procedures for the implemented release scope.
@@ -36,8 +36,9 @@ Follow your organization's software approval procedure before execution.
 
 Marshall hardware control, actual bus following and push/pull mapping are incomplete.
 Some positioner movement packets are rejected.
-The connected TouchDrive currently shows a blank embedded browser.
-Open the displayed setup address in Chromium if this occurs.
+The panel displays a native setup-address link.
+External browser launch on the TouchDrive still requires acceptance.
+Enter the displayed address in Chromium if the browser does not open.
 The simulator does not establish physical shot completion or saved optical framing.
 Full ASD-STE100 compliance requires the outstanding vocabulary and qualified editorial review.
 

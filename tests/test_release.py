@@ -26,6 +26,6 @@ class ReleaseTests(unittest.TestCase):
                 root=ET.parse(pathlib.Path(tmp)/f'CameraBridge-{maker}.grid').getroot()
                 self.assertEqual(root.find('.//image').get('src'),(pathlib.Path(tmp).resolve()/'assets'/f'{maker.lower()}.png').as_uri())
                 self.assertEqual(root.find('./meta/params/param[@oid="password"]').get('value'),'')
-                self.assertIsNotNone(root.find('.//button[@id="open_bridge"]'))
+                self.assertIsNotNone(root.find('.//help[@id="open_bridge"]'))
 
 if __name__=='__main__':unittest.main()

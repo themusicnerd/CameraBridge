@@ -6,7 +6,37 @@ on:
 permissions:
   contents: read
 jobs:
+  desktop_debug:
+    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements-desktop.txt
+      - run: python tools/smoke_tray.py
+        env:
+          QT_QPA_PLATFORM: offscreen
+  draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create private draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --json id --jq .id > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft --prerelease --title "CameraBridge $GITHUB_REF_NAME" --notes-file docs/release-notes.md
+          fi
   build:
+    needs: draft
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -58,11 +88,11 @@ jobs:
         run: python tools/build_release.py --target ${{ matrix.target }}
       - name: Test packaged program
         run: python tools/smoke_release.py ${{ matrix.executable }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}
-          path: release/*
-          if-no-files-found: error
+      - name: Upload tested release files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" release/* --clobber
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
@@ -71,11 +101,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: release
-          merge-multiple: true
       - name: Publish development release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --prerelease --title "CameraBridge $GITHUB_REF_NAME" --notes-file docs/release-notes.md
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease --latest=false

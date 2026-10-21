@@ -45,27 +45,14 @@ function login() {
     params.setValue('password',0,'');
     request('login', data, function(r) { if(r) {cbToken = r.token; status('Authenticated ' + r.role); poll();} });
 }
-function openBridge() {
+var cbLinkUrl = '';
+function refreshBridgeLink() {
     var url=String(params.getValue('bridge',0)).replace(/\/+$/,'')+'/';
-    if(!/^https?:\/\/[^\s?#@]+\/$/.test(url)){status('Set a valid HTTP or HTTPS backend URL on Config');return;}
-    var note=function(text){cbNoticeUntil=new Date().getTime()+10000;status(text);};
-    try {
-        var safe=url.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        ogscript.setXML('bridge_content','<browser id="bridge_browser" left="0" top="0" width="1200" height="760" type="Chromium" fallback="true" url="'+safe+'"/>');
-        ogscript.reveal('bridge_popup');
-        note('Setup requested. If blank, open this address in your browser: '+url);return;
-    } catch(embeddedError) {}
-    var fallback=function(){
-        try{java.awt.Desktop.getDesktop().browse(new java.net.URI(url));note('CameraBridge opened in the browser. Sign in there to control cameras.');}
-        catch(e){note('Browser did not open. Open this address manually: '+url);}
-    };
-    try {
-        var workbench=Packages.org.eclipse.ui.PlatformUI.getWorkbench();
-        workbench.getDisplay().asyncExec(new java.lang.Runnable({run:function(){
-            try{workbench.getBrowserSupport().getExternalBrowser().openURL(new java.net.URL(url));note('CameraBridge opened in the browser. Sign in there to control cameras.');}
-            catch(e){fallback();}
-        }}));
-    } catch(e) {fallback();}
+    if(url==cbLinkUrl)return;
+    var valid=/^https?:\/\/[A-Za-z0-9.\-:\[\]]+\/$/.test(url);
+    var html=valid?'<html><p>Select this link to open setup:</p><a href="'+url+'"><font size="5" color="#80d9eb">'+url+'</font></a><p>Sign in in the browser to control cameras.</p></html>':'<html>Set a valid HTTP or HTTPS backend URL on Config.</html>';
+    ogscript.setXML('bridge_launcher','<help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;"><![CDATA['+html+']]></help>');
+    cbLinkUrl=url;
 }
 function selected() { return String(params.getValue('camera',0)); }
 function send(action, data, callback) {
@@ -128,6 +115,7 @@ function preset(number) {
     params.setValue('store',0,0);params.setValue('confirmation',0,'');
 }
 function poll() {
+    refreshBridgeLink();
     if(cbBusy)return; cbBusy=true;
     var camera=selected(),epoch=cbEpoch;
     request('state',{},function(r){
