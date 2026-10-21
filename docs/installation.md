@@ -35,9 +35,9 @@ Linux requires a graphical desktop with a tray area for tray operation.
 Ubuntu 22.04 also requires EGL, OpenGL and the Qt XCB support libraries.
 Install the packages with this command:
 
-`sh
+```sh
 sudo apt-get install libegl1 libgl1 libxkbcommon0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
-`
+```
 
 If no tray is available, closing the control panel stops the service.
 Use CameraBridge-cli for a terminal or headless host.

@@ -11,6 +11,7 @@ def check(root=ROOT):
     for path in files:
         text=path.read_text(encoding='utf-8');code=False;prose=[]
         for number,line in enumerate(text.splitlines(),1):
+            if re.fullmatch(r'\s*`{1,2}[A-Za-z0-9_-]*\s*',line):errors.append(f'{path.relative_to(root)}:{number}: incomplete code fence')
             if line.strip().startswith('```'):code=not code;continue
             if code:continue
             for target in re.findall(r'!?\[[^\]]*\]\(([^)]+)\)',line):
