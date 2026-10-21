@@ -75,3 +75,7 @@ An additional Windows firewall rule, if approved, is named `CameraBridge Carboni
 
 
 The backend was restarted to load initialization support; simulator positions and in-memory presets reset. Both native panel sessions were signed in again. No physical camera was attached. The primary initialization specification is [Sony E0421001M](https://pro.sony/support/res/manuals/E042/3230148ee903c204b912cca5c2c3f5aa/E0421001M.pdf), pages 6-7.
+
+## First physical positioner test
+
+The operator moved/released pan, tilt and zoom and reported push/pull at the end. Actual frame capture and central motion events now verify the TouchDrive -> Carbonite -> CameraBridge -> Panasonic emulator path for positive/negative pan, tilt and zoom, including neutral stop commands. The camera ended `moving=false` with the neutral interlock ready. The retained event window contains 51 accepted pan/tilt and 20 accepted zoom commands; it also contains a watchdog stop. Some commands returned `90 60 41 FF` (command not executable); the current implementation does not log the rejection reason, so stale timing, neutral and ownership checks cannot yet be distinguished from this capture. This is a partial movement pass, not smooth continuous-motion acceptance. No separate focus, focus-mode or other push/pull command was observed. See `ross-positioner-first-test.json` for raw window and retained accepted motion events. Presets, native Custom Controls, physical-camera movement and real bus following remain unverified.
