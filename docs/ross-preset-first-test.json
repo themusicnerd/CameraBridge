@@ -1,0 +1,89 @@
+{
+  "test": "Carbonite shot 20 store and recall",
+  "camera": "pana1",
+  "events": [
+    {
+      "time": 1792584171.792554,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 04 3f 01 13 ff"
+    },
+    {
+      "time": 1792584172.2979662,
+      "camera": "pana1",
+      "kind": "preset",
+      "number": 20,
+      "store": true
+    },
+    {
+      "time": 1792584173.3286805,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 04 3f 01 13 ff"
+    },
+    {
+      "time": 1792584173.7653353,
+      "camera": "pana1",
+      "kind": "preset",
+      "number": 20,
+      "store": true
+    },
+    {
+      "time": 1792584187.2321448,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 04 3f 01 13 ff"
+    },
+    {
+      "time": 1792584187.6957653,
+      "camera": "pana1",
+      "kind": "preset",
+      "number": 20,
+      "store": true
+    },
+    {
+      "time": 1792584196.4905756,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 04 3f 02 13 ff"
+    },
+    {
+      "time": 1792584197.0586276,
+      "camera": "pana1",
+      "kind": "preset",
+      "number": 20,
+      "store": false
+    },
+    {
+      "time": 1792584200.225985,
+      "camera": "pana1",
+      "kind": "visca-rx",
+      "hex": "81 01 04 3f 02 13 ff"
+    },
+    {
+      "time": 1792584200.6408634,
+      "camera": "pana1",
+      "kind": "preset",
+      "number": 20,
+      "store": false
+    }
+  ],
+  "emulator_preset_history": [
+    "#M19",
+    "#R19",
+    "#R19"
+  ],
+  "final_axes": {
+    "pan": 0,
+    "tilt": 0,
+    "zoom": 0,
+    "focus": 0
+  },
+  "result": "Store and recall command transport verified through simulator; three store and two recall events observed.",
+  "limits": [
+    "No physical camera attached.",
+    "Emulator velocity commands update axes, not integrated absolute pan/tilt/zoom positions; return to a saved physical framing is not proven.",
+    "Native Custom Control origin not yet verified.",
+    "Intervening motion had command-not-executable responses."
+  ]
+}
