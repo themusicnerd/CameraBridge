@@ -97,7 +97,7 @@ int main() {
                     out<<"}}";std::cout<<out.str()<<std::endl;
                 } else if(op=="set") {
                     std::string key;long long value;if(!(in>>key>>value)||!codes.count(key))throw std::runtime_error("Invalid property");bool found=false;
-                    for(int n=0;n<count;n++)if(props[n].GetCode()==codes.at(key)){auto& p=props[n];if(!p.IsSetEnableCurrentValue()||!valid(p,value))throw std::runtime_error("Value unavailable in current camera mode");CrDeviceProperty request;request.SetCode(p.GetCode());request.SetValueType(p.GetValueType() & ~(CrDataType_ArrayBit|CrDataType_RangeBit));request.SetCurrentValue((CrInt64u)value);check(SetDeviceProperty(handle,&request));found=true;break;}
+                    for(int n=0;n<count;n++)if(props[n].GetCode()==codes.at(key)){auto& p=props[n];if(!p.IsSetEnableCurrentValue()||!valid(p,value))throw std::runtime_error("Value unavailable in current camera mode");CrDeviceProperty request;request.SetCode(p.GetCode());request.SetValueType(static_cast<CrDataType>(p.GetValueType() & ~(CrDataType_ArrayBit|CrDataType_RangeBit)));request.SetCurrentValue((CrInt64u)value);check(SetDeviceProperty(handle,&request));found=true;break;}
                     if(!found)throw std::runtime_error("Unsupported camera property");std::cout<<"{\"sent\":true}"<<std::endl;
                 } else throw std::runtime_error("Unknown operation");
             } catch(...) {ReleaseDeviceProperties(handle,props);throw;}
