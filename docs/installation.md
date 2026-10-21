@@ -35,6 +35,8 @@ Enable on login only after validation with `systemctl --user enable camerabridge
 
 ## TD1C
 
+For native panels on the TD with the backend/emulators on Windows, use [TouchDrive development panel hosting](touchdrive-panel-host.md). That arrangement does not install the backend on the TD. The compatibility requirements below apply to a future backend installation on the TD itself.
+
 First complete `td1c-compatibility.md`. Architecture, OS, runtime, writable paths, service manager, persistent storage, vendor permissions and update survival are unresolved. A self-contained executable has not been built. Do not modify Ross partitions, libraries, DashBoard binaries or boot configuration. Do not use root just because it is available.
 
 ## Configuration and security

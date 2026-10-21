@@ -51,3 +51,5 @@ python tools/host_diagnostic.py --output host-report.json
 See `docs/feature-matrix.md` for implementation and hardware-validation status, `docs/dashboard-custompanels.md` for panel acceptance, and `docs/installation.md` for deployment and rollback.
 
 Both redesigned Aura panels load in local DashBoard 9.15.2. Instrumented copies confirmed recurring native timer requests and successful feedback callbacks after updating native parameter/label values. The development admin account is provisioned and live backend login is verified. Visual layout, touch operation and authenticated native controls remain pending because the Windows screenshot helper times out. See `docs/native-dashboard-validation.md` and `docs/aura-design.md` for the evidence and its limits.
+
+Native panels on the connected TouchDrive with the Windows development backend: see [TouchDrive panel hosting](docs/touchdrive-panel-host.md).
