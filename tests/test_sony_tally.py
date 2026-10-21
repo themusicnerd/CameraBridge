@@ -166,9 +166,9 @@ class TallyTests(unittest.TestCase):
         receiver=TallyServer(('127.0.0.1',0),engine,'127.0.0.1')
         thread=threading.Thread(target=receiver.serve_forever,daemon=True);thread.start()
         try:
-            packet=bytes([0x82,0x33])+b'CAMERA 3        '
+            packet=bytes([0x83,0x32])+b'CAMERA 3        '
             with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as s:s.sendto(packet,receiver.server_address)
-            wait(lambda:engine.set_tally.called);engine.set_tally.assert_called_once_with('sony',True,True,'TSL 3.1')
+            wait(lambda:engine.set_tally.called);engine.set_tally.assert_called_once_with('sony',True,False,'TSL 3.1')
             self.assertFalse(receiver.verify_request(None,('192.0.2.5',12345)))
         finally:receiver.shutdown();receiver.server_close();thread.join()
 

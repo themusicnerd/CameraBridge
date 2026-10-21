@@ -124,6 +124,7 @@ def validate_config(c):
         ipaddress.IPv4Address(tally.get('bind','127.0.0.1'));ipaddress.IPv4Address(tally.get('source',''))
         if type(tally.get('port',5727)) is not int or not 1024<=tally.get('port',5727)<=65535:raise ValueError('Invalid tally UDP port')
         if type(tally.get('address_offset',0)) is not int or not -1<=tally.get('address_offset',0)<=1:raise ValueError('Invalid tally address offset')
+        if type(tally.get('program_tally',2)) is not int or tally.get('program_tally',2) not in (1,2):raise ValueError('Program tally must be 1 or 2')
     pivot=c.get('pivotcam',{})
     if not isinstance(pivot,dict) or type(pivot.get('enabled',False)) is not bool:raise ValueError('Invalid PIVOTCam settings')
     if pivot.get('enabled'):
@@ -276,7 +277,7 @@ def main():
         tally=config.get('tally',{})
         if tally.get('enabled'):
             from .tally import TallyServer
-            receiver=TallyServer((tally.get('bind','127.0.0.1'),tally.get('port',5727)),engine,tally['source'],tally.get('address_offset',0))
+            receiver=TallyServer((tally.get('bind','127.0.0.1'),tally.get('port',5727)),engine,tally['source'],tally.get('address_offset',0),tally.get('program_tally',2))
             threading.Thread(target=receiver.serve_forever,daemon=True).start();gateways.append(receiver)
         if a.visca_lab:
             if config.get('pivotcam',{}).get('enabled'):raise SystemExit('Use configured PIVOTCam endpoints or the legacy VISCA lab, not both')

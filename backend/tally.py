@@ -12,8 +12,9 @@ def decode(data):
     return result
 
 class TallyServer(socketserver.UDPServer):
-    def __init__(self,address,engine,source,address_offset=0):
-        self.engine=engine;self.source=source;self.address_offset=address_offset
+    def __init__(self,address,engine,source,address_offset=0,program_tally=2):
+        if program_tally not in (1,2):raise ValueError('Program tally must be 1 or 2')
+        self.engine=engine;self.source=source;self.address_offset=address_offset;self.program_tally=program_tally
         super().__init__(address,TallyHandler)
     def verify_request(self,request,address):return address[0]==self.source
 
@@ -21,7 +22,8 @@ class TallyHandler(socketserver.BaseRequestHandler):
     def handle(self):
         try:messages=decode(self.request[0])
         except ValueError:return
-        for address,program,preview in messages:
+        for address,tally1,tally2 in messages:
+            program,preview=(tally2,tally1) if self.server.program_tally==2 else (tally1,tally2)
             for cid,c in self.server.engine.cameras.items():
-                target=c['config'].get('tally_address',c['config'].get('carbonite_input',c['config'].get('number',1))-1+self.server.address_offset)
+                target=c['config'].get('tally_address',c['config'].get('carbonite_input',c['config'].get('number',1))+self.server.address_offset)
                 if address==target:self.server.engine.set_tally(cid,program,preview,'TSL 3.1')

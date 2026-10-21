@@ -47,11 +47,13 @@ Manual test requests can be replaced by the next TSL input.
 8. Test each program transition and lamp readback.
 
 The default UDP port is 5727.
-The default camera address is its Carbonite input number minus one.
-For example, video input 1 maps to TSL address 0.
+Allow that UDP port through the host firewall from the switcher's IP address.
+The default camera address is its Carbonite input number.
+For example, video input 1 maps to TSL address 1.
 An explicit camera address overrides this mapping.
 Valid TSL addresses are 0 through 126.
-Tally 1 is program; tally 2 is preview.
+The Carbonite default uses tally 2 for program and tally 1 for preview.
+Select tally 1 as program if another sender uses the opposite mapping.
 The receiver rejects packets from other source IP addresses and malformed messages.
 Only complete 18-byte TSL 3.1 messages are accepted.
 TSL 4 and TSL 5 are not supported by this receiver.
@@ -80,3 +82,5 @@ It does not claim or move the camera.
 
 - [Panasonic IP interface specification](https://eww.pass.panasonic.co.jp/pro-av/support/content/guide/DEF/HE50_120_IP/HDIntegratedCamera_InterfaceSpecifications-E.pdf)
 - [TSL UMD protocol specification](https://assets.ctfassets.net/vd4y94r5n5vv/2rcLXZWfZ6eOQ2MgEYa2QE/6b086201c7f1ed01f8ad926f0ef2c4d8/TSL_protocol_spec.pdf)
+- [Ross TSL device setup and input IDs](https://help.rossvideo.com/carbonite-device-db/Topics/Devices/UMD/TSL.html)
+- [Riedel's Carbonite tally mapping](https://manuals.riedel.net/en/hi/v3.0/ross-video-carbonite-series-integration-configuration)
