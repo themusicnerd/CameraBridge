@@ -36,7 +36,7 @@ def collect():
             processes=run('ps','-eo','pid,comm,rss'),listeners=run('ss','-lntu'),
             systemd=run('systemctl','--version'),user_services=run('systemctl','--user','is-system-running'),
             persistent_users=run('loginctl','show-user',str(os.getuid()),'-p','Linger'))
-    else:report['note']='Windows development host; this is not TD1C evidence'
+    else:report['note']=platform.system()+' host; this is not TD1C evidence'
     return report
 
 if __name__=='__main__':

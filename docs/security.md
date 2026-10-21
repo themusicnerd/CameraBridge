@@ -1,15 +1,62 @@
 # Security
 
-All write/control APIs require an authenticated session. Users are provisioned interactively by CLI; passwords are salted PBKDF2-SHA256 hashes in SQLite (250,000 iterations), not cleartext source/configuration. Sessions expire after eight hours, live only in memory and are invalidated at process exit. Native panels and web UI keep tokens in memory. Native password fields clear on sign-in.
+## Accounts and sessions
 
-Operator/admin roles are enforced for configuration and lockout. Trusted management CIDRs are checked before API dispatch. Cookies are not used; bearer tokens or explicitly supplied ogScript session tokens are required. Cross-origin requests are rejected. Browser login tokens are not stored in localStorage. Responses are no-store and anti-framing headers are set. Login attempts are rate limited per client address. HTTP requests have bounded body size, socket timeouts and a 24-thread limit.
+Create accounts through the local interactive command.
+Use `--init-user NAME --role admin` or `--role operator`.
+The command replaces an existing account with the same name.
+It stores a salted PBKDF2-SHA256 password hash in SQLite.
+The hash uses 250000 iterations.
+Passwords must be non-empty. This release has no minimum password length.
 
-LAB allows unauthenticated **read-only state** only from loopback. Every REST/ogScript control still requires login. CGI simulators are intentionally unauthenticated loopback-only services and contain no real credentials. Lab mode refuses non-loopback binding and non-simulated cameras.
+Sessions expire after eight hours.
+They exist only in service memory.
+Restart ends all sessions.
+Changing an account does not end existing session tokens immediately.
+Stop the service if immediate session removal is required.
 
-The explicitly enabled lab serial-VISCA/TCP listeners implement a protocol with no user-login field. They are isolated loopback test ingress, accept simulated Panasonic targets only and are never exposed as the authenticated REST API. Remote preset stores require an additional startup flag. Simulator bus-selection and service-stop API endpoints still require an administrator session. A future hardware listener needs separately reviewed management-host restrictions and protocol acceptance; it is not enabled here.
+The native password field clears after sign-in.
+Keep passwords out of saved grid files, configuration, logs and repositories.
+The browser and panels require separate sign-in.
+The Open CameraBridge button does not transfer a token.
 
-No request bodies, Authorization headers or camera credentials are logged. Diagnostic events contain parameter IDs/values and generic exception class names. The diagnostics download omits the user database and sessions. Process discovery records executable names rather than full arguments. Configuration currently has no camera credential fields or authenticated-camera support; do not put passwords into host URLs.
+## Network access
 
-Limitations requiring hardening before production: TLS is supplied by a reverse proxy, no automated account-revocation UI, no exhaustive denial-of-service testing, configuration schema is preliminary, and stdlib HTTP is not intended as a public server. Configure trusted proxy/host rules carefully; forwarded headers are not trusted by this backend. Restrict runtime-directory permissions on Linux and Windows. Do not expose management services to the internet.
+The default HTTP address is loopback.
+Trusted CIDR entries restrict HTTP clients.
+Write requests require authentication and the applicable role.
+Cookies are not used for authentication.
+Cross-origin browser writes are rejected.
 
-Do not save native .grid files with typed passwords. Obtain unknown credentials interactively from the equipment owner; no password guessing or embedding vendor credentials is part of this project.
+The TouchDrive host accepts its configured panel address and the host address only.
+It forwards configuration requests with the original login token.
+Only backend administrators can read or save configuration.
+The host does not expose service shutdown or arbitrary files.
+
+The lab VISCA protocol has no login field.
+The loopback listener permits Panasonic emulator targets only.
+The optional LAN relay permits one configured Carbonite address.
+It checks lab mode and the emulator target before a connection.
+Store commands also require `--visca-allow-store`.
+
+## Limits
+
+Use a trusted management network.
+The development panel host uses plain HTTP.
+Use a suitable HTTPS reverse proxy for remote production administration.
+The backend does not trust forwarded address headers.
+Its standard-library HTTP server is not hardened for internet exposure.
+
+The service limits body size, request threads and socket wait time.
+Eight failed login attempts per client within one minute cause a temporary block.
+No request body, password, authorization header or session token is logged.
+Diagnostic exports omit the credential database.
+Review diagnostics before sharing them; they contain host and camera information.
+
+Restrict access to the data directory and backups.
+Physical camera authentication is not implemented.
+Do not put camera passwords in host URLs.
+
+Configured PIVOTCam endpoints accept only the specified controller IP.
+VISCA does not provide authentication or encryption.
+Restrict these TCP ports to the isolated camera-control network.

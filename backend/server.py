@@ -10,12 +10,20 @@ import sqlite3
 import threading
 import time
 import getpass
+import os
+import sys
 from contextlib import closing
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlsplit,parse_qs
 from .core import Engine
 
 ROOT=pathlib.Path(__file__).resolve().parent.parent
+
+def default_storage():
+    if not getattr(sys,'frozen',False):return ROOT/'runtime'
+    if sys.platform=='win32':return pathlib.Path(os.environ.get('LOCALAPPDATA',pathlib.Path.home()/'AppData/Local'))/'CameraBridge'
+    if sys.platform=='darwin':return pathlib.Path.home()/'Library/Application Support/CameraBridge'
+    return pathlib.Path(os.environ.get('XDG_DATA_HOME',pathlib.Path.home()/'.local/share'))/'camerabridge'
 
 class Auth:
     def __init__(self,path):
@@ -46,13 +54,20 @@ class Auth:
 def provision_user(auth,name,role):
     """Interactive provisioning: show validation failures without exposing input."""
     print('Create CameraBridge account: '+name+' ('+role+')',flush=True)
-    print('Choose a non-empty password. Input is hidden. Repeat the same password.',flush=True)
+    print('Choose a non-empty password. Repeat the same password.',flush=True)
+    def read_password(prompt):
+        if sys.stdin.isatty():return getpass.getpass(prompt)
+        # getpass on Windows reads the console even with a redirected stdin.
+        # Read a private pipe directly for scripted account provisioning.
+        line=sys.stdin.readline()
+        if not line:raise EOFError('Password input ended before account creation.')
+        return line.rstrip('\r\n')
     while True:
-        password=getpass.getpass('New password: ')
+        password=read_password('New password: ')
         if not password:
             print('Not saved: password cannot be empty. Try again.',flush=True)
             continue
-        if password!=getpass.getpass('Repeat password: '):
+        if password!=read_password('Repeat password: '):
             print('Not saved: passwords differ. Try again.',flush=True)
             continue
         auth.add(name,password,role)
@@ -72,12 +87,23 @@ def validate_config(c):
     ipaddress.ip_address(c.get('bind','127.0.0.1'))
     if not 1024<=c.get('port',8088)<=65535:raise ValueError('Invalid port')
     if not 1<=c.get('poll_seconds',4)<=60:raise ValueError('Poll interval must be 1..60 seconds')
-    ids=set()
-    for camera in c['cameras']:
+    ids=set();numbers=set()
+    for index,camera in enumerate(c['cameras'],1):
         cid=camera['id']
         if not isinstance(cid,str) or not cid.isascii() or not cid.replace('_','').isalnum() or cid in ids:raise ValueError('Invalid or duplicate camera ID')
         ids.add(cid)
-        if camera['driver'] not in ('panasonic','marshall-lab'):raise ValueError('Driver not implemented')
+        number=camera.setdefault('number',index)
+        if type(number) is not int or not 1<=number<=255 or number in numbers:raise ValueError('Camera numbers must be unique integers from 1 through 255')
+        numbers.add(number)
+        if type(camera.get('enabled',True)) is not bool or type(camera.get('simulator',False)) is not bool:raise ValueError('Invalid camera enable or simulator option')
+        if camera['driver'] not in ('panasonic','marshall-lab','sony-sdk','marshall-pending'):raise ValueError('Driver not implemented')
+        if camera['driver'] in ('sony-sdk','marshall-pending'):
+            if camera.get('enabled',True):raise ValueError('This camera profile requires its hardware integration; save it disabled')
+            if camera.get('simulator'):raise ValueError('Pending hardware profiles are not simulators')
+            expected='Sony' if camera['driver']=='sony-sdk' else 'Marshall'
+            if camera.get('manufacturer')!=expected:raise ValueError('Driver/manufacturer mismatch')
+            if camera['driver']=='sony-sdk' and camera.get('model')!='PXW-Z200':raise ValueError('Unknown Sony profile')
+            if camera['driver']=='marshall-pending' and camera.get('model') not in ('CV226','CV228'):raise ValueError('Unknown Marshall profile')
         if camera['driver']=='marshall-lab' and not camera.get('simulator'):raise ValueError('Marshall lab must be labelled simulator')
         if camera['driver']=='panasonic' and camera['model']!='AW-HE130':raise ValueError('This release validates HE130 only; other model profiles pending')
         if camera['driver']=='panasonic':
@@ -86,13 +112,25 @@ def validate_config(c):
             if not isinstance(host,str) or not host or any(x in host for x in '/@?#:'):raise ValueError('Invalid camera host')
             if type(camera.get('port',80)) is not int or not 1<=camera.get('port',80)<=65535:raise ValueError('Invalid camera port')
         if camera['driver']=='marshall-lab' and camera.get('manufacturer')!='Marshall':raise ValueError('Driver/manufacturer mismatch')
+        if type(camera.get('pivotcam',False)) is not bool or type(camera.get('allow_store',False)) is not bool:raise ValueError('Invalid PIVOTCam option')
+        if camera.get('pivotcam') and camera['driver']!='panasonic':raise ValueError('PIVOTCam currently requires the Panasonic driver')
+    pivot=c.get('pivotcam',{})
+    if not isinstance(pivot,dict) or type(pivot.get('enabled',False)) is not bool:raise ValueError('Invalid PIVOTCam settings')
+    if pivot.get('enabled'):
+        if ipaddress.ip_address(pivot.get('bind','127.0.0.1')).version!=4:raise ValueError('PIVOTCam requires an IPv4 listen address')
+        if ipaddress.ip_address(pivot.get('controller','')).version!=4:raise ValueError('Set the Carbonite IPv4 address')
+        base=pivot.get('base_port',19010)
+        if type(base) is not int or not 1024<=base<=65280:raise ValueError('Invalid PIVOTCam base port')
+        for camera in c['cameras']:
+            if camera.get('enabled',True) and camera.get('pivotcam') and base+camera['number']==c.get('port',8088):raise ValueError('PIVOTCam port conflicts with HTTP port')
     for network in c.get('trusted_hosts',['127.0.0.1/32']):ipaddress.ip_network(network)
     return c
 
 class Server(ThreadingHTTPServer):
     daemon_threads=True
-    def __init__(self,address,engine,auth,lab=False):
+    def __init__(self,address,engine,auth,lab=False,desktop_control=False):
         self.engine,self.auth,self.lab=engine,auth,lab
+        self.desktop_control=desktop_control
         self.slots=threading.BoundedSemaphore(24)
         super().__init__(address,Handler)
     def process_request(self,request,client_address):
@@ -104,7 +142,7 @@ class Server(ThreadingHTTPServer):
         finally:self.slots.release()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version='CameraBridge/0.1'
+    server_version='CameraBridge/0.2.0rc1'
     def setup(self):
         super().setup();self.connection.settimeout(5)
     def log_message(self,*args):pass
@@ -172,16 +210,21 @@ class Handler(BaseHTTPRequestHandler):
                 configuration=validate_config(data['configuration'])
                 target=self.server.engine.storage/'config.pending.json'
                 tmp=target.with_suffix('.tmp');tmp.write_text(json.dumps(configuration,indent=2));tmp.replace(target)
-                self.send({'status':'validated and saved; restart explicitly with this configuration to apply'});return
+                if data.get('apply') and self.server.desktop_control:
+                    restart=self.server.engine.storage/'desktop-restart.json';temporary=restart.with_suffix('.tmp')
+                    temporary.write_text(json.dumps({'apply':True}),encoding='utf-8');temporary.replace(restart)
+                    self.send({'status':'Camera setup saved. Desktop service restart requested.'});return
+                self.send({'status':'Camera setup saved. Select Apply saved camera setup in the desktop control panel, or restart the console with config.pending.json.'});return
             self.send({'error':'Unsupported endpoint or role'},403)
         except PermissionError as exc:self.send({'error':str(exc)},403)
         except (ValueError,KeyError,TypeError) as exc:self.send({'error':str(exc)[:200]},400)
         except Exception:self.send({'error':'Device request failed; see central state'},502)
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--config',default=str(ROOT/'config.example.json'));p.add_argument('--storage',default=str(ROOT/'runtime'))
+    p=argparse.ArgumentParser();p.add_argument('--config',default=str(ROOT/'config.example.json'));p.add_argument('--storage',default=str(default_storage()))
     p.add_argument('--lab',action='store_true');p.add_argument('--visca-lab',action='store_true');p.add_argument('--visca-allow-store',action='store_true')
-    p.add_argument('--init-user');p.add_argument('--ensure-admin',action='store_true');p.add_argument('--role',choices=['admin','operator'],default='admin');a=p.parse_args()
+    p.add_argument('--init-user');p.add_argument('--ensure-admin',action='store_true');p.add_argument('--role',choices=['admin','operator'],default='admin')
+    p.add_argument('--desktop-control',action='store_true',help=argparse.SUPPRESS);a=p.parse_args()
     if a.visca_lab and not a.lab:p.error('--visca-lab requires --lab; physical gateway acceptance is pending')
     if a.visca_allow_store and not a.visca_lab:p.error('--visca-allow-store requires --visca-lab')
     storage=pathlib.Path(a.storage);storage.mkdir(parents=True,exist_ok=True)
@@ -193,29 +236,49 @@ def main():
     if a.init_user:
         provision_user(auth,a.init_user,a.role);return
     config=validate_config(json.loads(pathlib.Path(a.config).read_text(encoding='utf-8')))
-    if a.lab and (not ipaddress.ip_address(config['bind']).is_loopback or any(not c.get('simulator') for c in config['cameras'])):
+    if a.lab and (not ipaddress.ip_address(config['bind']).is_loopback or any(not c.get('simulator') for c in config['cameras'] if c.get('enabled',True))):
         raise SystemExit('LAB requires loopback binding and simulator cameras only')
     simulators=[]
-    if a.lab:
+    if any(c.get('simulator') and c.get('enabled',True) and c['driver']=='panasonic' for c in config['cameras']):
         from .simulator import server
         for c in config['cameras']:
-            if c['driver']=='panasonic':
+            if c['driver']=='panasonic' and c.get('enabled',True) and c.get('simulator'):
                 sim=server(port=c['port']);threading.Thread(target=sim.serve_forever,daemon=True).start();simulators.append(sim)
-    engine=Engine(config,storage);service=Server((config.get('bind','127.0.0.1'),config.get('port',8088)),engine,auth,a.lab)
-    engine.start();gateways=[]
-    if a.visca_lab:
-        from .ross import PresetFollower,LabViscaServer
-        engine.ross_follower=PresetFollower(engine)
-        for i,c in enumerate(c for c in config['cameras'] if c.get('enabled',True) and c['manufacturer']=='Panasonic'):
-            gateway=LabViscaServer(('127.0.0.1',19010+i),engine,c['id'],engine.ross_follower,a.visca_allow_store)
-            threading.Thread(target=gateway.serve_forever,daemon=True).start();gateways.append(gateway)
-            print(f'LAB serial VISCA/TCP: {gateway.server_address[0]}:{gateway.server_address[1]} -> {c["id"]}',flush=True)
-    print(f'CameraBridge: http://{service.server_address[0]}:{service.server_address[1]} (LAB={a.lab})',flush=True)
-    try:service.serve_forever(poll_interval=.2)
+    engine=Engine(config,storage);service=None;gateways=[]
+    try:
+        service=Server((config.get('bind','127.0.0.1'),config.get('port',8088)),engine,auth,a.lab,a.desktop_control)
+        engine.start()
+        if a.visca_lab:
+            if config.get('pivotcam',{}).get('enabled'):raise SystemExit('Use configured PIVOTCam endpoints or the legacy VISCA lab, not both')
+            from .ross import PresetFollower,LabViscaServer
+            engine.ross_follower=PresetFollower(engine)
+            for i,c in enumerate(c for c in config['cameras'] if c.get('enabled',True) and c['manufacturer']=='Panasonic'):
+                gateway=LabViscaServer(('127.0.0.1',19010+c['number']),engine,c['id'],engine.ross_follower,a.visca_allow_store)
+                threading.Thread(target=gateway.serve_forever,daemon=True).start();gateways.append(gateway)
+                print(f'LAB serial VISCA/TCP: {gateway.server_address[0]}:{gateway.server_address[1]} -> {c["id"]}',flush=True)
+        pivot=config.get('pivotcam',{})
+        if pivot.get('enabled'):
+            from .ross import FixedCameraController,PivotCamServer
+            for c in config['cameras']:
+                if not c.get('enabled',True) or not c.get('pivotcam'):continue
+                follower=FixedCameraController(engine,c['id'])
+                gateway=PivotCamServer((pivot.get('bind','127.0.0.1'),pivot.get('base_port',19010)+c['number']),engine,c['id'],follower,pivot['controller'],c.get('allow_store',False))
+                threading.Thread(target=gateway.serve_forever,daemon=True).start();gateways.append(gateway)
+                print(f'PIVOTCam camera {c["number"]}: {gateway.server_address} -> {c["id"]}',flush=True)
+        if a.desktop_control:
+            def parent_control():
+                # This private stdin pipe belongs to the desktop parent, not HTTP clients.
+                for line in sys.stdin:
+                    if line.strip()=='quit':break
+                service.shutdown()
+            threading.Thread(target=parent_control,daemon=True).start()
+        print(f'CameraBridge: http://{service.server_address[0]}:{service.server_address[1]} (LAB={a.lab})',flush=True)
+        service.serve_forever(poll_interval=.2)
     except KeyboardInterrupt:pass
     finally:
         for gateway in gateways:gateway.shutdown();gateway.server_close()
-        engine.close();service.server_close()
+        engine.close()
+        if service is not None:service.server_close()
         for sim in simulators:sim.shutdown();sim.server_close()
 
 if __name__=='__main__':main()

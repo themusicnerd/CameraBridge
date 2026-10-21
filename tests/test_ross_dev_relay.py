@@ -53,12 +53,12 @@ class RelayTests(unittest.TestCase):
     def test_lab_guard_rejects_hardware_and_nonloopback_target(self):
         def response(value):return io.BytesIO(json.dumps(value).encode())
         camera=dict(id='pana1',simulator=True,manufacturer='Panasonic',host='127.0.0.1')
-        with patch('tools.ross_dev_relay.urllib.request.urlopen',side_effect=[response({'mode':'LAB'}),response({'cameras':[camera]})]):verify_lab(19010)
+        with patch('tools.ross_dev_relay.urllib.request.urlopen',side_effect=[response({'mode':'LAB'}),response({'cameras':[camera]})]):verify_lab(19011)
         with patch('tools.ross_dev_relay.urllib.request.urlopen',return_value=response({'mode':'hardware'})):
-            with self.assertRaises(ValueError):verify_lab(19010)
+            with self.assertRaises(ValueError):verify_lab(19011)
         for changes in ({'simulator':False},{'host':'192.168.96.50'}):
             with patch('tools.ross_dev_relay.urllib.request.urlopen',side_effect=[response({'mode':'LAB'}),response({'cameras':[dict(camera,**changes)]})]):
-                with self.assertRaises(ValueError):verify_lab(19010)
+                with self.assertRaises(ValueError):verify_lab(19011)
     def test_capture_limit_fails_closed(self):
         self.capture.limit=1
         with self.assertRaises(OSError):self.capture.record('127.0.0.1','frame-to-lab',b'\x81\xff')

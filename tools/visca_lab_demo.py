@@ -25,7 +25,7 @@ def main():
             reply+=chunk
         if reply!=expected:raise RuntimeError('Unexpected VISCA reply: '+reply.hex(' '))
     api('lab/ross/bus',{'bus':'preset','camera':'pana1'})
-    with socket.create_connection(('127.0.0.1',19010),timeout=5) as first:
+    with socket.create_connection(('127.0.0.1',19011),timeout=5) as first:
         send(first,'81 01 06 01 01 01 03 03 FF');send(first,'81 01 04 07 00 FF')
         send(first,'81 01 06 01 08 06 02 01 FF');send(first,'81 01 04 07 22 FF')
         state=api('lab/ross/bus',{'bus':'program','camera':'pana2'})
@@ -34,7 +34,7 @@ def main():
         with urllib.request.urlopen('http://127.0.0.1:18080/lab/state') as response:
             assert not any(json.load(response)['axes'].values()),'Previous camera did not stop'
         send(first,'81 01 04 07 27 FF',bytes.fromhex('90 60 41 FF'))
-        with socket.create_connection(('127.0.0.1',19011),timeout=5) as second:
+        with socket.create_connection(('127.0.0.1',19012),timeout=5) as second:
             send(second,'81 01 06 01 01 01 03 03 FF');send(second,'81 01 04 07 00 FF')
             send(second,'81 01 06 01 08 06 01 02 FF');send(second,'81 01 04 07 32 FF')
             send(second,'81 01 06 01 01 01 03 03 FF');send(second,'81 01 04 07 00 FF')

@@ -1,52 +1,137 @@
-# Installation and rollback
+# Installation
 
-## Windows development
+## Requirements
 
-Use Python 3.11+ and run from the project directory. There are no third-party packages. Check ports8088,18080,18081 before starting. `python -m backend.server --init-user admin` prompts for credentials; `python -m backend.server --lab` starts local emulators and backend. The PowerShell launcher under `deployment/windows` is provided for interactive use; ensure `python.exe` resolves to an installed interpreter.
+| Package | Processor | Build and test system |
+|---|---|---|
+| Windows | x64 | Windows Server 2022 runner |
+| Linux | x64 | Ubuntu 22.04 runner; GNU libc 2.35 or later |
+| macOS Intel | x64 | macOS 15 runner |
+| macOS Apple silicon | arm64 | macOS 15 runner |
 
-The development service may already be running in this chat at <http://127.0.0.1:8088>. Create a user in a separate terminal if needed. A second server instance will fail to bind rather than take over existing listeners. Ctrl+C stops the foreground service and attempts camera neutral commands. No Windows service, scheduled task or startup entry is installed automatically.
+The release workflow tests each package on its build system.
+It does not establish compatibility with every system version.
+Linux systems that use musl are not release targets.
+The macOS packages do not have an Apple Developer ID signature or notarization.
+The Windows package does not have a publisher signature.
+Follow your organization's software approval procedure if the system blocks the program.
 
-Use `--lab --visca-lab` to include the local TCP controller endpoints on 19010/19011. Remote simulator preset stores additionally require `--visca-allow-store`. The Windows launcher enables the VISCA lab but leaves remote stores disabled by default. Regenerate the native panels with `python dashboard/build_panels.py` after moving the project so manufacturer-logo URLs are valid at the new location. See `ross-lab-protocol.md` for the end-to-end controller demonstration.
+Install Ross DashBoard separately to use the native grid panels.
+Use the web interface without DashBoard if only administration is required.
 
-## Generic x86-64 Linux
+## Install a package
 
-Check `uname -m`, `python3 --version`, storage, user permissions, loopback and listening ports. Copy source to an approved user-owned directory, e.g. `~/camerabridge`. Create private configuration and runtime directories:
+1. Download the applicable archive and its `.sha256` file from the private GitHub release.
+2. Check the archive hash against the `.sha256` file.
+3. Extract the complete archive to a user-owned directory.
+4. Open CameraBridge.exe on Windows, CameraBridge.app on macOS, or CameraBridge on Linux.
+5. Create an administrator account in the control panel.
+6. Select **Start**.
+7. Select **Open setup page**.
 
-```sh
-mkdir -p ~/.config/camerabridge ~/.local/share/camerabridge
-chmod 700 ~/.config/camerabridge ~/.local/share/camerabridge
-cp config.example.json ~/.config/camerabridge/config.json
-python3 -m backend.server --storage ~/.local/share/camerabridge --init-user admin
-python3 -m backend.server --config ~/.config/camerabridge/config.json --storage ~/.local/share/camerabridge --lab
+The desktop starts in simulator mode.
+Use the [desktop procedure](desktop.md) to set its port, configuration and startup options.
+Linux requires a graphical desktop with a tray area for tray operation.
+If no tray is available, closing the control panel stops the service.
+Use CameraBridge-cli for a terminal or headless host.
+
+Use `.\CameraBridge-cli.exe` for terminal commands on Windows.
+Use `./CameraBridge-cli` for terminal commands on Linux and macOS.
+Keep the `_internal` directory beside the executable.
+Do not move the executable alone.
+
+Windows hash command:
+
+```powershell
+Get-FileHash .\CameraBridge-0.2.0rc1-windows-x64.zip -Algorithm SHA256
 ```
 
-Remove `--lab` only after configuring actual supported cameras. The service unit intentionally omits lab mode. It assumes code under `~/camerabridge` and Python at `/usr/bin/python3`; adapt paths after checking the host. After foreground acceptance, install it as an independent user service:
+Linux hash command:
 
 ```sh
-mkdir -p ~/.config/systemd/user
-cp deployment/linux/camerabridge.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user start camerabridge
-systemctl --user status camerabridge
-journalctl --user -u camerabridge
+sha256sum CameraBridge-0.2.0rc1-linux-x64.tar.gz
 ```
 
-Enable on login only after validation with `systemctl --user enable camerabridge`. Do not assume lingering or boot persistence is allowed. Do not enable it on TD1C without the explicit deployment decision.
+macOS hash command:
 
-## TD1C
+```sh
+shasum -a 256 CameraBridge-0.2.0rc1-macos-arm64.tar.gz
+```
 
-For native panels on the TD with the backend/emulators on Windows, use [TouchDrive development panel hosting](touchdrive-panel-host.md). That arrangement does not install the backend on the TD. The compatibility requirements below apply to a future backend installation on the TD itself.
+Select the Intel archive name if the Mac has an Intel processor.
 
-First complete `td1c-compatibility.md`. Architecture, OS, runtime, writable paths, service manager, persistent storage, vendor permissions and update survival are unresolved. A self-contained executable has not been built. Do not modify Ross partitions, libraries, DashBoard binaries or boot configuration. Do not use root just because it is available.
+## Application data
 
-## Configuration and security
+| Mode | Default data directory |
+|---|---|
+| Windows package | `%LOCALAPPDATA%/CameraBridge` |
+| Linux package | `$XDG_DATA_HOME/camerabridge`, or `~/.local/share/camerabridge` |
+| macOS package | `~/Library/Application Support/CameraBridge` |
+| Source | `runtime` in the source directory |
 
-Change `bind`/`port` and trusted CIDRs in a reviewed config file, then restart with `--config`. Lab mode requires loopback and exclusively simulated cameras. For remote panels, remove lab mode, explicitly permit the development PC/TD1C management addresses and use an HTTPS reverse proxy. CGI emulators have no authentication and must remain loopback. Do not expose them to the network.
+Use `--storage PATH` to select a different directory.
+The directory contains accounts, shot names, snapshots, desktop settings and pending configuration files.
+Do not copy account files into a release archive.
 
-Administration saves to `runtime/config.pending.json`; this does not silently change running camera assignments. Back up the old configuration and deliberately restart using the pending file after reviewing it. Camera changes require correct host/port and supported model profiles. A bad config fails startup.
+## Export native panels
 
-## Backup / rollback / removal
+1. Run `CameraBridge-cli panels --output ./panels`.
+2. Open the exported grid files in DashBoard.
+3. Keep the exported assets directory with the grid files.
 
-Stop CameraBridge before copying its configuration, `runtime/snapshots.json` and private credential database. Keep credentials in an access-controlled backup and exclude them from diagnostic bundles and source control. Record the code revision. Restore a previous code directory and matching configuration, then restart and re-query cameras. Never replay saved motion.
+Run the export command again after you move the panel directory.
+It sets the local manufacturer image paths for that directory.
+For a remote TouchDrive, use the [panel host procedure](touchdrive-panel-host.md).
 
-For Linux removal: `systemctl --user disable --now camerabridge`, remove only the CameraBridge user-unit file, and `systemctl --user daemon-reload`. Retain or separately archive its user-owned data; do not delete Ross files. For Windows, stop the process; no system installation has been made. Do not delete the working project until needed configurations/snapshots are backed up.
+## Source installation
+
+1. Install Python 3.11 or later.
+2. Copy the repository to a user-owned directory.
+3. Open a terminal in that directory.
+4. Run `python -m backend.server --lab --visca-lab --ensure-admin`.
+
+Use `python3` if that is your system's Python command.
+The console service requires no third-party Python packages.
+For desktop use, install requirements-desktop.txt and run `python camerabridge.py --tray`.
+
+## Update and rollback
+
+1. Select **Quit** from the tray menu, or stop the terminal service with Ctrl+C.
+2. Back up the data directory and the active configuration file.
+3. Extract the new release to a separate directory.
+4. Start the new desktop with the previous data directory.
+5. For terminal use, supply the previous `--storage` and `--config` paths.
+6. Check login, camera status and stop commands.
+
+To roll back, stop the new executable and start the previous executable with its matching data backup.
+Do not run two versions against one data directory.
+Do not restore or replay movement commands.
+
+## Optional Linux user service
+
+The supplied unit is a source-installation example.
+It expects source at `~/camerabridge` and configuration at `~/.config/camerabridge/config.json`.
+It does not start lab emulators.
+
+1. Complete the foreground tests first.
+2. Create the unit's configuration and data directories.
+3. Copy the unit to `~/.config/systemd/user/camerabridge.service`.
+4. Set its paths for your installation.
+5. Run `systemctl --user daemon-reload`.
+6. Run `systemctl --user start camerabridge`.
+7. Check `systemctl --user status camerabridge`.
+
+Use `journalctl --user -u camerabridge` to read its log.
+Use `systemctl --user enable camerabridge` only after the tests pass.
+For a package installation, replace `ExecStart` with its absolute executable path.
+No Windows service or macOS launch agent is installed by this release.
+
+## Remove the program
+
+1. Stop CameraBridge.
+2. Back up required data.
+3. Remove the extracted application directory.
+
+If you installed the Linux unit, first run `systemctl --user disable --now camerabridge`.
+Then remove only its unit file and run `systemctl --user daemon-reload`.
+Keep the data directory until you no longer need its records.

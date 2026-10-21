@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-POST_PATHS = frozenset(('/api/login', '/api/logout', '/api/state', '/api/command', '/api/snapshot', '/api/lab/ross/bus'))
+POST_PATHS = frozenset(('/api/login', '/api/logout', '/api/state', '/api/command', '/api/snapshot', '/api/lab/ross/bus', '/api/config'))
 
 def panel_bytes(manufacturer, base):
     source = ROOT / 'dashboard' / ('SW-' + manufacturer + '-Camera-Control.grid')
@@ -75,8 +75,10 @@ class PanelHandler(BaseHTTPRequestHandler):
         assets={'/assets/panasonic.png':'panasonic.png','/assets/marshall.png':'marshall.png'}
         if self.path in assets:
             self.reply((ROOT/'dashboard/assets'/assets[self.path]).read_bytes(),mime='image/png'); return
-        if self.path=='/health':
-            self.reply(b'{"service":"CameraBridge TD panel host","mode":"development"}'); return
+        if self.path=='/':
+            self.reply((ROOT/'web/admin.html').read_bytes(),mime='text/html; charset=utf-8'); return
+        if self.path in ('/health','/api/state','/api/config','/api/snapshots'):
+            self.proxy('GET'); return
         self.reply(b'{"error":"Not found"}',404)
     def do_POST(self):
         if not self.trusted(): return
@@ -93,11 +95,14 @@ class PanelHandler(BaseHTTPRequestHandler):
         if len(body)!=size:
             self.reply(b'{"error":"Incomplete body"}',400); return
         self.count()
+        self.proxy('POST',body)
+
+    def proxy(self,method,body=None):
         upstream=http.client.HTTPConnection('127.0.0.1',8088,timeout=5)
         try:
             headers={'Content-Type':self.headers.get('Content-Type','application/json')}
             if self.headers.get('Authorization'):headers['Authorization']=self.headers['Authorization']
-            upstream.request('POST',self.path,body,headers)
+            upstream.request(method,self.path,body,headers)
             response=upstream.getresponse();data=response.read(1048577)
             if len(data)>1048576:raise ValueError('Upstream response too large')
             self.reply(data,response.status)

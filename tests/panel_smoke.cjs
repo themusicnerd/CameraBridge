@@ -13,11 +13,15 @@ const decode = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g
     const api=decode(xml.match(/<api>([\s\S]*?)<\/api>/)[1]);
     const elements=new Set([...xml.matchAll(/\bid="([^"]+)"/g)].map(x=>x[1]));
     const values={bridge:'http://127.0.0.1:8088',camera:manufacturer==='Panasonic'?'pana1':'marshall1'};
-    const labels={},inflight=[],access={};
+    const labels={},inflight=[],access={},opened=[];
     const context=vm.createContext({
       console,JSON,Date,Math,String,Number,encodeURIComponent,
+      java:{awt:{Desktop:{getDesktop:()=>({browse:uri=>opened.push(uri.value)})}},lang:{Runnable:function(value){return value;}},net:{URI:function(value){this.value=value;},URL:function(value){this.value=value;}}},
+      Packages:{org:{eclipse:{ui:{PlatformUI:{getWorkbench:()=>({getDisplay:()=>({asyncExec:task=>task.run()}),getBrowserSupport:()=>({getExternalBrowser:()=>({openURL:url=>opened.push(url.value)})})})}}}}},
       params:{getValue:(k)=>values[k],setValue:(k,i,v)=>{assert.equal(access[k],1,`feedback must unlock local parameter ${k} before setValue`);values[k]=v;},setAccess:(k,v)=>{access[k]=v;}},
       ogscript:{
+        setXML:(id,xml)=>{assert.equal(id,'bridge_content');opened.push(xml.match(/url="([^"]+)"/)[1]);},
+        reveal:id=>assert.equal(id,'bridge_popup'),
         setStyle:(id,style)=>{assert.ok(elements.has(id),`missing style target ${id}`);},
         rename:(id,text)=>{assert.ok(elements.has(id),`missing UI id ${id}`);labels[id]=text;},
         asyncPost:(url,body,callback)=>{
@@ -27,6 +31,11 @@ const decode = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g
       }
     });
     new vm.Script(api,{filename:manufacturer+'.api'}).runInContext(context);
+    vm.runInContext('openBridge();',context);
+    assert.deepEqual(opened,['http://127.0.0.1:8088/']);
+    values.bridge='javascript:alert(1)';vm.runInContext('openBridge();',context);
+    assert.equal(opened.length,1,'non-HTTP links must not launch');values.bridge='http://127.0.0.1:8088';
+    vm.runInContext('cbNoticeUntil=0;',context);
     vm.runInContext("highlightPage(CB_MANUFACTURER==='Panasonic'?'PTZ':'Paint');",context);
     let count=0;
     for(const match of xml.matchAll(/<(?:ogscript|task|timertask)\b[^>]*>([\s\S]*?)<\/(?:ogscript|task|timertask)>/g)){

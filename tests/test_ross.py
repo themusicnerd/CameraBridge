@@ -7,7 +7,7 @@ import time
 import unittest
 from backend.core import Engine
 from backend.simulator import server as simulator
-from backend.ross import decode,ViscaError,PresetFollower,LabViscaServer
+from backend.ross import decode,ViscaError,PresetFollower,LabViscaServer,FixedCameraController,PivotCamServer
 from tests.test_system import wait_for
 
 class ViscaCodecTests(unittest.TestCase):
@@ -62,6 +62,23 @@ class RossLabTests(unittest.TestCase):
         self.engine.command('p1','label_preset',{'number':20,'name':'Weather map'},'test')
         self.assertEqual(self.engine.snapshot()['cameras'][0]['preset_names']['20'],'Weather map')
         self.assertEqual(json.loads((pathlib.Path(self.tmp.name)/'preset-names.json').read_text())['p1']['20'],'Weather map')
+    def test_numbered_endpoint_is_fixed_and_controller_restricted(self):
+        c=self.engine.cameras['p2']['config'];c.update(number=7,simulator=False)
+        follower=FixedCameraController(self.engine,'p2')
+        service=PivotCamServer(('127.0.0.1',0),self.engine,'p2',follower,'127.0.0.1')
+        threading.Thread(target=service.serve_forever,daemon=True).start()
+        try:
+            self.assertFalse(service.verify_request(None,('127.0.0.2',1234)))
+            self.assertEqual(follower.selected,'p2')
+            with socket.create_connection(service.server_address,timeout=2) as sock:
+                sock.sendall(bytes.fromhex('88 30 01 FF'));self.assertEqual(sock.recv(4),bytes.fromhex('88 30 02 FF'))
+                sock.sendall(bytes.fromhex('81 01 04 3F 01 13 FF'));self.assertEqual(sock.recv(4),bytes.fromhex('90 60 41 FF'))
+                sock.sendall(bytes.fromhex('81 01 04 3F 02 13 FF'));reply=b''
+                while len(reply)<6:reply+=sock.recv(6-len(reply))
+                self.assertEqual(reply,bytes.fromhex('90 41 FF 90 51 FF'))
+                self.assertEqual(self.engine.cameras['p2']['active_preset']['number'],20)
+                self.assertIsNone(self.engine.cameras['p1']['active_preset'])
+        finally:service.shutdown();service.server_close()
     def test_fragmented_tcp_preset_focus_and_disconnect_stop(self):
         self.follower.bus_event('preset','p1')
         service=LabViscaServer(('127.0.0.1',0),self.engine,'p1',self.follower,allow_store=True)

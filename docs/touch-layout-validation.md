@@ -1,21 +1,35 @@
-# TouchDrive touch layout
+# Touch layout tests
 
-Developed on Windows and visually checked in the TD1C's native DashBoard over VNC at 1920×1080. Panels retain a 1366×800 canvas to leave room for the existing tree, menu and tab bar. No display resolution, DashBoard theme or switcher configuration was changed for this update.
+The panels were developed on Windows.
+Native TouchDrive DashBoard screens were checked over VNC at 1920 × 1080.
+The 1366 × 800 canvas leaves room for the existing tree, menu and tabs.
+The tests did not change the screen resolution or DashBoard theme.
 
-- Native vertical fader widget 26 replaces small dot sliders. Handles render approximately 120×40 screen pixels on this TD setup.
-- Navigation targets are 104×56. Command buttons, numeric fields and login fields are at least 48 pixels high. Fixed rail STOP is 124×64; the PTZ pad has a second large STOP.
-- Marshall Paint contains red gain, blue gain, black level and gamma. Image contains colour, sharpness, brightness and gain. Exposure uses large value fields and bounded +/− buttons.
-- Panasonic retains PTZ, Presets (20 shots), Paint, TD1C and Config. Manufacturer logos remain in the header.
-- Fine +/− adjustment uses native parameter bindings and the existing authenticated write path. Slider range limits, access and backend mode checks remain in effect.
+| Control | Size or arrangement |
+|---|---|
+| Native fader | Widget 26; broad handle, approximately 120 × 40 screen pixels |
+| Page navigation | 104 × 56 pixels |
+| Command button or field | At least 48 pixels high |
+| Left rail STOP | 124 × 64 pixels |
+| Panasonic direction pad | Eight direction buttons and a central STOP |
+| Panasonic shots | Twenty buttons on one page |
+| Marshall Paint and Image | Four faders per page |
+| Open CameraBridge | 180 × 56 pixels in each header |
 
-Both panels opened natively and authenticated on the TD. Panasonic iris fader drag reached 2834 with confirmed CGI emulator readback, then the value field restored 1365 with confirmed readback. Marshall black level +/− changed 0 → 1 → 0 with confirmed lab model feedback. Touch jogging was left disabled. No physical camera was used for these interface checks.
+Native login and feedback worked on both panels.
+A Panasonic iris fader change reached 2834 with confirmed emulator feedback.
+The value field then restored 1365 with confirmed feedback.
+Marshall black level changed from 0 to 1 and back to 0 with confirmed lab feedback.
+Touch jogging remained disabled after the tests.
+No physical camera was used for these interface tests.
 
-Seven panel/host tests pass, including geometry bounds, minimum touch target sizes, fader presence, event bindings and host access restrictions. The Node smoke test parses 104 Panasonic and 71 Marshall handlers and exercises live feedback. Screenshots below are actual TD VNC captures, not mockups.
+The new Open CameraBridge button has separate release tests.
+Earlier screen captures below show the large touch layout before that button was added.
 
 ![Panasonic paint](images/touch-panasonic-paint.png)
 
 ![Marshall paint](images/touch-marshall-paint.png)
 
-Current deployed files are `/home/touchdrive/Downloads/CameraBridge-Panasonic (1).grid` and `/home/touchdrive/Downloads/CameraBridge-Marshall (1).grid`. Older panels remain available as a rollback. The panel host serves the regenerated sources at `/Panasonic.grid` and `/Marshall.grid` on the explicitly configured LAN development host.
-
-Movement packet rejection, push/pull mapping, actual Preset-bus following and physical shot completion are separate outstanding control work. This layout update does not claim to resolve them. Numeric text fields commit on Enter; ongoing polling can still interrupt uncommitted text, so the larger faders and +/− buttons are the preferred touch adjustments.
+Geometry tests check canvas bounds and minimum control size.
+Script tests check native bindings and live feedback in a JavaScript test context.
+These checks do not establish physical camera behavior.

@@ -1,9 +1,27 @@
-# USR-IOT serial gateways
+# USR-IOT serial gateway
 
-Exact adapter model, firmware, address, TCP port and serial settings remain unknown. No adapter was reconfigured or contacted in this work. Obtain the correct model manual before selecting TCP server/client modes or changing persistent settings.
+The adapter model and serial settings are not established.
+No adapter configuration was changed during the recorded tests.
+The serial transport is not connected to a production Marshall profile.
 
-`backend.drivers.SerialBus` supplies a reconnect-on-next-request TCP transport, a mutex covering send/read/turnaround, bounded reads, response timeout and configurable delay. Reuse one object for every camera on a shared bus. Do not instantiate a new bus object per camera sharing that endpoint. This transport is not yet wired to an approved production Marshall command profile.
+## Check an adapter
 
-Camera responsiveness and TCP connectivity are separate fields. A timeout leaves camera responsiveness unknown, not offline. Writes are not retried after an ambiguous timeout; a second non-idempotent command could repeat a store or menu action. Reply matching, ACK/completion socket handling and safe idempotent retry require the approved model profile. There is no invented CRC: use a checksum only if the actual protocol specifies it.
+1. Record its exact model and firmware.
+2. Obtain its model manual.
+3. Back up its current configuration.
+4. Check the TCP mode, address and port.
+5. Check baud rate, data bits, parity and stop bits.
+6. Check RS485 polarity and automatic direction control.
+7. Check termination, bias and unique camera addresses.
+8. Check that TCP data has no added protocol wrapper.
+9. Test one camera before a shared camera bus.
 
-Commissioning must check baud, 8N1 where appropriate, RS485 two-wire polarity, automatic direction, turnaround, bias/termination, unique addresses, raw transparent TCP operation and no unwanted protocol wrapping. Back up the adapter configuration before any later authorised change. Test one camera before introducing a multidrop bus.
+Use one SerialBus object for each shared connection.
+Its lock covers request, reply and turnaround time.
+Reads and wait times have limits.
+The transport connects again on the next request after a connection failure.
+It does not automatically repeat an uncertain write.
+A second store or menu action could have an unwanted result.
+
+Use a checksum only if the exact protocol requires one.
+TCP connection status and camera response status are separate facts.

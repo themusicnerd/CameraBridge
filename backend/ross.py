@@ -112,6 +112,19 @@ class PresetFollower:
             if camera==self.selected:
                 self.axes=dict.fromkeys(self.axes,0);self.neutral=set();self.update_status()
 
+class FixedCameraController(PresetFollower):
+    """One numbered endpoint always controls one explicitly configured camera."""
+    def __init__(self,engine,camera):
+        super().__init__(engine);self.bus_event('preset',camera)
+
+    def update_status(self):
+        if self.selected is None:return
+        with self.engine.lock:
+            endpoints=self.engine.ross_status.setdefault('endpoints',{})
+            endpoints[self.selected]={'number':self.engine.cameras[self.selected]['config'].get('number'),
+                'neutral_ready':{'pan_tilt','zoom'}<=self.neutral,'selection':'fixed endpoint'}
+            self.engine.ross_status.update(state='Configured PIVOTCam endpoints — equipment acceptance pending',preset_follow='fixed camera per TCP port')
+
 class LabViscaServer(socketserver.ThreadingTCPServer):
     allow_reuse_address=True;daemon_threads=True
     def __init__(self,address,engine,camera,follower,allow_store=False):
@@ -119,6 +132,9 @@ class LabViscaServer(socketserver.ThreadingTCPServer):
         if camera not in engine.cameras or not engine.cameras[camera]['config'].get('simulator'):
             raise ValueError('VISCA bridge currently accepts simulated cameras only')
         if engine.cameras[camera]['config']['manufacturer']!='Panasonic':raise ValueError('VISCA target must be Panasonic')
+        self.configure(address,engine,camera,follower,allow_store)
+
+    def configure(self,address,engine,camera,follower,allow_store):
         self.engine,self.camera,self.follower,self.allow_store=engine,camera,follower,allow_store
         self.slots=threading.BoundedSemaphore(1)
         self.active=0
@@ -133,6 +149,18 @@ class LabViscaServer(socketserver.ThreadingTCPServer):
                 except OSError:pass
             self.client_condition.wait_for(lambda:self.active==0,timeout=6)
         super().server_close()
+
+class PivotCamServer(LabViscaServer):
+    """Explicit physical or simulated Panasonic endpoint, restricted to one frame."""
+    def __init__(self,address,engine,camera,follower,controller,allow_store=False):
+        self.controller=str(ipaddress.IPv4Address(controller))
+        ipaddress.IPv4Address(address[0])
+        if camera not in engine.cameras or engine.cameras[camera]['config']['driver']!='panasonic':
+            raise ValueError('PIVOTCam requires an enabled Panasonic camera')
+        self.configure(address,engine,camera,follower,allow_store)
+
+    def verify_request(self,request,client_address):
+        return client_address[0]==self.controller and not self.stopping.is_set()
 
 class ViscaHandler(socketserver.BaseRequestHandler):
     def handle(self):

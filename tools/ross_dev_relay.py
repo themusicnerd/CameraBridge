@@ -20,7 +20,7 @@ def verify_lab(port):
     def get(path):
         with urllib.request.urlopen('http://127.0.0.1:8088'+path,timeout=2) as r:return json.load(r)
     if get('/health').get('mode')!='LAB':raise ValueError('Development relay requires LAB backend')
-    cid={19010:'pana1',19011:'pana2'}[port]
+    cid={19011:'pana1',19012:'pana2'}[port]
     camera=next(c for c in get('/api/state')['cameras'] if c['id']==cid)
     if not camera.get('simulator') or camera['manufacturer']!='Panasonic' or not ipaddress.ip_address(camera['host']).is_loopback:
         raise ValueError('Only loopback Panasonic emulators are permitted')
@@ -90,7 +90,7 @@ class Handler(socketserver.BaseRequestHandler):
         finally:self.server.slot.release()
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--bind',required=True);p.add_argument('--frame',required=True);p.add_argument('--port',type=int,choices=(19010,19011),default=19010);p.add_argument('--output',required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--bind',required=True);p.add_argument('--frame',required=True);p.add_argument('--port',type=int,choices=(19011,19012),default=19011);p.add_argument('--output',required=True);a=p.parse_args()
     for value in (a.bind,a.frame):
         ip=ipaddress.ip_address(value)
         if ip.version!=4 or not ip.is_private or ip.is_unspecified or ip.is_loopback:p.error('Use explicit private LAN IPv4 addresses')

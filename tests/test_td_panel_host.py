@@ -31,7 +31,7 @@ class TouchDrivePanelHostTests(unittest.TestCase):
         self.host.allowed={'127.0.0.1'}
         for path in ('/runtime/credentials.sqlite','/../config.example.json','/assets/../runtime/credentials.sqlite'):
             self.assertEqual(self.request(path)[0],404)
-        for path in ('/api/config','/api/service/stop','/api/command?x=1'):
+        for path in ('/api/service/stop','/api/command?x=1'):
             self.assertEqual(self.request(path,b'{}')[0],403)
     def test_proxy_preserves_auth_and_payload(self):
         upstream=MagicMock();response=upstream.getresponse.return_value;response.status=403;response.read.return_value=b'{"error":"Authentication required"}'
@@ -47,5 +47,16 @@ class TouchDrivePanelHostTests(unittest.TestCase):
     def test_origin_and_body_limits(self):
         self.assertEqual(self.request('/api/login',b'{}',{'Origin':'http://untrusted.example'})[0],403)
         self.assertEqual(self.request('/api/login',b'x'*65537)[0],400)
+
+    def test_admin_page_and_authenticated_get_forwarding(self):
+        status,body,headers=self.request('/')
+        self.assertEqual(status,200);self.assertIn(b'<html',body)
+        upstream=MagicMock();response=upstream.getresponse.return_value;response.status=401;response.read.return_value=b'{"error":"Authentication required"}'
+        original=http.client.HTTPConnection
+        def connection(host,port,**kw):return upstream if (host,port)==('127.0.0.1',8088) else original(host,port,**kw)
+        with patch('tools.td_panel_host.http.client.HTTPConnection',side_effect=connection):
+            self.assertEqual(self.request('/api/config',headers={'Authorization':'Bearer test-session'})[0],401)
+        self.assertEqual(upstream.request.call_args.args[0:2],('GET','/api/config'))
+        self.assertEqual(upstream.request.call_args.args[3]['Authorization'],'Bearer test-session')
 
 if __name__=='__main__':unittest.main()

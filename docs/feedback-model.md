@@ -1,11 +1,28 @@
 # Feedback model
 
-Each parameter includes ID/label, native range/units, dependencies, writable/readback capability, actual value, requested value, last successful query, last command, confirmation and error. `None` plus `unknown` means startup has not established an actual value. Simulator parameters use the same model but their camera is explicitly labelled simulated.
+Each parameter has an actual value and an optional requested value.
+Its record also contains range, required mode, query time, command time and error information.
+Simulator cameras use the same record format and have a simulator label.
 
-Accepted UI writes set `requested` and `pending`, then enter a coalescing queue. The worker revalidates mode and ownership, transmits, queries and parses. Matching actual values become `confirmed`; differing replies become `mismatch`; failed writes become `error`. A successful command echo is insufficient. Presets remain `last command sent, unverified` because activity/completion readback is not implemented.
+| State | Meaning |
+|---|---|
+| `unknown` | No valid query has established the value |
+| `pending` | A write is in the queue |
+| `confirmed` | An independent query returned the expected value |
+| `mismatch` | The query returned a different value |
+| `error` | The write or query failed |
+| `stale` | The previous confirmed value is too old |
 
-Snapshot responses compute age and replace old confirmed labels with `stale` after the larger of 10 seconds and three configured poll intervals. Last actual values remain visible with their age; they are not silently replaced by requested values. Fresh confirmed mode state is required before dependent writes.
+Stale detection uses the greater of ten seconds and three configured poll intervals.
+The interface keeps the last actual value and its age.
+It does not replace actual feedback with the requested value.
+Dependent writes require fresh confirmed mode information.
 
-Workers poll one parameter at a time and yield to movement. Default completed-round delay is four seconds; adjust `poll_seconds` (1..60) in configuration. Panel polling reads central state once per second and does not increase camera traffic. External camera value changes appear on subsequent queries. Query priority, per-family refresh rates and Panasonic notification subscription are pending.
+Camera workers query parameters individually.
+Native panels read central state approximately once per second.
+Panel reads do not add camera queries.
+The default delay after a query round is four seconds.
 
-Transport connection, query response and physical camera action are different evidence. Marshall lab state cannot establish real RS485 acknowledgement or current settings. Ross Program/Preset/positioner fields remain unverified until actual switcher feedback is integrated.
+Shot completion is not part of parameter confirmation.
+Preset state remains `last command sent, unverified`.
+An emulator result does not establish physical camera motion or optical matching.

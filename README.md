@@ -1,55 +1,97 @@
 # CameraBridge
 
-Native Ross DashBoard camera panels, a shared Python backend, and a Windows/Linux camera-control lab.
+CameraBridge connects native Ross DashBoard panels to one camera control service.
+It includes Panasonic camera emulators and a Marshall lab model.
 
-**Development release 0.1 — 21 October 2026. Not production accepted.**
+**Version 0.2.0rc1 is a development release. Production acceptance is incomplete.**
 
-The two native DashBoard panels are deployed on the development TouchDrive. The backend and camera emulators run on Windows. Carbonite slot 0 Beauty uses PIVOTCam_1.1 at the simulator relay, with Input 1 / channel 1 restored. Positioner motion, shot store/recall and an operator-triggered Custom Control recall have reached the simulator. Continuous motion, actual bus following and physical-camera completion remain acceptance items.
+## Download and start
 
-## Start the lab
+1. Open the [private release page](https://github.com/themusicnerd/CameraBridge/releases).
+2. Select the package for your operating system and processor.
+3. Extract the complete archive.
+4. Open CameraBridge.exe on Windows, CameraBridge.app on macOS, or CameraBridge on Linux.
+5. Create an administrator account in the control panel.
+6. Select **Start**.
+7. Select **Open setup page**.
 
-Requires Python 3.11 or newer, with no third-party Python dependencies. From this directory:
+Close the control panel to keep the service in the tray.
+Right-click the tray icon and select **Quit** to stop CameraBridge.
+On macOS, use the menu bar icon.
+Read the [desktop procedure](docs/desktop.md) to change the port.
+
+For a terminal service, use the applicable command.
+
+Windows:
 
 ```powershell
-python -m backend.server --init-user admin
-python -m backend.server --lab --visca-lab
+.\CameraBridge-cli.exe --lab --visca-lab --ensure-admin
 ```
 
-The first command prompts for a password and stores only a salted PBKDF2 hash. Run it while the service is running if an account has not yet been created. Non-empty passwords are accepted; there is no minimum length requirement. An additional operator account can be created with `--init-user operator --role operator`.
+Linux or macOS:
 
-Open <http://127.0.0.1:8088>. The service starts two independent Panasonic CGI emulators (18080 and 18081), an explicitly synthetic Marshall lab model, and optional lab serial-VISCA/TCP endpoints (19010 and 19011). Check those ports are free first. All lab listeners bind to loopback.
+```sh
+./CameraBridge-cli --lab --visca-lab --ensure-admin
+```
 
-In **DashBoard → File → Open**, open:
+For terminal use, set the administrator password when the program asks for it.
+Then open [CameraBridge](http://127.0.0.1:8088/) in a browser.
 
-- `dashboard/SW-Panasonic-Camera-Control.grid`
-- `dashboard/SW-Marshall-Camera-Control.grid`
+The packages include Python. The packages do not include Ross DashBoard.
+Use the [installation procedure](docs/installation.md) for prerequisites and operating system limits.
 
-Use the same CameraBridge login in each panel. The URL defaults to `http://127.0.0.1:8088`. The panels use native OGLML controls and ogScript `asyncPost`; they do not embed a browser. Password entries clear after sign-in; sessions are held in memory. Do not save a panel containing a typed password.
+## Open the camera panels
 
-The panels follow the flat Aura reference with manufacturer logos and larger native fader handles. Navigation targets are 104×56; command buttons and entries are at least 48 pixels high. Marshall Paint and Image each hold four faders. The 1366×800 canvas fits inside the TD's 1920×1080 DashBoard desktop with its tree and tabs visible. Login is on Config. Enable touch control on PTZ before jogging. Persistent shot names are edited on Presets. Regenerate with `python dashboard/build_panels.py` after moving the project so local logo URLs resolve on the new host. See [touch layout verification](docs/touch-layout-validation.md).
+1. Export the panels with `CameraBridge-cli panels --output ./panels`.
+2. In DashBoard, select **File > Open**.
+3. Open the Panasonic or Marshall grid file in the exported directory.
+4. Select **Config**.
+5. Sign in with the CameraBridge account.
 
-To stop the lab, press Ctrl+C in its terminal. Stop controls and the watchdog cannot guarantee a physical camera stops if its network is broken; see the safety limitations.
+On Windows, use `.\CameraBridge-cli.exe` in place of `CameraBridge`.
+On Linux and macOS, use `./CameraBridge-cli`.
+Select **Open CameraBridge** in either panel to open its configured service in a DashBoard browser window.
+Some TouchDrive browser components are unavailable. Use the displayed address if the window is blank.
+The browser requires a separate sign-in.
 
-## Implemented scope
+## Current scope
 
-The AW-HE130 driver implements variable pan/tilt, zoom/focus speed, neutral stop, physical presets 1–100, iris mode/position, focus mode/position, zoom position, red/blue gain, white-balance modes and detail. Supported paint values are queried independently after writes. Additional paint families and HE40/HE120 profiles remain pending.
+- The Panasonic driver implements a limited AW-HE130 command set.
+- Marshall controls operate a lab model. They do not control a physical camera.
+- Native camera panels have large fader handles and touch targets.
+- Camera setup adds, edits, removes and numbers camera entries.
+- Numbered PIVOTCam endpoints can control configured Panasonic cameras.
+- Camera 1 defaults to TCP 19011. Camera 2 defaults to TCP 19012.
+- Sony PXW-Z200 entries remain disabled until SDK access and integration are complete.
+- Carbonite positioner and shot commands have reached the Panasonic emulator.
+- An operator-triggered Custom Control recall has reached the emulator.
+- Some motion packets were rejected. Continuous motion requires more tests.
+- Actual switcher bus selection and positioner push/pull mapping are incomplete.
+- Physical camera response and shot completion require tests.
 
-Marshall paint/OSD controls currently operate **only the lab model**. The RS485 TCP transport and bus mutex exist, but CV226/CV228 direct command bytes are deliberately blocked until an exact-model command list or annotated captures establish them.
+The default lab uses local network addresses only.
+The optional TouchDrive host and Carbonite relay require explicit network addresses.
+See the [feature table](docs/feature-matrix.md) for the limits of each feature.
 
-Modern Ross gateway transport is documented as serial VISCA over TCP. A **lab-only** bridge translates a tested subset to the Panasonic CGI emulators. Its core listener rejects LAN binds and physical targets; a separate IP-restricted development relay accepts the Carbonite. Actual frame capture verifies initialization, variable motion and shot commands through the simulator, including an operator-triggered Custom Control recall. Explicit simulator Preset events select a target; these are not actual switcher bus feedback. Handover stops the old camera and requires fresh neutral input. See `docs/ross-lab-protocol.md` and `docs/ross-hardware-acceptance.md` for partial passes and remaining work.
+## Documentation
 
-Run `python tools/visca_lab_demo.py` for the controller demonstration. Intentional simulator remote stores require `--visca-allow-store` on the service and `--store` on the demo. Store is otherwise blocked at the raw gateway.
+Start with the [documentation index](docs/index.md).
+It includes installation, operation, configuration, API, security, support and developer procedures.
+The [writing review](docs/ste-review.md) records the ASD-STE100 review limits.
+Full ASD-STE100 compliance has not been established.
 
-## Verify
+## Source installation
 
-```powershell
+Python 3.11 or later is required for source use.
+The console service uses the Python standard library.
+The desktop interface requires PySide6 Essentials.
+Install it with `python -m pip install -r requirements-desktop.txt`.
+Start the desktop with `python camerabridge.py --tray`.
+
+```sh
+python -m backend.server --lab --visca-lab --ensure-admin
 python -m unittest discover -v
-python dashboard/build_panels.py
-python tools/host_diagnostic.py --output host-report.json
+python tools/check_docs.py
 ```
 
-See `docs/feature-matrix.md` for implementation and hardware-validation status, `docs/dashboard-custompanels.md` for panel acceptance, and `docs/installation.md` for deployment and rollback.
-
-Both redesigned Aura panels load in local DashBoard 9.15.2. Instrumented copies confirmed recurring native timer requests and successful feedback callbacks after updating native parameter/label values. The development admin account is provisioned and live backend login is verified. Visual layout, touch operation and authenticated native controls remain pending because the Windows screenshot helper times out. See `docs/native-dashboard-validation.md` and `docs/aura-design.md` for the evidence and its limits.
-
-Native panels on the connected TouchDrive with the Windows development backend: see [TouchDrive panel hosting](docs/touchdrive-panel-host.md).
+Read [release engineering](docs/releases.md) before you build a package.

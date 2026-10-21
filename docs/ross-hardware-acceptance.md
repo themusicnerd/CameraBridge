@@ -1,31 +1,49 @@
-# Carbonite / TouchDrive acceptance still required
+# Physical equipment acceptance
 
-User-authorized development equipment: Carbonite Ultra 192.168.96.123 and TD1C 192.168.96.122. The user created the first test camera/input mapping. CameraBridge subsequently corrected/recreated slot 0 Beauty as PIVOTCam_1.1 at 192.168.96.61:19010 and restored Input 1, channel 1, inversion No. Other slots and Custom Controls were not edited. Native CameraBridge panels are deployed in the TD DashBoard, with the backend on Windows. Initialization and focus-mode inquiry have real bidirectional capture; positioner, shot actions and actual bus following remain unverified.
+Production acceptance is incomplete.
+Use isolated development equipment for these tests.
+Record the model, firmware, application version and test result.
 
-## Documented Custom Control configuration
+## Before a physical camera test
 
-The current [Ultra Camera Custom Control event reference](https://help.rossvideo.com/ultra/Topics/Operation/CustomControls/Events-Camera.html) documents the following under **Devices → Camera** in the custom-control event editor:
+1. Back up the switcher configuration.
+2. Record occupied device slots and input assignments.
+3. Record the camera model and firmware.
+4. Check the exact command specification.
+5. Establish an independent camera stop method.
+6. Clear the camera movement area.
+7. Test the camera through its supported native controller.
 
-| Action | Fields to configure |
+The current Carbonite relay rejects physical camera targets.
+Physical gateway support requires separate implementation and review.
+Do not remove that guard for a test.
+
+## Acceptance record
+
+| Test | Required result |
 |---|---|
-| Camera Halt All | Select the camera device |
-| Recall Shot | Camera, channel, Absolute/Reset change type and shot number |
-| Recall Shot Fast | Same camera/channel/shot selection, fastest recall |
-| Store Shot | Camera, channel, Absolute/Reset change type and shot number |
+| Manual modes and paint writes | Independent query confirms each supported value |
+| Direction and inversion | Physical result agrees with the selected direction |
+| Variable speed | Predictable response across the usable range |
+| Simultaneous axes | Pan, tilt and zoom do not erase each other |
+| Release and STOP | Camera stops within the accepted measured interval |
+| Network failure | Fault indication and an independent stop method |
+| Target change | Previous camera stops before a new target moves |
+| Bus selection | Preset selects the intended target; Program alone does not |
+| Shot recall and store | Correct shot and measured physical completion |
+| Custom Controls | Recall, Recall Fast, Store and Halt act on the correct camera |
+| Restart | No queued movement resumes |
+| Normal switching | Camera control does not disrupt the switcher |
 
-After a working gateway has been validated, an operator example is: add Recall Shot, choose the device associated with Panasonic 1, select its verified channel, use Absolute, enter Shot 20, and save the custom control. A corresponding halt custom control should target the same camera. Store examples must be tested only on an expendable preset and with remote stores explicitly allowed. Exact menu labels must be checked against the frame's installed version.
+## Native Custom Controls
 
-These are documented configuration examples, **not hardware-tested CameraBridge macros**. Carbonite Custom Controls are not assumed to issue arbitrary HTTP. Paint look/select/group actions still need a documented external pathway or a verified native translation. Normal switcher Program/ME memories are distinct from physical camera shots and CameraBridge paint snapshots.
+Ross documents camera events under **Devices > Camera**.
+Recall Shot uses camera, channel, change type and shot number.
+Store Shot uses the same selection and writes a shot.
+Recall Shot Fast requests a faster recall.
+Camera Halt All targets the selected camera device.
 
-## Before enabling a hardware listener
-
-1. Record frame firmware, DashBoard/plugin versions, occupied ports/device slots and current input/device mappings. Back up the switcher set using its normal supported workflow.
-2. Capture initialization, inquiries, joystick axes/neutral, halt, preset store/recall and both Program/Preset source changes from a working modern gateway. Confirm raw TCP framing, addressing, ACK sockets and completion timing.
-3. Implement and test physical Panasonic preset completion (notification or other documented evidence), supported inquiries and any additional required commands. Do not reuse the emulator's instantaneous completion claim.
-4. Add a separately reviewed LAN listener restricted to the frame's management address. The existing lab server intentionally cannot be used on a LAN or against a physical camera.
-5. Use an unused device slot/input association. Test with emulators first, then a physical camera within a controlled movement area. Preserve original mappings for rollback.
-6. Verify that Preset selects the intended camera, Program alone does not, old camera movement stops before handover, stale packets cannot move the new camera, and neutral input is required after a switch/fault.
-7. Test simultaneous PT/zoom, all directions, deadbands, focus-mode push behaviour, presets, disconnect/watchdog stopping, service shutdown/restart and camera outages.
-8. Run real Recall Shot/Recall Shot Fast/Halt/Store Custom Controls, including an unassigned input and invalid preset. Confirm normal switching is unaffected.
-
-If native delegation follows additional buses, a documented real bus-feedback adapter is required to enforce Preset-only following. The simulator's bus API is not such an adapter. Panel Follow/Live Assist page navigation is also distinct from physical positioner delegation. Physical TouchDrive knob mapping remains a separate research item.
+The bench verified an operator-triggered Recall Shot command to an emulator.
+Recall Fast, Halt All and Custom Control Store Shot remain untested through equipment.
+Menu labels must match the installed frame version.
+Do not assume that a camera Custom Control can issue arbitrary HTTP commands.

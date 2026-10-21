@@ -1,23 +1,44 @@
 # Architecture
 
-The Windows/Linux development process owns the REST adapter, central Engine, one worker and I/O lock per camera, and memory-only sessions. Lab mode additionally starts independent Panasonic HTTP servers. Separate native DashBoard panels and the administration page share the same state.
+One Python process owns the central state engine.
+Each camera has one worker and one input/output lock.
+Native panels and the web interface read the same state.
 
+```text
+Native panels ---- authenticated HTTP ---- State engine ---- Panasonic CGI
+Web interface ---/                           |
+                                            +------------- Marshall lab model
+Carbonite ---- restricted lab relay ---- VISCA listener ---/
 ```
-Panasonic .grid ─┐
-Marshall .grid ──┼── authenticated HTTP adapter ── Engine ── camera workers
-Web admin ───────┘                                  │          ├─ Panasonic CGI
-                                                   │          └─ Marshall LAB model
-                                                   └─ state + bounded diagnostic events
-```
 
-Commands are protocol-independent until they reach a driver. Paint writes coalesce by parameter. Workers recheck ownership, generation, lockout and dependent camera modes immediately before transmission. Camera I/O failures do not terminate other camera workers. Polling yields to movement.
+The TouchDrive host can serve panels, images and the web interface.
+It forwards a fixed set of HTTP requests to the local backend.
+It preserves the login token for backend access checks.
 
-The movement watchdog uses monotonic deadlines. New jog input expires after 900ms unless refreshed by valid input. It invalidates queued movement before attempting neutral commands. No movement is restored from persistent storage. Stop commands bypass ownership but require API authentication.
+Paint writes for the same parameter replace older queued writes.
+Workers check ownership, generation, lock and required mode before transmission.
+An independent query confirms a paint value.
+A command echo does not confirm it.
 
-One shared `SerialBus` instance is required per physical RS485 bus. Its lock covers the complete request/response/turnaround interval. The exact-model Marshall driver is currently fail-closed and not registered as a production camera driver.
+The watchdog uses a monotonic clock.
+It invalidates queued movement before it attempts neutral commands.
+The application never restores movement from disk.
+The lab VISCA listener stops its selected target when a controller connection ends.
 
-The service uses only the Python standard library. Python was chosen for protocol work, portability and zero downloaded application dependencies. Go is attractive for a single executable and predictable deployment; no CPU/RAM comparison has yet been measured. Porting a tested protocol core is preferable to presenting estimated resource usage as measurements. The supplied Linux unit limits CPU/RAM; these are policy settings, not measured consumption.
+The lab follower accepts explicit simulator bus events.
+It requires fresh pan/tilt and zoom neutral input after a target change or stop.
+It does not read the actual Carbonite bus.
 
-An optional lab-only serial VISCA/TCP ingress now shares the Engine and a PresetFollower. Its separate reader/consumer paths bound and coalesce movement traffic, reject stale frames and preserve command barriers. The follower fences selection epochs and requires fresh neutral input after handover/stop. Its bus inputs are authenticated simulator events, not inferred switcher state. Production targets and non-loopback listeners are rejected.
+One SerialBus object must serve each shared physical RS485 connection.
+The production Marshall command profile is not registered.
 
-Current limitations: the stdlib HTTP server is a local engineering service, not an internet-facing hardened server; no WebSocket transport; no applied live configuration reload; diagnostic events are bounded in memory; exhaustive lifecycle/fault tests remain outstanding. Use a trusted management network and an HTTPS reverse proxy for remote operation.
+The console service uses only the Python standard library.
+The desktop interface uses PySide6 Essentials.
+A QProcess instance owns the console child process.
+A private standard-input pipe requests graceful shutdown.
+Closing that pipe also stops the child.
+Desktop settings are separate from the selected camera configuration.
+A local user socket brings an existing control panel to the front.
+Release packages include Python through PyInstaller.
+The service is not an internet-facing production server.
+CPU and memory acceptance limits require measurement on the target equipment.

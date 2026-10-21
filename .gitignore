@@ -3,3 +3,7 @@ __pycache__/
 runtime/
 *.log
 .venv/
+build/
+dist/
+release/
+*.spec

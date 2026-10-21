@@ -28,13 +28,25 @@ class ProtocolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             auth=Auth(pathlib.Path(directory)/'auth.sqlite')
             output=StringIO()
-            with patch('backend.server.getpass.getpass',side_effect=['','a','b','password','password']),redirect_stdout(output):
+            with patch('backend.server.sys.stdin.isatty',return_value=True),patch('backend.server.getpass.getpass',side_effect=['','a','b','password','password']),redirect_stdout(output):
                 provision_user(auth,'test','admin')
             self.assertIn('cannot be empty',output.getvalue())
             self.assertIn('passwords differ',output.getvalue())
             self.assertIn('SUCCESS',output.getvalue())
             self.assertNotIn('New password: password',output.getvalue())
             self.assertEqual(auth.login('test','password','test-client')[1],'admin')
+    def test_pipe_provisioning_and_eof(self):
+        from unittest.mock import patch
+        from contextlib import redirect_stdout
+        from io import StringIO
+        with tempfile.TemporaryDirectory() as directory:
+            auth=Auth(pathlib.Path(directory)/'auth.sqlite');output=StringIO()
+            with patch('backend.server.sys.stdin',StringIO('pipe-test\npipe-test\n')),redirect_stdout(output):
+                provision_user(auth,'pipe','admin')
+            self.assertEqual(auth.login('pipe','pipe-test','test-client')[1],'admin')
+            self.assertNotIn('pipe-test',output.getvalue())
+            with patch('backend.server.sys.stdin',StringIO('')),redirect_stdout(output),self.assertRaises(EOFError):
+                provision_user(auth,'missing','admin')
     def test_directions_and_neutral(self):
         self.assertEqual(movement(-49,49,1,-1),['#PTS0199','#Z51','#F49'])
         self.assertEqual(movement(),['#PTS5050','#Z50','#F50'])
@@ -57,6 +69,18 @@ class ProtocolTests(unittest.TestCase):
     def test_secret_config_rejected(self):
         c=json.loads((ROOT/'config.example.json').read_text());c['cameras'][0]['password']='do-not-store'
         with self.assertRaises(ValueError):validate_config(c)
+    def test_camera_numbers_and_pending_profiles(self):
+        config=json.loads((ROOT/'config.example.json').read_text(encoding='utf-8'))
+        validate_config(config);self.assertEqual([c['number'] for c in config['cameras']],[1,2,3])
+        config['cameras'][1]['number']=1
+        with self.assertRaises(ValueError):validate_config(config)
+        config['cameras'][1]['number']=2
+        sony=dict(id='sony1',number=4,name='Sony',manufacturer='Sony',model='PXW-Z200',driver='sony-sdk',enabled=False,simulator=False)
+        config['cameras'].append(sony);validate_config(config)
+        sony['enabled']=True
+        with self.assertRaises(ValueError):validate_config(config)
+        sony['enabled']=False;sony['pivotcam']=True
+        with self.assertRaises(ValueError):validate_config(config)
     def test_documented_fixtures(self):
         fixture=json.loads((ROOT/'tests/fixtures/panasonic-documented.json').read_text())
         for case in fixture['cases']:
