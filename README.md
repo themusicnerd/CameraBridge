@@ -62,7 +62,7 @@ The browser requires a separate sign-in.
 - Camera setup adds, edits, removes and numbers camera entries.
 - Numbered PIVOTCam endpoints can control configured Panasonic cameras.
 - Camera 1 defaults to TCP 19011. Camera 2 defaults to TCP 19012.
-- Sony PXW-Z200 entries remain disabled until SDK access and integration are complete.
+- Sony PXW-Z200 entries remain disabled until SDK integration and camera tests are complete.
 - Carbonite positioner and shot commands have reached the Panasonic emulator.
 - An operator-triggered Custom Control recall has reached the emulator.
 - Some motion packets were rejected. Continuous motion requires more tests.
