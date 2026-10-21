@@ -1,4 +1,4 @@
-# CameraBridge 0.2.0rc1
+# CameraBridge 0.2.0rc2
 
 This is a development prerelease.
 Production and physical camera acceptance are incomplete.

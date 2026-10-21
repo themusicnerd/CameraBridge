@@ -32,6 +32,13 @@ Use the web interface without DashBoard if only administration is required.
 The desktop starts in simulator mode.
 Use the [desktop procedure](desktop.md) to set its port, configuration and startup options.
 Linux requires a graphical desktop with a tray area for tray operation.
+Ubuntu 22.04 also requires EGL, OpenGL and the Qt XCB support libraries.
+Install the packages with this command:
+
+`sh
+sudo apt-get install libegl1 libgl1 libxkbcommon0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
+`
+
 If no tray is available, closing the control panel stops the service.
 Use CameraBridge-cli for a terminal or headless host.
 
@@ -43,19 +50,19 @@ Do not move the executable alone.
 Windows hash command:
 
 ```powershell
-Get-FileHash .\CameraBridge-0.2.0rc1-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\CameraBridge-0.2.0rc2-windows-x64.zip -Algorithm SHA256
 ```
 
 Linux hash command:
 
 ```sh
-sha256sum CameraBridge-0.2.0rc1-linux-x64.tar.gz
+sha256sum CameraBridge-0.2.0rc2-linux-x64.tar.gz
 ```
 
 macOS hash command:
 
 ```sh
-shasum -a 256 CameraBridge-0.2.0rc1-macos-arm64.tar.gz
+shasum -a 256 CameraBridge-0.2.0rc2-macos-arm64.tar.gz
 ```
 
 Select the Intel archive name if the Mac has an Intel processor.

@@ -1,6 +1,6 @@
 # Change record
 
-## 0.2.0rc1
+## 0.2.0rc2
 
 - Add native release packages for Windows, Linux and both macOS processor types.
 - Add a separate build and package test for each platform.

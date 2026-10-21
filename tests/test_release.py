@@ -24,7 +24,7 @@ class ReleaseTests(unittest.TestCase):
             export_panels(tmp)
             for maker in ('Panasonic','Marshall'):
                 root=ET.parse(pathlib.Path(tmp)/f'CameraBridge-{maker}.grid').getroot()
-                self.assertEqual(root.find('.//image').get('src'),(pathlib.Path(tmp)/'assets'/f'{maker.lower()}.png').as_uri())
+                self.assertEqual(root.find('.//image').get('src'),(pathlib.Path(tmp).resolve()/'assets'/f'{maker.lower()}.png').as_uri())
                 self.assertEqual(root.find('./meta/params/param[@oid="password"]').get('value'),'')
                 self.assertIsNotNone(root.find('.//button[@id="open_bridge"]'))
 

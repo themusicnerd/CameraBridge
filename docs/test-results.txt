@@ -1,10 +1,33 @@
+test_exported_panels_have_local_assets_and_no_secrets (tests.test_release.ReleaseTests.test_exported_panels_have_local_assets_and_no_secrets) ... ok
+test_frozen_storage_is_writable_user_data (tests.test_release.ReleaseTests.test_frozen_storage_is_writable_user_data) ... ok
+test_source_storage_keeps_existing_runtime (tests.test_release.ReleaseTests.test_source_storage_keeps_existing_runtime) ... ok
 test_fragmented_tcp_preset_focus_and_disconnect_stop (tests.test_ross.RossLabTests.test_fragmented_tcp_preset_focus_and_disconnect_stop) ... ok
 test_gateway_close_drains_and_stops_active_controller (tests.test_ross.RossLabTests.test_gateway_close_drains_and_stops_active_controller) ... ok
 test_hardware_and_nonloopback_are_rejected (tests.test_ross.RossLabTests.test_hardware_and_nonloopback_are_rejected) ... ok
+test_numbered_endpoint_is_fixed_and_controller_restricted (tests.test_ross.RossLabTests.test_numbered_endpoint_is_fixed_and_controller_restricted) ... ok
 test_preset_name_persists (tests.test_ross.RossLabTests.test_preset_name_persists) ... ok
 test_preset_only_handover_and_stale_motion (tests.test_ross.RossLabTests.test_preset_only_handover_and_stale_motion) ... ok
 test_direction_speed_and_preset_index (tests.test_ross.ViscaCodecTests.test_direction_speed_and_preset_index) ... ok
 test_reject_unsupported_or_malformed (tests.test_ross.ViscaCodecTests.test_reject_unsupported_or_malformed) ... ok
+test_serial_network_initialization (tests.test_ross.ViscaCodecTests.test_serial_network_initialization) ... ok
+C:\Users\rackpc01\AppData\Local\Temp\tmpv066b2up\CameraBridge-Panasonic.grid
+C:\Users\rackpc01\AppData\Local\Temp\tmpv066b2up\CameraBridge-Marshall.grid
+Carbonite connected: 127.0.0.1
+Non-VISCA prefix from frame; captured and disconnected without forwarding or invented replies.
+Carbonite disconnected; loopback gateway will stop its selected emulator.
+test_ascii_driver_traffic_is_captured_without_forwarding (tests.test_ross_dev_relay.RelayTests.test_ascii_driver_traffic_is_captured_without_forwarding) ... ok
+Carbonite connected: 127.0.0.1
+Carbonite disconnected; loopback gateway will stop its selected emulator.
+test_broadcast_address_initialization_is_forwarded (tests.test_ross_dev_relay.RelayTests.test_broadcast_address_initialization_is_forwarded) ... ok
+test_capture_limit_fails_closed (tests.test_ross_dev_relay.RelayTests.test_capture_limit_fails_closed) ... ok
+Carbonite connected: 127.0.0.1
+Carbonite disconnected; loopback gateway will stop its selected emulator.
+test_duplex_fragments_and_disconnect (tests.test_ross_dev_relay.RelayTests.test_duplex_fragments_and_disconnect) ... ok
+test_lab_guard_rejects_hardware_and_nonloopback_target (tests.test_ross_dev_relay.RelayTests.test_lab_guard_rejects_hardware_and_nonloopback_target) ... ok
+Carbonite connected: 127.0.0.1
+Carbonite disconnected; loopback gateway will stop its selected emulator.
+test_shutdown_closes_active_controller_and_upstream (tests.test_ross_dev_relay.RelayTests.test_shutdown_closes_active_controller_and_upstream) ... ok
+test_wrong_peer_denied_before_upstream (tests.test_ross_dev_relay.RelayTests.test_wrong_peer_denied_before_upstream) ... ok
 test_auth_api_and_csrf (tests.test_system.IntegrationTests.test_auth_api_and_csrf) ... ok
 test_feedback_age_is_not_live (tests.test_system.IntegrationTests.test_feedback_age_is_not_live) ... ok
 test_http_readback_and_external_change (tests.test_system.IntegrationTests.test_http_readback_and_external_change) ... ok
@@ -16,17 +39,32 @@ test_stop_discards_queued_motion (tests.test_system.IntegrationTests.test_stop_d
 test_watchdog_stops_without_ui (tests.test_system.IntegrationTests.test_watchdog_stops_without_ui) ... ok
 test_wb_query_mapping (tests.test_system.IntegrationTests.test_wb_query_mapping) ... ok
 test_aura_pages_logos_and_no_overflow (tests.test_system.PanelTests.test_aura_pages_logos_and_no_overflow) ... ok
+test_touch_targets_and_faders (tests.test_system.PanelTests.test_touch_targets_and_faders) ... ok
 test_two_native_panels_contract (tests.test_system.PanelTests.test_two_native_panels_contract) ... ok
+test_camera_numbers_and_pending_profiles (tests.test_system.ProtocolTests.test_camera_numbers_and_pending_profiles) ... ok
 test_config_validation (tests.test_system.ProtocolTests.test_config_validation) ... ok
 test_directions_and_neutral (tests.test_system.ProtocolTests.test_directions_and_neutral) ... ok
 test_documented_fixtures (tests.test_system.ProtocolTests.test_documented_fixtures) ... ok
 test_interactive_provisioning_retries_without_exposing_password (tests.test_system.ProtocolTests.test_interactive_provisioning_retries_without_exposing_password) ... ok
 test_malformed_readback (tests.test_system.ProtocolTests.test_malformed_readback) ... ok
 test_marshall_fail_closed (tests.test_system.ProtocolTests.test_marshall_fail_closed) ... ok
+test_pipe_provisioning_and_eof (tests.test_system.ProtocolTests.test_pipe_provisioning_and_eof) ... ok
 test_preset_and_ranges (tests.test_system.ProtocolTests.test_preset_and_ranges) ... ok
 test_secret_config_rejected (tests.test_system.ProtocolTests.test_secret_config_rejected) ... ok
+127.0.0.1 GET / (first request; no content logged)
+127.0.0.1 GET /api/config (first request; no content logged)
+test_admin_page_and_authenticated_get_forwarding (tests.test_td_panel_host.TouchDrivePanelHostTests.test_admin_page_and_authenticated_get_forwarding) ... ok
+127.0.0.1 GET /Panasonic.grid (first request; no content logged)
+test_cross_platform_panels (tests.test_td_panel_host.TouchDrivePanelHostTests.test_cross_platform_panels) ... ok
+127.0.0.1 GET /runtime/credentials.sqlite (first request; no content logged)
+127.0.0.1 GET /../config.example.json (first request; no content logged)
+127.0.0.1 GET /assets/../runtime/credentials.sqlite (first request; no content logged)
+test_denied_host_and_private_files (tests.test_td_panel_host.TouchDrivePanelHostTests.test_denied_host_and_private_files) ... ok
+test_origin_and_body_limits (tests.test_td_panel_host.TouchDrivePanelHostTests.test_origin_and_body_limits) ... ok
+127.0.0.1 POST /api/command (first request; no content logged)
+test_proxy_preserves_auth_and_payload (tests.test_td_panel_host.TouchDrivePanelHostTests.test_proxy_preserves_auth_and_payload) ... ok
 
 ----------------------------------------------------------------------
-Ran 27 tests in 42.877s
+Ran 47 tests in 53.862s
 
 OK

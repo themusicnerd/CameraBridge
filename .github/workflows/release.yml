@@ -37,6 +37,11 @@ jobs:
           python tools/check_docs.py
       - name: Install desktop dependencies
         run: python -m pip install -r requirements-desktop.txt
+      - name: Install Linux desktop libraries
+        if: matrix.target == 'linux-x64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
       - name: Test desktop lifecycle
         env:
           QT_QPA_PLATFORM: offscreen

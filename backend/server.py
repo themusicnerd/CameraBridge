@@ -142,7 +142,7 @@ class Server(ThreadingHTTPServer):
         finally:self.slots.release()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version='CameraBridge/0.2.0rc1'
+    server_version='CameraBridge/0.2.0rc2'
     def setup(self):
         super().setup();self.connection.settimeout(5)
     def log_message(self,*args):pass

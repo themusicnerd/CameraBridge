@@ -1,6 +1,6 @@
 # Documentation index
 
-This manual describes CameraBridge 0.2.0rc1.
+This manual describes CameraBridge 0.2.0rc2.
 Read the feature table before you connect a physical camera.
 
 | Task | Document |
