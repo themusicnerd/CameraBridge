@@ -1,4 +1,4 @@
-# CameraBridge 0.3.0rc2
+# CameraBridge 0.3.0rc3
 
 This is a development prerelease for Windows x64 and Linux x64.
 Physical camera acceptance is incomplete.

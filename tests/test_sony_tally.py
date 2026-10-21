@@ -101,7 +101,10 @@ class SonyTests(unittest.TestCase):
         engine.command('sony1','move',{'focus':24,'generation':gen},'test')
         self.driver.move(focus=24);self.driver.connected=False
         with self.assertRaises(OSError):self.driver.stop()
-        self.driver.connected=True;engine.close()
+        self.driver.query('iris')
+        self.assertEqual(self.fake.properties['focus_jog']['value'],0)
+        self.assertFalse(any(self.driver.active_axes.values()))
+        engine.close()
 
 class SonyAccessTests(unittest.TestCase):
     def test_access_is_admin_only_and_never_exported(self):

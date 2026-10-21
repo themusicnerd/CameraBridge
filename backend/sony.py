@@ -94,18 +94,26 @@ class SDKProcess:
 
 class Sony:
     def __init__(self,config,storage,process=None):
-        self.config=config;self.storage=storage;self.process=process or SDKProcess();self.connected=False;self.capabilities={};self.state_time=0;self.active_axes={'zoom_jog':False,'focus_jog':False}
+        self.config=config;self.storage=storage;self.process=process or SDKProcess();self.connected=False;self.capabilities={};self.state_time=0;self.active_axes={'zoom_jog':False,'focus_jog':False};self.needs_neutral=False
     def connect(self):
         if self.connected:return
         access=SonyCredentials(self.storage).load(self.config['id'])
         fields=[access[k].encode().hex() for k in ('username','password','fingerprint')]
         self.process.request('connect '+self.config['host']+' '+' '.join(fields),timeout=12)
-        self.connected=True
+        self.connected=True;self.needs_neutral=any(self.active_axes.values());self.state_time=0
     def state(self,force=False):
         try:
             self.connect()
             if force or time.monotonic()-self.state_time>.3:
                 self.capabilities=self.process.request('state')['properties'];self.state_time=time.monotonic()
+                if self.needs_neutral:
+                    # An earlier write may have reached the lens before transport
+                    # failed. Send neutral before accepting controls on reconnect.
+                    for key,active in self.active_axes.items():
+                        if not active:continue
+                        if not self.capabilities.get(key,{}).get('writable'):raise OSError('Cannot stop the Sony lens in its current camera mode')
+                        self.process.request(f'set {key} 0');self.active_axes[key]=False
+                    self.capabilities=self.process.request('state')['properties'];self.needs_neutral=False
             return self.capabilities
         except Exception:self.connected=False;self.process.close();raise
     def metadata(self,key):
