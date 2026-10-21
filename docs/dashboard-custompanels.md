@@ -25,4 +25,6 @@ The Panasonic UI has 20 preset buttons and a one-shot overwrite confirmation. PT
 9. Marshall OSD/paint must remain clearly marked LAB; fixed-camera UI must show no mechanical pan/tilt.
 10. Check touch hit targets, clipping and actual TD1C screen scaling; adjust panel dimensions if needed.
 
-XML/contract tests pass. `node tests/panel_smoke.cjs` also parses every generated handler and exercises the generated API against the live local backend with a strict parameter/label test adapter. This is a V8 contract test, not the DashBoard Rhino engine. Native runtime opening, rendering and interaction have **not** passed acceptance yet: computer-use window capture timed out twice. No screenshot or app-level validation is claimed.
+XML/contract tests pass. `node tests/panel_smoke.cjs` also parses every generated handler and exercises the generated API against the live local backend with a strict parameter/label test adapter. This is a V8 contract test, not the DashBoard Rhino engine.
+
+Native application validation subsequently confirmed both panels load and process recurring feedback in DashBoard9.15.2. A temporary loopback HTTP observer forwarded requests to the existing backend, and instrumented panel copies emitted success only after the normal parameter/label update path returned. No production equipment or credentials were involved. See `native-dashboard-validation.md`. Visual layout/touch interaction still cannot be claimed because screen capture fails. Authenticated UI control tests are pending local account provisioning.

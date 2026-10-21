@@ -14,6 +14,6 @@
 
 **SSH access denied:** obtain credentials/keys through an authorised path. Do not guess vendor passwords. VNC/FTP availability does not establish Linux shell permissions.
 
-**DashBoard panel load error:** record installed DashBoard version and full debug/error text. The local target is 9.15.2. Regenerate with `python dashboard/build_panels.py`; XML tests do not establish runtime support. Do not patch Ross libraries. The Windows computer-use screenshot helper timed out during initial validation.
+**DashBoard panel load error:** record installed DashBoard version and full debug/error text. Both panels have loaded and processed feedback in local9.15.2. Regenerate with `python dashboard/build_panels.py`; XML tests alone do not establish runtime support. Do not patch Ross libraries. The Windows computer-use screenshot helper times out, so visual/touch checks remain pending despite native callback evidence.
 
 **Shutdown/network failure:** a stop attempt cannot guarantee delivery across a failed link. Use the camera's independent control path to verify neutral before resuming. The service does not replay queued movement after restart.

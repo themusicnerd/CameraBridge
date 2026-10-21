@@ -46,4 +46,4 @@ python tools/host_diagnostic.py --output host-report.json
 
 See `docs/feature-matrix.md` for implementation and hardware-validation status, `docs/dashboard-custompanels.md` for panel acceptance, and `docs/installation.md` for deployment and rollback.
 
-The local DashBoard installation reports 9.15.2 in its launcher configuration. Panel XML/contract tests pass; opening and operating them inside DashBoard is still awaiting a successful application-level validation. The Windows screenshot helper timed out during that attempt.
+Both panels load in local DashBoard 9.15.2. Instrumented copies confirmed recurring native timer requests and successful feedback callbacks after updating native parameter/label values. Visual layout, touch operation and authenticated controls remain pending: the Windows screenshot helper times out, and the local admin password has not yet been provisioned. See `docs/native-dashboard-validation.md` for the evidence and its limits.

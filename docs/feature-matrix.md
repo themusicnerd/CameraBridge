@@ -13,8 +13,8 @@ Status meanings: **tested** = exercised by local automated tests, **hardware pen
 | Panasonic preset recall/store, overwrite guard | Tested | Hardware pending; activity remains unverified |
 | Central confirmed/pending/stale/error state | Tested | Hardware pending |
 | Ownership, stale generation rejection, motion watchdog | Tested | Network failure cannot guarantee physical stop |
-| Separate Panasonic native .grid | XML and contract tested | DashBoard open/runtime validation pending |
-| Separate Marshall native .grid | XML and contract tested | DashBoard open/runtime validation pending |
+| Separate Panasonic native .grid | XML/contract tested; native load and feedback callback verified | DashBoard9.15.2; visual/touch/authenticated control tests pending |
+| Separate Marshall native .grid | XML/contract tested; native load and feedback callback verified | DashBoard9.15.2; visual/touch/authenticated control tests pending |
 | Marshall paint/OSD lab model | Implemented; synthetic state | Not camera wire emulation |
 | Marshall RS485 TCP serialization/turnaround | Implemented | Gateway hardware and command map pending |
 | CV226/CV228 direct serial command/readback map | Blocked | Need exact-model protocol or verified captures |
@@ -40,6 +40,8 @@ Status meanings: **tested** = exercised by local automated tests, **hardware pen
 `python -m unittest discover -v`: 18 tests passed in 27.383 seconds on bundled Python 3.12.14, Windows AMD64, 21 October 2026. Tests use emulators, not physical cameras. There are no manufacturer hardware captures in the fixtures directory; the Panasonic fixture is explicitly labelled manufacturer-documented examples.
 
 `node tests/panel_smoke.cjs`: Panasonic's 85 handlers and Marshall's 49 handlers parse in V8, and each generated panel API retrieves live lab state and updates its expected parameter/label IDs. This caught and corrected missing zoom/focus feedback labels. It does not establish Rhino or native rendering compatibility. See `test-results.txt` for the final test run.
+
+Later native application validation: both panels loaded in DashBoard9.15.2. Instrumented copies emitted recurring feedback-success callbacks after executing the native parameter/label update path. This adds native ogScript/runtime evidence beyond the V8 test. Screenshot capture, visual layout, touch operation and authenticated control remain pending. See `native-dashboard-validation.md`.
 
 ## Network discovery evidence
 
