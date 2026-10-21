@@ -59,6 +59,7 @@ jobs:
           python dashboard/build_panels.py
           python -m unittest discover -v
           python tools/check_docs.py
+          node tests/sony_panel_smoke.cjs
       - name: Install desktop dependencies
         run: python -m pip install -r requirements-desktop.txt
       - name: Install Linux desktop libraries

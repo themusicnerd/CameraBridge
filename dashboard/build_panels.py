@@ -72,7 +72,7 @@ function cameraAt(index) {
     var finish=function(r){
         cbHandover=false;
         if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
-        cbIndex=index;params.setValue('camera',0,target);poll();
+        cbIndex=index;params.setAccess('camera',1);params.setValue('camera',0,target);params.setAccess('camera',0);poll();
     };
     if(cbToken)request('command',{camera:old,action:'stop',data:{}},finish);
     else finish({readOnly:true});
@@ -124,7 +124,8 @@ function poll() {
         cbLastFeedback=new Date().getTime();cbCameras=[];
         for(var i=0;i<r.cameras.length;i++)if(r.cameras[i].manufacturer==CB_MANUFACTURER)cbCameras.push(r.cameras[i]);
         var c=null;for(var i=0;i<cbCameras.length;i++)if(cbCameras[i].id==camera){c=cbCameras[i];cbIndex=i;}
-        if(!c){status('Camera ID not configured; use Next camera');return;}
+        if(!c && cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
+        if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
         ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
         for(var n=0;n<6;n++) {

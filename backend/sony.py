@@ -139,10 +139,12 @@ class Sony:
         for key,value in [('zoom_jog',zoom),('focus_jog',focus)]:
             p=self.state().get(key)
             if p and p.get('writable'):
+                if value:self.active_axes[key]=True
                 self.write(key,(value>0)-(value<0));self.active_axes[key]=bool(value)
             elif value or self.active_axes[key]:raise ValueError('Sony lens jog or stop is unavailable in this camera mode')
     def stop(self):
         if self.connected:self.move()
+        elif any(self.active_axes.values()):raise OSError('Sony lens stop could not be delivered; camera connection is lost')
     def tally(self,program,preview=False):
         props=self.state(True)
         if not props.get('tally_red',{}).get('writable'):raise NotImplementedError('External tally lamp control is not supported by the PXW-Z200 SDK profile')

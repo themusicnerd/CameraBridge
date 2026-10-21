@@ -6,11 +6,12 @@ import tempfile
 import threading
 import time
 import unittest
+import http.client
 from unittest.mock import Mock,patch
 from backend.sony import Sony,SonyCredentials,SONY
 from backend.core import Engine
 from backend.drivers import Panasonic
-from backend.server import validate_config
+from backend.server import validate_config,Auth,Server
 from backend.tally import TallyServer,decode
 from backend.simulator import server as simulator
 
@@ -28,6 +29,7 @@ class FakeSDK:
         self.properties={
             'iris':dict(value=280,readable=True,writable=True,range=False,values=[280,400,560]),
             'iris_auto':dict(value=2,readable=True,writable=True,range=False,values=[1,2]),
+            'focus_auto':dict(value=2,readable=True,writable=True,range=False,values=[1,2]),
             'zoom':dict(value=100,readable=True,writable=False,range=False,values=[]),
             'zoom_jog':dict(value=0,readable=True,writable=True,range=False,values=[-1,0,1]),
             'focus_jog':dict(value=0,readable=True,writable=True,range=False,values=[-1,0,1]),
@@ -88,6 +90,44 @@ class SonyTests(unittest.TestCase):
         self.assertTrue(state['tally']['enabled']);self.assertFalse(state['parameters']['zoom']['writable'])
         engine.set_tally('sony1',True)
         wait(lambda:engine.cameras['sony1']['tally']['status']=='unsupported')
+    def test_focus_jog_guard_and_unknown_stop_delivery(self):
+        engine=Engine({'cameras':[self.config]},self.tmp.name)
+        engine.cameras['sony1']['driver']=self.driver
+        c=engine.cameras['sony1']
+        c['params']['focus_auto'].update(value=1,confirmation='confirmed',last_query=time.time())
+        gen=engine.command('sony1','claim',{},'test')['generation']
+        with self.assertRaises(ValueError):engine.command('sony1','move',{'focus':24,'generation':gen},'test')
+        c['params']['focus_auto']['value']=2
+        engine.command('sony1','move',{'focus':24,'generation':gen},'test')
+        self.driver.move(focus=24);self.driver.connected=False
+        with self.assertRaises(OSError):self.driver.stop()
+        self.driver.connected=True;engine.close()
+
+class SonyAccessTests(unittest.TestCase):
+    def test_access_is_admin_only_and_never_exported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            camera=dict(id='sony1',name='Sony',number=1,driver='sony-sdk',manufacturer='Sony',model='PXW-Z200',host='192.0.2.20',enabled=False)
+            config=validate_config({'cameras':[camera]});engine=Engine(config,directory)
+            auth=Auth(pathlib.Path(directory)/'auth.sqlite');auth.add('admin','test','admin');auth.add('operator','test','operator')
+            admin=auth.login('admin','test','local')[0];operator=auth.login('operator','test','local')[0]
+            server=Server(('127.0.0.1',0),engine,auth,False);threading.Thread(target=server.serve_forever,daemon=True).start()
+            def post(path,data,token=''):
+                client=http.client.HTTPConnection(*server.server_address,timeout=3)
+                client.request('POST',path,json.dumps(data),{'Content-Type':'application/json','Authorization':'Bearer '+token})
+                response=client.getresponse();code=response.status;body=json.loads(response.read());client.close();return code,body
+            try:
+                data=dict(camera='sony1',username='camuser',password='private-example',fingerprint='verified-identity',acknowledge_terms=True)
+                self.assertEqual(post('/api/sony/credentials',data)[0],403)
+                self.assertEqual(post('/api/sony/credentials',data,operator)[0],403)
+                self.assertEqual(post('/api/sony/credentials',dict(data,acknowledge_terms=False),admin)[0],400)
+                self.assertEqual(post('/api/sony/credentials',data,admin)[0],200)
+                self.assertEqual(SonyCredentials(directory).load('sony1')['password'],'private-example')
+                self.assertNotIn('private-example',json.dumps(engine.snapshot()))
+                self.assertNotIn('private-example',json.dumps(engine.config))
+                with patch('backend.sony.fingerprint',return_value='verified-identity'):
+                    self.assertEqual(post('/api/sony/fingerprint',{'host':'192.0.2.20'},operator)[0],403)
+                    self.assertEqual(post('/api/sony/fingerprint',{'host':'192.0.2.20'},admin)[1]['fingerprint'],'verified-identity')
+            finally:server.shutdown();server.server_close();engine.close()
 
 class TallyTests(unittest.TestCase):
     def test_panasonic_wire_commands_and_readback(self):

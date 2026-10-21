@@ -45,6 +45,7 @@ def main():
                 page.locator('#addcamera').click();page.locator('#camnumber').fill('7');page.locator('#camname').fill('Sony Z200');page.locator('#camprofile').select_option('sony-sdk');page.locator('#camhost').fill('192.0.2.20')
                 expect(page.locator('#camenabled')).to_be_enabled();expect(page.locator('#camenabled')).to_be_checked()
                 expect(page.locator('#camtally')).to_be_checked()
+                page.locator('#camtally').uncheck()
                 page.get_by_role('button',name='Save camera to setup',exact=True).click();expect(page.locator('#roster')).to_contain_text('Camera 7')
                 page.locator('#addcamera').click();page.locator('#camnumber').fill('7');page.locator('#camname').fill('Real Panasonic');page.locator('#camhost').fill('192.0.2.30');page.get_by_role('button',name='Save camera to setup',exact=True).click()
                 expect(page.locator('#status')).to_contain_text('already assigned')
@@ -62,7 +63,8 @@ def main():
                 assert next(c for c in saved['cameras'] if c['number']==4)['id']=='pana1'
                 assert saved['pivotcam']['base_port']==19010
                 assert next(c for c in saved['cameras'] if c['number']==7)['enabled']
-                assert next(c for c in saved['cameras'] if c['number']==7)['tally_enabled']
+                assert not next(c for c in saved['cameras'] if c['number']==7)['tally_enabled']
+                assert next(c for c in saved['cameras'] if c['number']==4)['tally_enabled']
                 assert not errors,errors
                 browser.close();print('PASS: login, add/edit/remove cameras, duplicate number rejection, Sony profile, default tally, map export and save/restart request')
         finally:

@@ -31,6 +31,8 @@ def build(defs):
         label(lens,title,12,y,560,32,size=20)
         axes=[0,0,0,0];axes[axis]=-1;jog_button(lens,low,12,y+46,265,104,axes);axes[axis]=1;jog_button(lens,high,293,y+46,265,104,axes)
     for i,key in enumerate(['iris','iris_auto','focus_auto']):horizontal(lens,key,defs[key],594,12+170*i,580)
+    label(lens,'ZOOM SCALE',12,452,560,22,size=14)
+    label(lens,'Awaiting camera',12,478,560,24,'actual_zoom',colour='a9bbc8',size=14)
     label(lens,'Hold / release stops · fixed-speed SDK lens jog · no pan/tilt motors',12,506,560,48,colour='a9bbc8',size=14)
     paint=pages['Paint']
     for i,key in enumerate(['red_gain','blue_gain','colour_temperature']):vertical(paint,key,defs[key],12+i*226,12,212,530)

@@ -137,7 +137,7 @@ class Engine:
                 axes={k:data.get(k,0) for k in ('pan','tilt','zoom','focus')}
                 from .protocol import movement
                 movement(**axes)
-                if axes['focus']:self.check_mode(c,'focus_auto' if isinstance(c['driver'],Sony) else 'focus')
+                if axes['focus']:self.check_mode(c,'focus')
                 c['motion_deadline']=time.monotonic()+0.9
                 c['moving']=any(axes.values())
                 c['pending']['@motion']=(axes,c['generation'],owner)
@@ -159,7 +159,7 @@ class Engine:
         raise ValueError('Unknown action')
 
     def check_mode(self,c,key):
-        requirement=c['defs'][key].dependency
+        requirement='focus_auto=2' if isinstance(c['driver'],Sony) and key=='focus' else c['defs'][key].dependency
         if c['config']['manufacturer']=='Marshall':
             if key in ('red_gain','blue_gain'):requirement='wb_mode=1'
             if key in ('gain','shutter'):requirement='exposure_auto=0'
@@ -289,7 +289,7 @@ class Engine:
         for t in self.threads:t.join(3)
         for c in self.cameras.values():
             try:
-                if c['config'].get('tally_enabled',True) and c['tally']['actual']:
+                if c['config'].get('tally_enabled',True) and c['tally']['actual'] and any(c['tally']['actual'].values()):
                     with c['io']:c['driver'].tally(False,False)
             except Exception:pass
             if hasattr(c['driver'],'close'):c['driver'].close()
