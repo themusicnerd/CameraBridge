@@ -118,7 +118,10 @@ function poll() {
                 var p=c.parameters[key];
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
-                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000))params.setValue(key,0,p.value);
+                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
+                    // DashBoard blocks local setValue while the parameter is read-only.
+                    params.setAccess(key,1);params.setValue(key,0,p.value);
+                }
                 var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed';
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
                 if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
@@ -166,6 +169,22 @@ function tick() {
     <timer id="bridge_tick" rate="200" autostart="true" />
     <timertask timerid="bridge_tick" tasktype="ogscript">tick();</timertask>
   </meta>
+  <ogscript handles="onchange" oid="wb_mode" element="0">changed('wb_mode');</ogscript>
+  <ogscript handles="onchange" oid="red_gain" element="0">changed('red_gain');</ogscript>
+  <ogscript handles="onchange" oid="blue_gain" element="0">changed('blue_gain');</ogscript>
+  <ogscript handles="onchange" oid="exposure_auto" element="0">changed('exposure_auto');</ogscript>
+  <ogscript handles="onchange" oid="brightness" element="0">changed('brightness');</ogscript>
+  <ogscript handles="onchange" oid="gain" element="0">changed('gain');</ogscript>
+  <ogscript handles="onchange" oid="agc_limit" element="0">changed('agc_limit');</ogscript>
+  <ogscript handles="onchange" oid="shutter" element="0">changed('shutter');</ogscript>
+  <ogscript handles="onchange" oid="black_level" element="0">changed('black_level');</ogscript>
+  <ogscript handles="onchange" oid="gamma" element="0">changed('gamma');</ogscript>
+  <ogscript handles="onchange" oid="colour" element="0">changed('colour');</ogscript>
+  <ogscript handles="onchange" oid="sharpness" element="0">changed('sharpness');</ogscript>
+  <ogscript handles="onchange" oid="dnr" element="0">changed('dnr');</ogscript>
+  <ogscript handles="onchange" oid="mirror" element="0">changed('mirror');</ogscript>
+  <ogscript handles="onchange" oid="flip" element="0">changed('flip');</ogscript>
+  <ogscript handles="onchange" oid="digital_zoom" element="0">changed('digital_zoom');</ogscript>
   <ogscript handles="onload">highlightPage('Paint');poll();</ogscript>
   <ogscript handles="onclose">if(cbToken)request('command',{camera:selected(),action:'stop',data:{}},null);</ogscript>
   <abs left="8" top="8" width="1350" height="64" style="bg#2c3037;bdr:line;bdr#383d45;">
@@ -214,82 +233,50 @@ function tick() {
     <abs id="page_paint" name="Paint" width="1224" height="595" style="bg#25282e;">
       <abs left="8" top="34" width="142" height="495" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="RED GAIN" left="10" top="10" width="122" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="red_gain" left="10" top="43" width="122" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('red_gain');</ogscript>
-        </param>
-        <param oid="red_gain" left="32" top="90" width="78" height="330" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('red_gain');</ogscript>
-        </param>
+        <param oid="red_gain" left="10" top="43" width="122" height="34" showlabel="false" widget="6" />
+        <param oid="red_gain" left="32" top="90" width="78" height="330" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="429" width="122" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_red_gain" />
       </abs>
       <abs left="160" top="34" width="142" height="495" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="BLUE GAIN" left="10" top="10" width="122" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="blue_gain" left="10" top="43" width="122" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('blue_gain');</ogscript>
-        </param>
-        <param oid="blue_gain" left="32" top="90" width="78" height="330" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('blue_gain');</ogscript>
-        </param>
+        <param oid="blue_gain" left="10" top="43" width="122" height="34" showlabel="false" widget="6" />
+        <param oid="blue_gain" left="32" top="90" width="78" height="330" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="429" width="122" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_blue_gain" />
       </abs>
       <abs left="312" top="34" width="142" height="495" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="BLACK LEVEL" left="10" top="10" width="122" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="black_level" left="10" top="43" width="122" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('black_level');</ogscript>
-        </param>
-        <param oid="black_level" left="32" top="90" width="78" height="330" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('black_level');</ogscript>
-        </param>
+        <param oid="black_level" left="10" top="43" width="122" height="34" showlabel="false" widget="6" />
+        <param oid="black_level" left="32" top="90" width="78" height="330" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="429" width="122" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_black_level" />
       </abs>
       <abs left="464" top="34" width="142" height="495" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="GAMMA ×10" left="10" top="10" width="122" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="gamma" left="10" top="43" width="122" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('gamma');</ogscript>
-        </param>
-        <param oid="gamma" left="32" top="90" width="78" height="330" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('gamma');</ogscript>
-        </param>
+        <param oid="gamma" left="10" top="43" width="122" height="34" showlabel="false" widget="6" />
+        <param oid="gamma" left="32" top="90" width="78" height="330" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="429" width="122" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_gamma" />
       </abs>
       <abs left="616" top="34" width="142" height="495" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="COLOUR" left="10" top="10" width="122" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="colour" left="10" top="43" width="122" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('colour');</ogscript>
-        </param>
-        <param oid="colour" left="32" top="90" width="78" height="330" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('colour');</ogscript>
-        </param>
+        <param oid="colour" left="10" top="43" width="122" height="34" showlabel="false" widget="6" />
+        <param oid="colour" left="32" top="90" width="78" height="330" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="429" width="122" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_colour" />
       </abs>
       <abs left="768" top="34" width="142" height="495" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="SHARPNESS" left="10" top="10" width="122" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="sharpness" left="10" top="43" width="122" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('sharpness');</ogscript>
-        </param>
-        <param oid="sharpness" left="32" top="90" width="78" height="330" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('sharpness');</ogscript>
-        </param>
+        <param oid="sharpness" left="10" top="43" width="122" height="34" showlabel="false" widget="6" />
+        <param oid="sharpness" left="32" top="90" width="78" height="330" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="429" width="122" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_sharpness" />
       </abs>
       <abs left="920" top="34" width="142" height="495" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="BRIGHTNESS" left="10" top="10" width="122" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="brightness" left="10" top="43" width="122" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('brightness');</ogscript>
-        </param>
-        <param oid="brightness" left="32" top="90" width="78" height="330" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('brightness');</ogscript>
-        </param>
+        <param oid="brightness" left="10" top="43" width="122" height="34" showlabel="false" widget="6" />
+        <param oid="brightness" left="32" top="90" width="78" height="330" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="429" width="122" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_brightness" />
       </abs>
       <abs left="1072" top="34" width="142" height="495" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="GAIN" left="10" top="10" width="122" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="gain" left="10" top="43" width="122" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('gain');</ogscript>
-        </param>
-        <param oid="gain" left="32" top="90" width="78" height="330" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('gain');</ogscript>
-        </param>
+        <param oid="gain" left="10" top="43" width="122" height="34" showlabel="false" widget="6" />
+        <param oid="gain" left="32" top="90" width="78" height="330" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="429" width="122" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_gain" />
       </abs>
       <label name="LAB MODEL · serial command map is not yet verified for CV226/CV228." left="12" top="547" width="1180" height="34" style="fg#d7bb8c;size:14;txt-align:west;" />
@@ -297,82 +284,50 @@ function tick() {
     <abs id="page_exposure" name="Exposure" width="1224" height="595" style="bg#25282e;">
       <abs left="12" top="22" width="588" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="WHITE BALANCE" left="12" top="8" width="564" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="wb_mode" left="10" top="31" width="472" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('wb_mode');</ogscript>
-        </param>
-        <param oid="wb_mode" left="490" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('wb_mode');</ogscript>
-        </param>
+        <param oid="wb_mode" left="10" top="31" width="472" height="29" showlabel="false" widget="3" />
+        <param oid="wb_mode" left="490" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="564" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_wb_mode" />
       </abs>
       <abs left="620" top="22" width="588" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="AUTO EXPOSURE" left="12" top="8" width="564" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="exposure_auto" left="10" top="31" width="472" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('exposure_auto');</ogscript>
-        </param>
-        <param oid="exposure_auto" left="490" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('exposure_auto');</ogscript>
-        </param>
+        <param oid="exposure_auto" left="10" top="31" width="472" height="29" showlabel="false" widget="3" />
+        <param oid="exposure_auto" left="490" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="564" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_exposure_auto" />
       </abs>
       <abs left="12" top="157" width="588" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="AGC LIMIT" left="12" top="8" width="564" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="agc_limit" left="10" top="31" width="472" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('agc_limit');</ogscript>
-        </param>
-        <param oid="agc_limit" left="490" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('agc_limit');</ogscript>
-        </param>
+        <param oid="agc_limit" left="10" top="31" width="472" height="29" showlabel="false" widget="3" />
+        <param oid="agc_limit" left="490" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="564" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_agc_limit" />
       </abs>
       <abs left="620" top="157" width="588" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="SHUTTER" left="12" top="8" width="564" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="shutter" left="10" top="31" width="472" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('shutter');</ogscript>
-        </param>
-        <param oid="shutter" left="490" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('shutter');</ogscript>
-        </param>
+        <param oid="shutter" left="10" top="31" width="472" height="29" showlabel="false" widget="3" />
+        <param oid="shutter" left="490" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="564" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_shutter" />
       </abs>
       <abs left="12" top="292" width="588" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="NOISE REDUCTION" left="12" top="8" width="564" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="dnr" left="10" top="31" width="472" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('dnr');</ogscript>
-        </param>
-        <param oid="dnr" left="490" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('dnr');</ogscript>
-        </param>
+        <param oid="dnr" left="10" top="31" width="472" height="29" showlabel="false" widget="3" />
+        <param oid="dnr" left="490" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="564" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_dnr" />
       </abs>
       <abs left="620" top="292" width="588" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="MIRROR" left="12" top="8" width="564" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="mirror" left="10" top="31" width="472" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('mirror');</ogscript>
-        </param>
-        <param oid="mirror" left="490" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('mirror');</ogscript>
-        </param>
+        <param oid="mirror" left="10" top="31" width="472" height="29" showlabel="false" widget="3" />
+        <param oid="mirror" left="490" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="564" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_mirror" />
       </abs>
       <abs left="12" top="427" width="588" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="FLIP" left="12" top="8" width="564" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="flip" left="10" top="31" width="472" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('flip');</ogscript>
-        </param>
-        <param oid="flip" left="490" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('flip');</ogscript>
-        </param>
+        <param oid="flip" left="10" top="31" width="472" height="29" showlabel="false" widget="3" />
+        <param oid="flip" left="490" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="564" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_flip" />
       </abs>
       <abs left="620" top="427" width="588" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="DIGITAL ZOOM ×10" left="12" top="8" width="564" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="digital_zoom" left="10" top="31" width="472" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('digital_zoom');</ogscript>
-        </param>
-        <param oid="digital_zoom" left="490" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('digital_zoom');</ogscript>
-        </param>
+        <param oid="digital_zoom" left="10" top="31" width="472" height="29" showlabel="false" widget="3" />
+        <param oid="digital_zoom" left="490" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="564" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_digital_zoom" />
       </abs>
     </abs>

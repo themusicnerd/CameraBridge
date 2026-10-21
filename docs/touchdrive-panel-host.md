@@ -33,4 +33,28 @@ Remove-NetFirewallRule -DisplayName 'CameraBridge TD1C development panels'
 
 Remove only the newly downloaded CameraBridge files if no longer wanted. Do not remove any Ross application directories, existing panels, or device connections. Root installation and TD backend compatibility remain separate unresolved work. Physical positioner, Carbonite Preset follow, and custom-control shot calls still require hardware acceptance described in `ross-hardware-acceptance.md`; the displayed LAB functions are simulations.
 
-Verification on the Windows host: four automated tests passed (cross-platform XML, source/file restrictions, authentication forwarding, origin and body limits). Live relay verification rejected an unauthenticated command, authenticated an existing admin session, returned all three simulated cameras, and logged that test session out. TD-to-Windows access is still pending the administrator firewall prompt.
+Verification on the Windows host: four automated tests passed (cross-platform XML, source/file restrictions, authentication forwarding, origin and body limits). Live relay verification rejected an unauthenticated command, authenticated an existing admin session, returned all three simulated cameras, and logged that test session out. TD-to-Windows access is verified; the administrator approved the scoped firewall rule.
+
+
+## Connected TD1C acceptance, 21 October 2026
+
+Both final files are open and authenticated in the TD DashBoard:
+
+- `/home/touchdrive/Downloads/CameraBridge-Marshall.grid`
+- `/home/touchdrive/Downloads/CameraBridge-Panasonic.grid`
+
+The Panasonic PTZ page is visible with touch jogging disabled. The backend and emulators remain on Windows. No backend service or startup entry was installed. Existing Ross device connections remain in the TD tree.
+
+Verified using the actual TD UI and central events:
+
+- Both manufacturer logos and live simulator feedback.
+- Existing CameraBridge admin login.
+- Marshall black level: 0 to 1 to 0, confirmed readback.
+- Panasonic zoom position: 1365 to 1366 to 1365, confirmed CGI emulator readback.
+- Panasonic preset 20 recall: event received for pana1, store=false.
+
+Native testing exposed two OGLML issues that were fixed before deploying these final files: onchange listeners must be registered at the panel root with explicit OIDs, and local values must be temporarily writable while applying feedback before restoring operator access. Regression checks cover the root listener mapping and read-only feedback contract. Six focused Python tests and both live-feedback script checks pass.
+
+Earlier exploratory downloads (Marshall.grid, Marshall (1).grid, Panasonic.grid and Panasonic (1).grid) are superseded; their tabs were closed. An empty exploratory `/data/bin/carbonite/DashBoard/CameraBridge-Panasonic.grid` also exists and is not the deployed operator panel. Use the two final Downloads files above. Numeric text entry is refreshed by polling; use the verified sliders/spinners for this development build while text-entry focus handling is refined.
+
+No physical camera was connected. Hardware joystick delegation, real Carbonite Preset follow, custom-control shot events, and physical preset completion remain unverified. The TD1C simulation page is not a hardware integration test.

@@ -13,10 +13,10 @@ const decode = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g
     const api=decode(xml.match(/<api>([\s\S]*?)<\/api>/)[1]);
     const elements=new Set([...xml.matchAll(/\bid="([^"]+)"/g)].map(x=>x[1]));
     const values={bridge:'http://127.0.0.1:8088',camera:manufacturer==='Panasonic'?'pana1':'marshall1'};
-    const labels={},inflight=[];
+    const labels={},inflight=[],access={};
     const context=vm.createContext({
       console,JSON,Date,Math,String,Number,encodeURIComponent,
-      params:{getValue:(k)=>values[k],setValue:(k,i,v)=>{values[k]=v;},setAccess:()=>{}},
+      params:{getValue:(k)=>values[k],setValue:(k,i,v)=>{assert.equal(access[k],1,`feedback must unlock local parameter ${k} before setValue`);values[k]=v;},setAccess:(k,v)=>{access[k]=v;}},
       ogscript:{
         setStyle:(id,style)=>{assert.ok(elements.has(id),`missing style target ${id}`);},
         rename:(id,text)=>{assert.ok(elements.has(id),`missing UI id ${id}`);labels[id]=text;},
@@ -38,6 +38,8 @@ const decode = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g
     assert.match(labels.connection,/SIMULATOR/);
     assert.match(labels.status,/read-only/);
     assert.ok(labels.actual_red_gain.includes('confirmed'));
+    assert.equal(values.red_gain,manufacturer==='Panasonic'?150:128);
+    assert.equal(access.red_gain,0,'unauthenticated controls return to read-only');
     console.log(`${manufacturer}: ${count} handlers parse; live lab feedback updates native parameter/label contract`);
   }
 })().catch(e=>{console.error(e);process.exitCode=1;});

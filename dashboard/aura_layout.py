@@ -19,14 +19,14 @@ def feedback(parent,key,x,y,w):label(parent,'unknown · never read',x,y,w,26,'ac
 def vertical(parent,key,x,y,w=140,h=440):
     box=card(parent,x,y,w,h)
     label(box,SHORT[key],10,10,w-20,26,size=13)
-    entry=field(box,key,10,43,w-20,34,6);script(entry,f"changed('{key}');",'onchange')
-    slider=field(box,key,32,90,w-64,h-165,4);script(slider,f"changed('{key}');",'onchange')
+    entry=field(box,key,10,43,w-20,34,6)
+    slider=field(box,key,32,90,w-64,h-165,4)
     feedback(box,key,10,h-66,w-20)
     return box
 def horizontal(parent,key,x,y,w=480):
     box=card(parent,x,y,w,86);label(box,SHORT[key],12,8,w-24,20,size=13)
-    s=field(box,key,10,31,w-116,29,3);script(s,f"changed('{key}');",'onchange')
-    e=field(box,key,w-98,31,86,29,6);script(e,f"changed('{key}');",'onchange')
+    s=field(box,key,10,31,w-116,29,3)
+    e=field(box,key,w-98,31,86,29,6)
     feedback(box,key,12,60,w-24)
     return box
 def jog_button(parent,text,x,y,w,h,axes):
@@ -56,6 +56,8 @@ def build(manufacturer,defs):
             n.set('constraint',f'{p.low};{p.high};'+('-150;150;' if pana and key in ('red_gain','blue_gain') else ''))
     node(meta,'timer',id='bridge_tick',rate=200,autostart='true')
     node(meta,'timertask',timerid='bridge_tick',tasktype='ogscript').text='tick();'
+    for key in defs:
+        listener=script(root,"changed('"+key+"');",'onchange');listener.set('oid',key);listener.set('element','0')
     script(root,"highlightPage('"+('PTZ' if pana else 'Paint')+"');poll();",'onload');script(root,"if(cbToken)request('command',{camera:selected(),action:'stop',data:{}},null);",'onclose')
 
     header=card(root,8,8,1350,64)
@@ -96,7 +98,7 @@ def build(manufacturer,defs):
                 axes=(0,0,-1,0) if key=='zoom' else (0,0,0,-1)
                 jog_button(box,top,14,93,192,40,axes)
                 jog_button(box,bottom,14,438,192,40,tuple(-v for v in axes))
-            s=field(box,key,73,146,74,279,4);script(s,f"changed('{key}');",'onchange')
+            s=field(box,key,73,146,74,279,4)
             feedback(box,key,14,488,192)
             if key in ('iris','focus'):
                 mode=key+'_auto'

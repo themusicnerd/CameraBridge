@@ -124,7 +124,10 @@ function poll() {
                 var p=c.parameters[key];
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
-                if(p.confirmation=='confirmed' && !cbPending.hasOwnProperty(key) && (!cbEdit[key] || new Date().getTime()-cbEdit[key]>1000))params.setValue(key,0,p.value);
+                if(p.confirmation=='confirmed' && !cbPending.hasOwnProperty(key) && (!cbEdit[key] || new Date().getTime()-cbEdit[key]>1000)) {
+                    // DashBoard blocks local setValue while the parameter is read-only.
+                    params.setAccess(key,1);params.setValue(key,0,p.value);
+                }
                 var enabled=!!cbToken && !c.locked && p.confirmation=='confirmed';
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled && m && m.confirmation=='confirmed' && (','+pair[1]+',').indexOf(','+m.value+',')>=0;}
                 if(CB_MANUFACTURER=='Marshall' && (key=='red_gain'||key=='blue_gain'))enabled=enabled && c.parameters.wb_mode.value==1;
@@ -144,7 +147,9 @@ function tick() {
 
 def node(parent,tag,**attributes):return ET.SubElement(parent,tag,{k:str(v) for k,v in attributes.items()})
 def script(parent,text,event=None):
-    n=node(parent,'ogscript',**({'handles':event} if event else {}));n.text=text;return n
+    attrs={'handles':event} if event else {}
+    if event=='onchange' and parent.tag=='param':attrs.update(oid=parent.get('oid'),element='0')
+    n=node(parent,'ogscript',**attrs);n.text=text;return n
 def task(parent,text):n=node(parent,'task',tasktype='ogscript');n.text=text
 def label(parent,text,x,y,w=400,h=24,id=None):
     return node(parent,'label',name=text,left=x,top=y,width=w,height=h,style='txt-align:west;fg#dbe5ee;font:bold;',**({'id':id} if id else {}))

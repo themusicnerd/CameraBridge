@@ -71,7 +71,7 @@ class PanelHandler(BaseHTTPRequestHandler):
         if not self.trusted(): return
         self.count()
         if self.path in ('/Panasonic.grid','/Marshall.grid'):
-            self.reply(panel_bytes(self.path[1:-5],self.server.base),mime='application/xml',attachment=self.path[1:]); return
+            self.reply(panel_bytes(self.path[1:-5],self.server.base),mime='application/xml',attachment="CameraBridge-"+self.path[1:]); return
         assets={'/assets/panasonic.png':'panasonic.png','/assets/marshall.png':'marshall.png'}
         if self.path in assets:
             self.reply((ROOT/'dashboard/assets'/assets[self.path]).read_bytes(),mime='image/png'); return

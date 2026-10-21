@@ -167,6 +167,13 @@ class PanelTests(unittest.TestCase):
             ids=[x.get('oid') for x in root.findall('./meta/params/param')]
             self.assertEqual(len(ids),len(set(ids)))
             self.assertIn('ogscript.asyncPost',root.find('api').text)
+            from backend.protocol import PANASONIC
+            from backend.core import MARSHALL_LAB
+            definitions=PANASONIC if manufacturer=='Panasonic' else MARSHALL_LAB
+            listeners=root.findall("./ogscript[@handles='onchange']")
+            self.assertEqual({x.get('oid') for x in listeners},set(definitions))
+            self.assertEqual(len(listeners),len(definitions))
+            self.assertFalse(root.findall(".//param/ogscript[@handles='onchange']"))
             if manufacturer=='Panasonic':
                 presets=[b for b in root.findall('.//button') if (b.findtext('task') or '').startswith('preset(')]
                 self.assertEqual(len(presets),20)

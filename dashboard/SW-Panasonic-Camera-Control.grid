@@ -118,7 +118,10 @@ function poll() {
                 var p=c.parameters[key];
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
-                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000))params.setValue(key,0,p.value);
+                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
+                    // DashBoard blocks local setValue while the parameter is read-only.
+                    params.setAccess(key,1);params.setValue(key,0,p.value);
+                }
                 var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed';
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
                 if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
@@ -166,6 +169,15 @@ function tick() {
     <timer id="bridge_tick" rate="200" autostart="true" />
     <timertask timerid="bridge_tick" tasktype="ogscript">tick();</timertask>
   </meta>
+  <ogscript handles="onchange" oid="iris_auto" element="0">changed('iris_auto');</ogscript>
+  <ogscript handles="onchange" oid="iris" element="0">changed('iris');</ogscript>
+  <ogscript handles="onchange" oid="focus_auto" element="0">changed('focus_auto');</ogscript>
+  <ogscript handles="onchange" oid="zoom" element="0">changed('zoom');</ogscript>
+  <ogscript handles="onchange" oid="focus" element="0">changed('focus');</ogscript>
+  <ogscript handles="onchange" oid="red_gain" element="0">changed('red_gain');</ogscript>
+  <ogscript handles="onchange" oid="blue_gain" element="0">changed('blue_gain');</ogscript>
+  <ogscript handles="onchange" oid="wb_mode" element="0">changed('wb_mode');</ogscript>
+  <ogscript handles="onchange" oid="detail" element="0">changed('detail');</ogscript>
   <ogscript handles="onload">highlightPage('PTZ');poll();</ogscript>
   <ogscript handles="onclose">if(cbToken)request('command',{camera:selected(),action:'stop',data:{}},null);</ogscript>
   <abs left="8" top="8" width="1350" height="64" style="bg#2c3037;bdr:line;bdr#383d45;">
@@ -275,9 +287,7 @@ function tick() {
         <button name="OPEN" left="14" top="438" width="192" height="40" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:14;">
           <task tasktype="ogscript">send('write',{parameter:'iris',value:4095},null);</task>
         </button>
-        <param oid="iris" left="73" top="146" width="74" height="279" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('iris');</ogscript>
-        </param>
+        <param oid="iris" left="73" top="146" width="74" height="279" showlabel="false" widget="4" />
         <label name="unknown · never read" left="14" top="488" width="192" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_iris" />
         <button name="Manual" left="14" top="519" width="92" height="32" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:14;">
           <task tasktype="ogscript">send('write',{parameter:'iris_auto',value:0},null);</task>
@@ -299,9 +309,7 @@ function tick() {
           <ogscript handles="onmouseup">stop();</ogscript>
           <ogscript handles="onmouseexit">stop();</ogscript>
         </button>
-        <param oid="zoom" left="73" top="146" width="74" height="279" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('zoom');</ogscript>
-        </param>
+        <param oid="zoom" left="73" top="146" width="74" height="279" showlabel="false" widget="4" />
         <label name="unknown · never read" left="14" top="488" width="192" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_zoom" />
       </abs>
       <abs left="970" top="0" width="220" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
@@ -317,9 +325,7 @@ function tick() {
           <ogscript handles="onmouseup">stop();</ogscript>
           <ogscript handles="onmouseexit">stop();</ogscript>
         </button>
-        <param oid="focus" left="73" top="146" width="74" height="279" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('focus');</ogscript>
-        </param>
+        <param oid="focus" left="73" top="146" width="74" height="279" showlabel="false" widget="4" />
         <label name="unknown · never read" left="14" top="488" width="192" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_focus" />
         <button name="Manual" left="14" top="519" width="92" height="32" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:14;">
           <task tasktype="ogscript">send('write',{parameter:'focus_auto',value:0},null);</task>
@@ -410,62 +416,38 @@ function tick() {
     <abs id="page_paint" name="Paint" width="1224" height="595" style="bg#25282e;">
       <abs left="16" top="35" width="172" height="450" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="RED GAIN" left="10" top="10" width="152" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="red_gain" left="10" top="43" width="152" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('red_gain');</ogscript>
-        </param>
-        <param oid="red_gain" left="32" top="90" width="108" height="285" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('red_gain');</ogscript>
-        </param>
+        <param oid="red_gain" left="10" top="43" width="152" height="34" showlabel="false" widget="6" />
+        <param oid="red_gain" left="32" top="90" width="108" height="285" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="384" width="152" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_red_gain" />
       </abs>
       <abs left="204" top="35" width="172" height="450" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="BLUE GAIN" left="10" top="10" width="152" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="blue_gain" left="10" top="43" width="152" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('blue_gain');</ogscript>
-        </param>
-        <param oid="blue_gain" left="32" top="90" width="108" height="285" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('blue_gain');</ogscript>
-        </param>
+        <param oid="blue_gain" left="10" top="43" width="152" height="34" showlabel="false" widget="6" />
+        <param oid="blue_gain" left="32" top="90" width="108" height="285" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="384" width="152" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_blue_gain" />
       </abs>
       <abs left="580" top="35" width="172" height="450" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="DETAIL" left="10" top="10" width="152" height="26" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="detail" left="10" top="43" width="152" height="34" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('detail');</ogscript>
-        </param>
-        <param oid="detail" left="32" top="90" width="108" height="285" showlabel="false" widget="4">
-          <ogscript handles="onchange">changed('detail');</ogscript>
-        </param>
+        <param oid="detail" left="10" top="43" width="152" height="34" showlabel="false" widget="6" />
+        <param oid="detail" left="32" top="90" width="108" height="285" showlabel="false" widget="4" />
         <label name="unknown · never read" left="10" top="384" width="152" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_detail" />
       </abs>
       <abs left="780" top="35" width="420" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="WHITE BALANCE" left="12" top="8" width="396" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="wb_mode" left="10" top="31" width="304" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('wb_mode');</ogscript>
-        </param>
-        <param oid="wb_mode" left="322" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('wb_mode');</ogscript>
-        </param>
+        <param oid="wb_mode" left="10" top="31" width="304" height="29" showlabel="false" widget="3" />
+        <param oid="wb_mode" left="322" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="396" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_wb_mode" />
       </abs>
       <abs left="780" top="139" width="420" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="IRIS AUTO" left="12" top="8" width="396" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="iris_auto" left="10" top="31" width="304" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('iris_auto');</ogscript>
-        </param>
-        <param oid="iris_auto" left="322" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('iris_auto');</ogscript>
-        </param>
+        <param oid="iris_auto" left="10" top="31" width="304" height="29" showlabel="false" widget="3" />
+        <param oid="iris_auto" left="322" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="396" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_iris_auto" />
       </abs>
       <abs left="780" top="243" width="420" height="86" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="AUTO FOCUS" left="12" top="8" width="396" height="20" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="focus_auto" left="10" top="31" width="304" height="29" showlabel="false" widget="3">
-          <ogscript handles="onchange">changed('focus_auto');</ogscript>
-        </param>
-        <param oid="focus_auto" left="322" top="31" width="86" height="29" showlabel="false" widget="6">
-          <ogscript handles="onchange">changed('focus_auto');</ogscript>
-        </param>
+        <param oid="focus_auto" left="10" top="31" width="304" height="29" showlabel="false" widget="3" />
+        <param oid="focus_auto" left="322" top="31" width="86" height="29" showlabel="false" widget="6" />
         <label name="unknown · never read" left="12" top="60" width="396" height="26" style="fg#a9bbc8;size:11;txt-align:west;" id="actual_focus_auto" />
       </abs>
       <label name="R/B gain is displayed as -150..+150; native wire range remains 0..300." left="16" top="511" width="1180" height="30" style="fg#a9bbc8;size:12;txt-align:west;" />
