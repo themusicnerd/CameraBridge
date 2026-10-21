@@ -11,7 +11,7 @@ from backend.server import ROOT
 def export_panels(output):
     destination=pathlib.Path(output).resolve();destination.mkdir(parents=True,exist_ok=True)
     shutil.copytree(ROOT/'dashboard/assets',destination/'assets',dirs_exist_ok=True)
-    for manufacturer in ('Panasonic','Marshall'):
+    for manufacturer in ('Panasonic','Marshall','Sony'):
         tree=ET.parse(ROOT/'dashboard'/f'SW-{manufacturer}-Camera-Control.grid')
         for image in tree.iter('image'):
             image.set('src',(destination/'assets'/f'{manufacturer.lower()}.png').as_uri())

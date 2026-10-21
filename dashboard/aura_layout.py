@@ -4,6 +4,7 @@ from build_panels import COMMON,HERE,node,script,task,field
 
 BG='25282e';SURFACE='2c3037';BUTTON='494f5b';PURPLE='7433bd';BLUE='49a8d8'
 SHORT={'iris_auto':'IRIS MODE','focus_auto':'FOCUS MODE','iris':'IRIS','zoom':'ZOOM POSITION','focus':'FOCUS POSITION',
+       'colour_temperature':'COLOUR TEMPERATURE',
        'red_gain':'RED GAIN','blue_gain':'BLUE GAIN','wb_mode':'WHITE BALANCE','detail':'DETAIL',
        'exposure_auto':'EXPOSURE MODE','brightness':'BRIGHTNESS','gain':'GAIN','agc_limit':'AGC LIMIT',
        'shutter':'SHUTTER','black_level':'BLACK LEVEL','gamma':'GAMMA ×10','colour':'COLOUR','sharpness':'SHARPNESS',
@@ -161,7 +162,11 @@ def build(manufacturer,defs):
     button(config,'Sign out',442,288,218,"stop();cbToken='';cbTouchEnabled=false;status('Signed out');",56)
     button(config,'Lock camera',200,368,218,"send('lock',{value:true},null);",56)
     button(config,'Unlock camera',442,368,218,"send('lock',{value:false},null);",56)
-    label(config,'Configuration, diagnostics and paint snapshots: separate administration interface.',20,454,1140,36,colour='a9bbc8',size=14)
+    if pana:
+        button(config,'Tally ON',700,288,210,"send('tally',{program:true,preview:false},null);",56)
+        button(config,'Tally OFF',934,288,210,"send('tally',{program:false,preview:false},null);",56)
+        label(config,'Tally feedback pending',700,360,450,88,'tally_state',size=14)
+    label(config,'Tally enable / disable, configuration and diagnostics: open CameraBridge setup.',20,454,1140,36,colour='a9bbc8',size=14)
     label(config,'SIMULATOR feedback confirms simulator state. Verify hardware separately.',20,506,1140,36,colour='d7bb8c',size=14)
     label(root,'Starting…',164,744,1186,44,'status','b9c5cf',14)
     path=HERE/f'SW-{manufacturer}-Camera-Control.grid'

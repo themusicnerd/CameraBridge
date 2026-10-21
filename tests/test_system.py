@@ -75,11 +75,13 @@ class ProtocolTests(unittest.TestCase):
         config['cameras'][1]['number']=1
         with self.assertRaises(ValueError):validate_config(config)
         config['cameras'][1]['number']=2
-        sony=dict(id='sony1',number=4,name='Sony',manufacturer='Sony',model='PXW-Z200',driver='sony-sdk',enabled=False,simulator=False)
+        sony=dict(id='sony1',number=4,name='Sony',manufacturer='Sony',model='PXW-Z200',driver='sony-sdk',enabled=False,simulator=False,host='192.0.2.20')
         config['cameras'].append(sony);validate_config(config)
         sony['enabled']=True
-        with self.assertRaises(ValueError):validate_config(config)
+        validate_config(config)
         sony['enabled']=False;sony['pivotcam']=True
+        validate_config(config)
+        sony['simulator']=True
         with self.assertRaises(ValueError):validate_config(config)
     def test_documented_fixtures(self):
         fixture=json.loads((ROOT/'tests/fixtures/panasonic-documented.json').read_text())
@@ -182,7 +184,7 @@ class PanelTests(unittest.TestCase):
     def test_aura_pages_logos_and_no_overflow(self):
         from urllib.parse import urlparse
         from urllib.request import url2pathname
-        for manufacturer in ('Panasonic','Marshall'):
+        for manufacturer in ('Panasonic','Marshall','Sony'):
             root=ET.parse(ROOT/'dashboard'/f'SW-{manufacturer}-Camera-Control.grid').getroot()
             logo=root.find('.//image');self.assertIsNotNone(logo)
             self.assertEqual(pathlib.Path(url2pathname(urlparse(logo.get('src')).path)).name,manufacturer.lower()+'.png')

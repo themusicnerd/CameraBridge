@@ -96,9 +96,12 @@ def validate_config(c):
         if type(number) is not int or not 1<=number<=255 or number in numbers:raise ValueError('Camera numbers must be unique integers from 1 through 255')
         numbers.add(number)
         if type(camera.get('enabled',True)) is not bool or type(camera.get('simulator',False)) is not bool:raise ValueError('Invalid camera enable or simulator option')
+        camera.setdefault('tally_enabled',True)
+        if type(camera['tally_enabled']) is not bool:raise ValueError('Invalid tally enable option')
+        if 'tally_address' in camera and (type(camera['tally_address']) is not int or not 0<=camera['tally_address']<=126):raise ValueError('TSL address must be 0..126')
         if camera['driver'] not in ('panasonic','marshall-lab','sony-sdk','marshall-pending'):raise ValueError('Driver not implemented')
         if camera['driver'] in ('sony-sdk','marshall-pending'):
-            if camera.get('enabled',True):raise ValueError('This camera profile requires its hardware integration; save it disabled')
+            if camera['driver']=='marshall-pending' and camera.get('enabled',True):raise ValueError('This camera profile requires its hardware integration; save it disabled')
             if camera.get('simulator'):raise ValueError('Pending hardware profiles are not simulators')
             expected='Sony' if camera['driver']=='sony-sdk' else 'Marshall'
             if camera.get('manufacturer')!=expected:raise ValueError('Driver/manufacturer mismatch')
@@ -106,14 +109,21 @@ def validate_config(c):
             if camera['driver']=='marshall-pending' and camera.get('model') not in ('CV226','CV228'):raise ValueError('Unknown Marshall profile')
         if camera['driver']=='marshall-lab' and not camera.get('simulator'):raise ValueError('Marshall lab must be labelled simulator')
         if camera['driver']=='panasonic' and camera['model']!='AW-HE130':raise ValueError('This release validates HE130 only; other model profiles pending')
-        if camera['driver']=='panasonic':
-            if camera.get('manufacturer')!='Panasonic':raise ValueError('Driver/manufacturer mismatch')
+        if camera['driver'] in ('panasonic','sony-sdk'):
+            if camera.get('manufacturer')!=('Sony' if camera['driver']=='sony-sdk' else 'Panasonic'):raise ValueError('Driver/manufacturer mismatch')
             host=camera.get('host','')
             if not isinstance(host,str) or not host or any(x in host for x in '/@?#:'):raise ValueError('Invalid camera host')
             if type(camera.get('port',80)) is not int or not 1<=camera.get('port',80)<=65535:raise ValueError('Invalid camera port')
+            if camera['driver']=='sony-sdk':ipaddress.IPv4Address(host)
         if camera['driver']=='marshall-lab' and camera.get('manufacturer')!='Marshall':raise ValueError('Driver/manufacturer mismatch')
         if type(camera.get('pivotcam',False)) is not bool or type(camera.get('allow_store',False)) is not bool:raise ValueError('Invalid PIVOTCam option')
-        if camera.get('pivotcam') and camera['driver']!='panasonic':raise ValueError('PIVOTCam currently requires the Panasonic driver')
+        if camera.get('pivotcam') and camera['driver'] not in ('panasonic','sony-sdk'):raise ValueError('PIVOTCam requires Panasonic or Sony')
+    tally=c.get('tally',{})
+    if not isinstance(tally,dict) or type(tally.get('enabled',False)) is not bool:raise ValueError('Invalid tally receiver configuration')
+    if tally.get('enabled'):
+        ipaddress.IPv4Address(tally.get('bind','127.0.0.1'));ipaddress.IPv4Address(tally.get('source',''))
+        if type(tally.get('port',5727)) is not int or not 1024<=tally.get('port',5727)<=65535:raise ValueError('Invalid tally UDP port')
+        if type(tally.get('address_offset',0)) is not int or not -1<=tally.get('address_offset',0)<=1:raise ValueError('Invalid tally address offset')
     pivot=c.get('pivotcam',{})
     if not isinstance(pivot,dict) or type(pivot.get('enabled',False)) is not bool:raise ValueError('Invalid PIVOTCam settings')
     if pivot.get('enabled'):
@@ -158,6 +168,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self.trusted():self.send({'error':'Management host denied'},403);return
         path=urlsplit(self.path).path
         if path=='/':self.send((ROOT/'web/admin.html').read_bytes(),mime='text/html; charset=utf-8');return
+        if path=='/sony':self.send((ROOT/'web/sony.html').read_bytes(),mime='text/html; charset=utf-8');return
+        if path=='/assets/sony.png':self.send((ROOT/'dashboard/assets/sony.png').read_bytes(),mime='image/png');return
         if path=='/health':self.send({'service':'CameraBridge','mode':'LAB' if self.server.lab else 'hardware'});return
         token=self.headers.get('Authorization','').removeprefix('Bearer ')
         role=self.server.auth.role(token)
@@ -190,6 +202,19 @@ class Handler(BaseHTTPRequestHandler):
             role=self.server.auth.role(token)
             if not role:raise PermissionError('Authentication required')
             if path=='/api/state':self.send(self.server.engine.snapshot());return
+            if path in ('/api/sony/credentials','/api/sony/fingerprint'):
+                if role!='admin':raise PermissionError('Administrator required for Sony access setup')
+                from .sony import SonyCredentials,fingerprint
+                if path.endswith('/fingerprint'):
+                    self.send({'fingerprint':fingerprint(data['host'])});return
+                cid=data['camera']
+                if data.get('acknowledge_terms') is not True:raise ValueError('Acknowledge the Sony SDK terms before saving camera access')
+                if not any(c['id']==cid and c['driver']=='sony-sdk' for c in self.server.engine.config['cameras']):raise ValueError('Save the Sony camera setup first')
+                SonyCredentials(self.server.engine.storage).save(cid,data['username'],data['password'],data['fingerprint'])
+                if cid in self.server.engine.cameras:
+                    c=self.server.engine.cameras[cid]
+                    with c['io']:c['driver'].close()
+                self.send({'status':'Sony camera access saved locally; password is not exported'});return
             if path=='/api/command':
                 if data['action']=='lock' and role!='admin':raise PermissionError('Administrator required for lockout')
                 # Ownership is bound to the authenticated session, never a client supplied owner.
@@ -248,6 +273,11 @@ def main():
     try:
         service=Server((config.get('bind','127.0.0.1'),config.get('port',8088)),engine,auth,a.lab,a.desktop_control)
         engine.start()
+        tally=config.get('tally',{})
+        if tally.get('enabled'):
+            from .tally import TallyServer
+            receiver=TallyServer((tally.get('bind','127.0.0.1'),tally.get('port',5727)),engine,tally['source'],tally.get('address_offset',0))
+            threading.Thread(target=receiver.serve_forever,daemon=True).start();gateways.append(receiver)
         if a.visca_lab:
             if config.get('pivotcam',{}).get('enabled'):raise SystemExit('Use configured PIVOTCam endpoints or the legacy VISCA lab, not both')
             from .ross import PresetFollower,LabViscaServer

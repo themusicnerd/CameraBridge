@@ -23,6 +23,9 @@ def main():
     version=tomllib.loads((ROOT/'pyproject.toml').read_text(encoding='utf-8'))['project']['version']
     build=ROOT/'build';build.mkdir(exist_ok=True)
     datas=[(str(ROOT/source),destination) for source,destination in [('web','web'),('dashboard','dashboard'),('config.example.json','.'),('pyproject.toml','.')]]
+    if expected in ('windows','linux'):
+        if not (ROOT/'sony').is_dir():raise SystemExit('Build the Sony SDK adapter with tools/build_sony.py first')
+        datas.append((str(ROOT/'sony'),'sony'))
     # Some managed Python distributions require an extra CA policy resource.
     # Preserve that distribution's TLS policy in its frozen runtime.
     runtime_ca=pathlib.Path(ssl.__file__).with_name('codex-rejected-cas.pem')

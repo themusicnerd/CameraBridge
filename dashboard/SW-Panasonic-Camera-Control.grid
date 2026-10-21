@@ -20,7 +20,7 @@ function status(text) {
     ogscript.rename('status', text);
 }
 function highlightPage(name) {
-    var pages=CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
+    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
     for(var i=0;i&lt;pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
 }
 function request(path, data, callback) {
@@ -132,6 +132,8 @@ function poll() {
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
         }
         cbUpdating=true;
+        var tally=c.tally||{};
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
                 var p=c.parameters[key];
@@ -141,7 +143,7 @@ function poll() {
                     // DashBoard blocks local setValue while the parameter is read-only.
                     params.setAccess(key,1);params.setValue(key,0,p.value);
                 }
-                var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed';
+                var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed' &amp;&amp; p.writable!==false;
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
                 if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
                 params.setAccess(key,enabled?1:0);
@@ -152,7 +154,7 @@ function poll() {
 }
 function tick() {
     cbTick++;
-    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value},null);break;}
+    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
     if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
@@ -539,7 +541,14 @@ function tick() {
       <button name="Unlock camera" left="442" top="368" width="218" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
         <task tasktype="ogscript">send('lock',{value:false},null);</task>
       </button>
-      <label name="Configuration, diagnostics and paint snapshots: separate administration interface." left="20" top="454" width="1140" height="36" style="fg#a9bbc8;size:14;txt-align:west;" />
+      <button name="Tally ON" left="700" top="288" width="210" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">send('tally',{program:true,preview:false},null);</task>
+      </button>
+      <button name="Tally OFF" left="934" top="288" width="210" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">send('tally',{program:false,preview:false},null);</task>
+      </button>
+      <label name="Tally feedback pending" left="700" top="360" width="450" height="88" style="fg#e2e4e9;size:14;txt-align:west;" id="tally_state" />
+      <label name="Tally enable / disable, configuration and diagnostics: open CameraBridge setup." left="20" top="454" width="1140" height="36" style="fg#a9bbc8;size:14;txt-align:west;" />
       <label name="SIMULATOR feedback confirms simulator state. Verify hardware separately." left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
     </abs>
   </tab>

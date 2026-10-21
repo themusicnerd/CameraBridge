@@ -43,7 +43,8 @@ def main():
                 expect(page.locator('#status')).to_contain_text('Authenticated')
                 page.get_by_role('button',name='Camera setup',exact=True).click();expect(page.locator('#draftstatus')).to_have_text('Current setup loaded')
                 page.locator('#addcamera').click();page.locator('#camnumber').fill('7');page.locator('#camname').fill('Sony Z200');page.locator('#camprofile').select_option('sony-sdk');page.locator('#camhost').fill('192.0.2.20')
-                expect(page.locator('#camenabled')).to_be_disabled();expect(page.locator('#camenabled')).not_to_be_checked()
+                expect(page.locator('#camenabled')).to_be_enabled();expect(page.locator('#camenabled')).to_be_checked()
+                expect(page.locator('#camtally')).to_be_checked()
                 page.get_by_role('button',name='Save camera to setup',exact=True).click();expect(page.locator('#roster')).to_contain_text('Camera 7')
                 page.locator('#addcamera').click();page.locator('#camnumber').fill('7');page.locator('#camname').fill('Real Panasonic');page.locator('#camhost').fill('192.0.2.30');page.get_by_role('button',name='Save camera to setup',exact=True).click()
                 expect(page.locator('#status')).to_contain_text('already assigned')
@@ -60,9 +61,10 @@ def main():
                 assert {c['number'] for c in saved['cameras']}=={3,4,7,8}
                 assert next(c for c in saved['cameras'] if c['number']==4)['id']=='pana1'
                 assert saved['pivotcam']['base_port']==19010
-                assert not next(c for c in saved['cameras'] if c['number']==7)['enabled']
+                assert next(c for c in saved['cameras'] if c['number']==7)['enabled']
+                assert next(c for c in saved['cameras'] if c['number']==7)['tally_enabled']
                 assert not errors,errors
-                browser.close();print('PASS: login, add/edit/remove cameras, duplicate number rejection, pending Sony profile, map export and save/restart request')
+                browser.close();print('PASS: login, add/edit/remove cameras, duplicate number rejection, Sony profile, default tally, map export and save/restart request')
         finally:
             if process.poll() is None:process.communicate('quit\n',timeout=20)
             assert process.returncode==0

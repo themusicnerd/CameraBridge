@@ -18,7 +18,8 @@
 The real Panasonic profile supports AW-HE130 CGI.
 The camera port is normally 80 for that profile.
 The camera connection port is separate from the PIVOTCam listening port.
-Sony and physical Marshall entries must remain disabled until their hardware integrations are available.
+Sony setup uses the SDK adapter and a separate local camera access form.
+Physical Marshall entries must remain disabled.
 
 The desktop stops its old service before starting the saved setup.
 When a physical camera is enabled, the desktop disables simulator startup and the legacy VISCA lab.

@@ -68,7 +68,7 @@ class PresetFollower:
     def bus_event(self,bus,camera):
         if bus not in ('preset','program'):raise ValueError('Bus must be preset or program')
         if bus=='program':return {'changed':False,'selected':self.selected,'epoch':self.epoch}
-        if camera not in self.engine.cameras or self.engine.cameras[camera]['config']['manufacturer']!='Panasonic':raise ValueError('Select a configured Panasonic camera')
+        if camera not in self.engine.cameras or self.engine.cameras[camera]['config']['manufacturer'] not in ('Panasonic','Sony'):raise ValueError('Select a configured Panasonic or Sony camera')
         with self.lock:
             if camera==self.selected:return {'changed':False,'selected':self.selected,'epoch':self.epoch}
             previous=self.selected
@@ -96,8 +96,12 @@ class PresetFollower:
                     if not neutral and not {'pan_tilt','zoom'}<=self.neutral:raise ViscaError('Return positioner to neutral after handover',0x41)
                     self.engine.claim(c,self.owner)
                     if axes.get('focus'):self.engine.check_mode(c,'focus')
+                    if c['config']['driver']=='sony-sdk' and kind=='pan_tilt' and any(axes.values()):raise ViscaError('PXW-Z200 has no pan/tilt motors',0x41)
                     self.axes.update(axes)
                     c['moving']=any(self.axes.values());c['motion_deadline']=received+.9
+                if c['config']['driver']=='sony-sdk':
+                    c['driver'].move(**self.axes)
+                    self.update_status();self.engine.event(camera,'sony-visca-lens',axes=dict(self.axes));return
                 if kind=='pan_tilt':
                     command=movement(self.axes['pan'],self.axes['tilt'])[0];expected='pTS'+command[4:]
                 elif kind=='zoom':command=f'#Z{self.axes["zoom"]+50:02d}';expected='zS'+command[2:]
@@ -155,8 +159,8 @@ class PivotCamServer(LabViscaServer):
     def __init__(self,address,engine,camera,follower,controller,allow_store=False):
         self.controller=str(ipaddress.IPv4Address(controller))
         ipaddress.IPv4Address(address[0])
-        if camera not in engine.cameras or engine.cameras[camera]['config']['driver']!='panasonic':
-            raise ValueError('PIVOTCam requires an enabled Panasonic camera')
+        if camera not in engine.cameras or engine.cameras[camera]['config']['driver'] not in ('panasonic','sony-sdk'):
+            raise ValueError('PIVOTCam requires an enabled Panasonic or Sony camera')
         self.configure(address,engine,camera,follower,allow_store)
 
     def verify_request(self,request,client_address):
@@ -216,7 +220,8 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                         c=self.server.engine.cameras[self.server.camera]
                         with c['io']:value=c['driver'].query('focus_auto')
                         with self.server.engine.lock:c['params']['focus_auto'].update(value=value,last_query=time.time(),confirmation='confirmed')
-                        self.request.sendall(bytes([0x90,0x50,2 if value else 3,0xff]));continue
+                        auto=value==1 if c['config']['driver']=='sony-sdk' else bool(value)
+                        self.request.sendall(bytes([0x90,0x50,2 if auto else 3,0xff]));continue
                     # No ACK is sent until the request has passed policy checks.
                     if kind in ('pan_tilt','zoom','focus'):
                         self.server.follower.apply_motion(self.server.camera,kind,data,epoch,received)
@@ -224,8 +229,9 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                         c=self.server.engine.cameras[self.server.camera]
                         with c['io']:
                             with self.server.engine.lock:self.server.engine.claim(c,self.server.follower.owner)
-                            value=c['driver'].write('focus_auto',data['value'])
-                            if value!=data['value']:raise ViscaError('Focus mode mismatch',0x41)
+                            requested=(1 if data['value'] else 2) if c['config']['driver']=='sony-sdk' else data['value']
+                            value=c['driver'].write('focus_auto',requested)
+                            if value!=requested:raise ViscaError('Focus mode mismatch',0x41)
                             with self.server.engine.lock:c['params']['focus_auto'].update(value=value,last_query=time.time(),confirmation='confirmed')
                     elif kind=='preset':
                         if data['store'] and not self.server.allow_store:raise ViscaError('Preset store disabled',0x41)

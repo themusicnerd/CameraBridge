@@ -29,6 +29,10 @@ def main():
         subprocess.run(common+['--init-user','smoke'],input='release-test-password\nrelease-test-password\n',text=True,check=True,timeout=20)
         subprocess.run([exe,'panels','--output',str(root/'panels')],check=True)
         assert (root/'panels/CameraBridge-Panasonic.grid').is_file()
+        assert (root/'panels/CameraBridge-Sony.grid').is_file()
+        helper=pathlib.Path(exe).parent/'_internal/sony'/('CameraBridge-Sony.exe' if __import__('sys').platform=='win32' else 'CameraBridge-Sony')
+        probe=subprocess.run([str(helper)],input='version\nquit\n',text=True,capture_output=True,timeout=15,check=True,cwd=helper.parent)
+        assert '"adapter":1' in probe.stdout
         proc=subprocess.Popen(common+['--lab'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         def api(route,data=None):
             req=urllib.request.Request(f'http://127.0.0.1:{port}'+route,data=json.dumps(data).encode() if data is not None else None,headers={'Content-Type':'application/json'})

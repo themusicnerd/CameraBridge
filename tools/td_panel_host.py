@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-POST_PATHS = frozenset(('/api/login', '/api/logout', '/api/state', '/api/command', '/api/snapshot', '/api/lab/ross/bus', '/api/config'))
+POST_PATHS = frozenset(('/api/login', '/api/logout', '/api/state', '/api/command', '/api/snapshot', '/api/lab/ross/bus', '/api/config', '/api/sony/credentials', '/api/sony/fingerprint'))
 
 def panel_bytes(manufacturer, base):
     source = ROOT / 'dashboard' / ('SW-' + manufacturer + '-Camera-Control.grid')
@@ -70,28 +70,32 @@ class PanelHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.trusted(): return
         self.count()
-        if self.path in ('/Panasonic.grid','/Marshall.grid'):
+        if self.path in ('/Panasonic.grid','/Marshall.grid','/Sony.grid'):
             self.reply(panel_bytes(self.path[1:-5],self.server.base),mime='application/xml',attachment="CameraBridge-"+self.path[1:]); return
-        assets={'/assets/panasonic.png':'panasonic.png','/assets/marshall.png':'marshall.png'}
+        assets={'/assets/panasonic.png':'panasonic.png','/assets/marshall.png':'marshall.png','/assets/sony.png':'sony.png'}
         if self.path in assets:
             self.reply((ROOT/'dashboard/assets'/assets[self.path]).read_bytes(),mime='image/png'); return
         if self.path=='/':
             self.reply((ROOT/'web/admin.html').read_bytes(),mime='text/html; charset=utf-8'); return
+        if self.path=='/sony':
+            self.reply((ROOT/'web/sony.html').read_bytes(),mime='text/html; charset=utf-8');return
         if self.path in ('/health','/api/state','/api/config','/api/snapshots'):
             self.proxy('GET'); return
         self.reply(b'{"error":"Not found"}',404)
     def do_POST(self):
         if not self.trusted(): return
-        if self.path not in POST_PATHS:
-            self.reply(b'{"error":"Endpoint not exposed"}',403); return
-        if self.headers.get('Origin') and self.headers['Origin']!=self.server.base:
-            self.reply(b'{"error":"Origin denied"}',403); return
         try:
             size=int(self.headers.get('Content-Length','0'))
             if self.headers.get('Transfer-Encoding') or not 0<size<=65536: raise ValueError()
         except ValueError:
             self.reply(b'{"error":"Invalid body size"}',400); return
         body=self.rfile.read(size)
+        # Drain a bounded valid body before rejecting its route. This prevents
+        # unread request bytes causing a Windows TCP reset over the HTTP reply.
+        if self.path not in POST_PATHS:
+            self.reply(b'{"error":"Endpoint not exposed"}',403);return
+        if self.headers.get('Origin') and self.headers['Origin']!=self.server.base:
+            self.reply(b'{"error":"Origin denied"}',403);return
         if len(body)!=size:
             self.reply(b'{"error":"Incomplete body"}',400); return
         self.count()

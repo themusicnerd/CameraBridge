@@ -16,7 +16,7 @@ class TouchDrivePanelHostTests(unittest.TestCase):
         c.request('POST' if body is not None else 'GET',path,body,headers or {})
         r=c.getresponse();result=r.status,r.read(),dict(r.getheaders());c.close();return result
     def test_cross_platform_panels(self):
-        for maker in ('Panasonic','Marshall'):
+        for maker in ('Panasonic','Marshall','Sony'):
             root=ET.fromstring(panel_bytes(maker,'http://192.168.96.61:8089'))
             bridge=next(p for p in root.iter('param') if p.get('oid')=='bridge' and 'value' in p.attrib)
             self.assertEqual(bridge.get('value'),'http://192.168.96.61:8089')
@@ -46,7 +46,9 @@ class TouchDrivePanelHostTests(unittest.TestCase):
         self.assertEqual(args[3]['Authorization'],'Bearer test-session')
     def test_origin_and_body_limits(self):
         self.assertEqual(self.request('/api/login',b'{}',{'Origin':'http://untrusted.example'})[0],403)
-        self.assertEqual(self.request('/api/login',b'x'*65537)[0],400)
+        # Reject from the declared size before the body is sent. Sending an unread
+        # oversized body can make Windows reset the socket before HTTP is read.
+        self.assertEqual(self.request('/api/login',b'',{'Content-Length':'65537'})[0],400)
 
     def test_admin_page_and_authenticated_get_forwarding(self):
         status,body,headers=self.request('/')

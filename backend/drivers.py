@@ -63,6 +63,14 @@ class Panasonic:
     def preset(self, number, store=False):
         self.send(preset(number,store))
 
+    def tally(self,program,preview=False):
+        # AW-HE130 CGI: enable network tally input, drive red lamp, read back.
+        if self.send('#TAE1')!='tAE1':raise ValueError('Tally input enable was not acknowledged')
+        self.send('#DA'+str(int(program)))
+        answer=self.send('#DA')
+        if answer not in ('dA0','dA1'):raise ValueError('Invalid tally readback')
+        return {'program':answer=='dA1','preview':False}
+
 class SerialBus:
     """One instance per TCP endpoint. No retry of ambiguous writes; no fake ACK."""
     def __init__(self, host, port, delay=0.1, timeout=0.5):

@@ -17,7 +17,7 @@ This table separates software tests from physical equipment acceptance.
 | Open setup link | Panel script and host route tests; native address popup | External TouchDrive browser launch |
 | Camera setup | Browser add, edit, remove, numbering and export test | Physical installation acceptance |
 | Numbered PIVOTCam endpoints | Fixed target, controller restriction and shot tests | Physical Panasonic acceptance |
-| Sony PXW-Z200 | Disabled configuration entry; official SDK research | SDK access, driver and hardware tests |
+| Sony PXW-Z200 | SDK adapter, lens and paint interfaces, capability readback | Physical camera acceptance; external tally lamps unavailable |
 | Marshall paint and OSD | Synthetic lab model | Exact CV226/CV228 command map |
 | Shared RS485 transport | Serialized TCP transport | Adapter and camera acceptance |
 | Paint snapshot capture | Confirmed values saved | Recall, comparison and matching |

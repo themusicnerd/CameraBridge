@@ -1,45 +1,33 @@
-# CameraBridge 0.2.0rc3
+# CameraBridge 0.3.0rc1
 
-This is a development prerelease.
-Production and physical camera acceptance are incomplete.
-
-## Downloads
-
-- Windows x64: extract the ZIP archive.
-- Linux x64: extract the TAR.GZ archive; GNU libc 2.35 or later is required.
-- macOS Intel: select the macos-x64 archive.
-- macOS Apple silicon: select the macos-arm64 archive.
-
-Each archive includes Python and a SHA256 file is provided separately.
-The packages have no publisher signature.
-The macOS packages are not notarized.
-Follow your organization's software approval procedure before execution.
+This is a development prerelease for Windows x64 and Linux x64.
+Physical camera acceptance is incomplete.
 
 ## Changes
 
-- Add platform packages and native package tests.
-- Add a tray icon and desktop control panel.
-- Add port settings, local account setup, service controls and Open setup page.
-- Add camera setup with add, edit, remove and persistent camera numbers.
-- Add fixed Panasonic PIVOTCam endpoints and a connection-map export.
-- Set the first camera port to 19011.
-- Add disabled Sony PXW-Z200 entries; Sony control is not implemented.
-- Keep the service running when the control panel closes.
-- Add an explicit Quit command to the tray menu.
-- Add Open setup to both camera panels.
-- Add the web interface to the restricted TouchDrive host.
-- Retain large native fader handles and touch targets.
-- Add complete procedures for the implemented release scope.
-- Add a technical term list and limited documentation checks.
+- Add a native Sony SDK 2.02.00 adapter and local camera access setup.
+- Add Sony PXW-Z200 lens and paint controls with capability feedback.
+- Add a Sony native DashBoard panel and a touch web dashboard.
+- Add PIVOTCam lens and focus-mode translation for the Sony profile.
+- Add Panasonic red tally commands and independent lamp readback.
+- Add Sony SDK tally property handling with explicit unsupported-model feedback.
+- Add a per-camera tally option, enabled by default.
+- Add manual tally tests and a source-restricted TSL UMD 3.1 UDP receiver.
+- Keep release downloads separate from Actions artifact storage.
+
+## Installation
+
+Extract the complete platform archive.
+Keep the Sony helper and its libraries with the application.
+Check the supplied SHA-256 file before use.
+The packages are not signed by a publisher.
+See [installation](installation.md) and [Sony setup](sony-pxw-z200.md).
 
 ## Limits
 
-Marshall hardware control, actual bus following and push/pull mapping are incomplete.
-Some positioner movement packets are rejected.
-The panel displays a native setup-address link.
-External browser launch on the TouchDrive still requires acceptance.
-Enter the displayed address in Chromium if the browser does not open.
-The simulator does not establish physical shot completion or saved optical framing.
-Full ASD-STE100 compliance requires the outstanding vocabulary and qualified editorial review.
-
-Read docs/installation.md and docs/operation.md before use.
+The PXW-Z200 SDK profile does not support external tally lamps or mechanical pan/tilt.
+Lens jog uses fixed speed and requires physical stop acceptance.
+Marshall hardware control and actual Preset-bus following remain incomplete.
+TSL 4 and TSL 5 are not supported.
+Physical Sony, Panasonic tally and Carbonite tally tests remain required.
+The documentation checks do not establish full ASD-STE100 compliance.

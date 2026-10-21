@@ -6,6 +6,7 @@ import threading
 import time
 from .protocol import PANASONIC,Parameter
 from .drivers import Panasonic
+from .sony import Sony,SONY
 
 MARSHALL_LAB={p.id:p for p in [
     Parameter('wb_mode','White balance: 0 auto / 1 manual / 2 ATW / 3 push',0,3,'','','',1,10),
@@ -52,14 +53,16 @@ class Engine:
         for c in configuration['cameras']:
             if not c.get('enabled',True):continue
             lab=c['driver']=='marshall-lab'
-            if not lab and c['driver']!='panasonic':
+            sony=c['driver']=='sony-sdk'
+            if not lab and not sony and c['driver']!='panasonic':
                 raise ValueError('Unsupported production driver; no guessed Marshall serial commands')
-            definitions=MARSHALL_LAB if lab else PANASONIC
-            driver=LabMarshall() if lab else Panasonic(c['host'],c.get('port',80))
+            definitions=SONY if sony else MARSHALL_LAB if lab else PANASONIC
+            driver=Sony(c,storage) if sony else LabMarshall() if lab else Panasonic(c['host'],c.get('port',80))
             self.cameras[c['id']]={'config':c,'driver':driver,'defs':definitions,'io':threading.RLock(),
                 'params':{k:{'value':None,'requested':None,'confirmation':'unknown','last_query':None,'last_command':None,'error':None} for k in definitions},
                 'pending':{},'owner':None,'lease_until':0,'generation':0,'motion_deadline':0,'moving':False,'locked':False,'error':None,
-                'health':'unknown','last_poll':0,'active_preset':None}
+                'health':'unknown','last_poll':0,'active_preset':None,
+                'tally':{'enabled':c.get('tally_enabled',True),'requested':None,'actual':None,'status':'unknown' if c.get('tally_enabled',True) else 'disabled','source':None,'updated':None},'tally_pending':None}
 
     def event(self,camera,kind,**data):
         with self.lock:
@@ -83,8 +86,9 @@ class Engine:
                     status='stale' if age is not None and age>max(10,self.config.get('poll_seconds',4)*3) and v['confirmation']=='confirmed' else v['confirmation']
                     parameters[key]=dict(c['defs'][key].metadata(),**v)
                     parameters[key].update(confirmation=status,age_seconds=age)
+                    if isinstance(c['driver'],Sony):parameters[key].update(c['driver'].metadata(key))
                 result.append(dict(c['config'],parameters=parameters,preset_names=dict(self.preset_names.get(cid,{})),health=c['health'],error=c['error'],locked=c['locked'],
-                    owner=c['owner'] if c['lease_until']>time.monotonic() else None,generation=c['generation'],moving=c['moving'],active_preset=c['active_preset']))
+                    owner=c['owner'] if c['lease_until']>time.monotonic() else None,generation=c['generation'],moving=c['moving'],active_preset=c['active_preset'],tally=dict(c['tally'])))
             return {'revision':self.revision,'time':now,'cameras':result,'ross':dict(self.ross_status),'events':list(self.events)}
 
     def claim(self,c,owner):
@@ -96,6 +100,7 @@ class Engine:
 
     def command(self,cid,action,data,owner):
         c=self.cameras[cid]
+        if action=='tally':return self.set_tally(cid,data.get('program',False),data.get('preview',False),'manual')
         if action=='stop':
             self.stop(cid);return {'status':'stop sent'}
         if action=='claim':
@@ -119,18 +124,20 @@ class Engine:
                 return {'status':'name saved'}
             if action=='write':
                 key=data['parameter'];value=c['defs'][key].validate(data['value'])
+                if isinstance(c['driver'],Sony) and data.get('snap') is True:value=c['defs'][key].validate(c['driver'].snap(key,value))
                 self.check_mode(c,key)
                 c['pending'][key]=(value,c['generation'],owner)
                 c['params'][key].update(requested=value,confirmation='pending',last_command=time.time(),error=None)
                 self.event(cid,'queued',parameter=key,value=value)
                 return {'status':'queued'}
             if action=='move':
-                if c['config']['manufacturer']!='Panasonic':raise ValueError('Fixed camera has no mechanical PTZ')
+                if c['config']['manufacturer'] not in ('Panasonic','Sony'):raise ValueError('Fixed camera has no mechanical PTZ')
+                if isinstance(c['driver'],Sony) and (data.get('pan',0) or data.get('tilt',0)):raise ValueError('PXW-Z200 has no pan/tilt motors')
                 if data.get('generation')!=c['generation']:raise ValueError('Stale motion generation; claim again')
                 axes={k:data.get(k,0) for k in ('pan','tilt','zoom','focus')}
                 from .protocol import movement
                 movement(**axes)
-                if axes['focus']:self.check_mode(c,'focus')
+                if axes['focus']:self.check_mode(c,'focus_auto' if isinstance(c['driver'],Sony) else 'focus')
                 c['motion_deadline']=time.monotonic()+0.9
                 c['moving']=any(axes.values())
                 c['pending']['@motion']=(axes,c['generation'],owner)
@@ -161,6 +168,19 @@ class Engine:
         if state['confirmation']!='confirmed' or state['last_query'] is None or time.time()-state['last_query']>10 or state['value'] not in [int(x) for x in raw.split(',')]:
             raise ValueError('Manual adjustment requires fresh confirmed '+requirement)
 
+    def set_tally(self,cid,program,preview=False,source='manual'):
+        if type(program) is not bool or type(preview) is not bool:raise ValueError('Tally values must be true or false')
+        c=self.cameras[cid]
+        with self.lock:
+            if not c['config'].get('tally_enabled',True):return {'status':'disabled for this camera'}
+            desired={'program':program,'preview':preview}
+            t=c['tally']
+            if t['requested']==desired and t['status'] in ('pending','confirmed','unsupported'):return {'status':t['status']}
+            t.update(requested=desired,status='pending',source=source,updated=time.time())
+            c['tally_pending']=dict(desired)
+            self.revision+=1
+        return {'status':'queued'}
+
     def stop(self,cid):
         c=self.cameras[cid]
         with self.lock:
@@ -184,6 +204,18 @@ class Engine:
         c=self.cameras[cid];driver=c['driver']
         next_poll=0;poll_keys=iter(())
         while not self.closed.is_set():
+            with self.lock:
+                tally=c['tally_pending'];c['tally_pending']=None
+            if tally is not None:
+                try:
+                    if not hasattr(driver,'tally'):raise NotImplementedError('No tally driver for this camera')
+                    with c['io']:actual=driver.tally(**tally)
+                    expected={'program':tally['program'],'preview':tally['preview'] if isinstance(driver,Sony) else False}
+                    with self.lock:c['tally'].update(actual=actual,status='confirmed' if actual==expected else 'mismatch',error=None,updated=time.time());self.revision+=1
+                    self.event(cid,'tally-readback',actual=actual)
+                except Exception as exc:
+                    with self.lock:c['tally'].update(status='unsupported' if isinstance(exc,NotImplementedError) else 'error',error=str(exc)[:180],updated=time.time());self.revision+=1
+                continue
             try:
                 with self.lock:
                     item=next(iter(c['pending'].items()),None)
@@ -216,7 +248,7 @@ class Engine:
                         with self.lock:
                             v=c['params'][key]
                             v.update(value=actual,last_query=time.time(),error=None)
-                            if v['confirmation']!='pending':v['confirmation']='confirmed'
+                            if v['confirmation']!='pending':v['confirmation']='confirmed' if actual is not None else 'unsupported'
                             c['health']='simulated' if c['config'].get('simulator') else 'online';c['error']=None
                             self.revision+=1
                         # Spread queries; finish a round without a burst.
@@ -255,3 +287,9 @@ class Engine:
             try:self.stop(cid)
             except Exception:pass
         for t in self.threads:t.join(3)
+        for c in self.cameras.values():
+            try:
+                if c['config'].get('tally_enabled',True) and c['tally']['actual']:
+                    with c['io']:c['driver'].tally(False,False)
+            except Exception:pass
+            if hasattr(c['driver'],'close'):c['driver'].close()

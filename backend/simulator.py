@@ -14,11 +14,17 @@ class PanasonicModel:
         self.presets={}
         self.history=[]
         self.lock=threading.RLock()
+        self.tally_enabled=False;self.tally_on=False
 
     def command(self,command):
         with self.lock:
             self.history.append(command)
             self.history=self.history[-200:]
+            if command in ('#TAE0','#TAE1'):
+                self.tally_enabled=command[-1]=='1';return 'tAE'+command[-1]
+            if command in ('#DA0','#DA1'):
+                self.tally_on=self.tally_enabled and command[-1]=='1';return 'dA'+str(int(self.tally_on))
+            if command=='#DA':return 'dA'+str(int(self.tally_on))
             for name,p in PANASONIC.items():
                 if command==p.query:
                     v=self.values[name]

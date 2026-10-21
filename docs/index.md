@@ -9,7 +9,8 @@ Read the feature table before you connect a physical camera.
 | Use the tray and set the port | [Desktop control panel](desktop.md) |
 | Use the camera panels | [Operation](operation.md) |
 | Add, remove and number cameras | [Camera setup](camera-setup.md) |
-| Read Sony integration status | [Sony PXW-Z200](sony-pxw-z200.md) |
+| Set up Sony camera control | [Sony PXW-Z200](sony-pxw-z200.md) |
+| Set up camera tally | [Tally lights](tally.md) |
 | Set addresses and camera profiles | [Configuration](configuration.md) |
 | Open the web interface from a TouchDrive | [TouchDrive host](touchdrive-panel-host.md) |
 | Read implementation and test status | [Feature table](feature-matrix.md) |

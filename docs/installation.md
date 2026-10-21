@@ -6,13 +6,12 @@
 |---|---|---|
 | Windows | x64 | Windows Server 2022 runner |
 | Linux | x64 | Ubuntu 22.04 runner; GNU libc 2.35 or later |
-| macOS Intel | x64 | macOS 15 runner |
-| macOS Apple silicon | arm64 | macOS 15 runner |
 
 The release workflow tests each package on its build system.
 It does not establish compatibility with every system version.
 Linux systems that use musl are not release targets.
-The macOS packages do not have an Apple Developer ID signature or notarization.
+Version 0.3.0 builds target Windows and Linux.
+Earlier releases also supplied macOS packages.
 The Windows package does not have a publisher signature.
 Follow your organization's software approval procedure if the system blocks the program.
 

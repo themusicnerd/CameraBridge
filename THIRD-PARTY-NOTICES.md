@@ -24,3 +24,15 @@ The package does not include Ross DashBoard or camera manufacturer applications.
 Ross, Panasonic and Marshall do not endorse this project.
 The repository owner has not selected a distribution license for the CameraBridge source.
 No CameraBridge source license is implied by this release.
+
+## Sony Camera Remote SDK 2.02.00
+
+Windows and Linux packages include Sony libraries with the CameraBridge adapter.
+The SDK remains Sony's licensed software.
+Read `SONY-SDK-LICENSE.txt` in the bundled `sony` directory.
+Camera access setup requires acknowledgement of the SDK terms and camera warranty conditions.
+Sony does not develop or support CameraBridge.
+CameraBridge does not grant rights beyond the applicable Sony license.
+The bundled open source notices cover libssh2, libusb and OpenSSL.
+Sony's original SDK download includes the corresponding open source archives.
+See [Sony's SDK license and downloads](https://support.d-imaging.sony.co.jp/app/sdk/licenseagreement_d/en-US.html).

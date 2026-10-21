@@ -1,0 +1,405 @@
+<?xml version='1.0' encoding='utf-8'?>
+<abs contexttype="opengear" id="_top" name="CameraBridge Sony" virtualwidth="1366" virtualheight="800" width="1366" height="800" gridaspect="false" style="bg#25282e;fg#e2e4e9;size:16;">
+  <api>var CB_MANUFACTURER='Sony';
+
+var cbToken = '';
+var cbUpdating = false;
+var cbPending = {};
+var cbEdit = {};
+var cbCameras = [];
+var cbIndex = 0;
+var cbEpoch = 0;
+var cbBusy = false;
+var cbTick = 0;
+var cbLastFeedback = 0;
+var cbHandover = false;
+var cbTouchEnabled = false;
+var cbNoticeUntil = 0;
+function status(text) {
+    if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
+    ogscript.rename('status', text);
+}
+function highlightPage(name) {
+    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
+    for(var i=0;i&lt;pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
+}
+function request(path, data, callback) {
+    data.token = cbToken;
+    var base = String(params.getValue('bridge', 0));
+    ogscript.asyncPost(base + '/api/' + path, 'request=' + encodeURIComponent(JSON.stringify(data)), function(raw) {
+        try {
+            var result = JSON.parse(String(raw));
+            if (result.error) { status(result.error); if (callback) callback(null); return; }
+            if (callback) callback(result);
+        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+    });
+}
+function login() {
+    var data = {username:String(params.getValue('username',0)),password:String(params.getValue('password',0))};
+    params.setValue('password',0,'');
+    request('login', data, function(r) { if(r) {cbToken = r.token; status('Authenticated ' + r.role); poll();} });
+}
+var cbLinkUrl = '';
+function refreshBridgeLink() {
+    var url=String(params.getValue('bridge',0)).replace(/\/+$/,'')+'/';
+    if(url==cbLinkUrl)return;
+    var valid=/^https?:\/\/[A-Za-z0-9.\-:\[\]]+\/$/.test(url);
+    var html=valid?'&lt;html&gt;&lt;p&gt;Select this link to open setup:&lt;/p&gt;&lt;a href="'+url+'"&gt;&lt;font size="5" color="#80d9eb"&gt;'+url+'&lt;/font&gt;&lt;/a&gt;&lt;p&gt;Sign in in the browser to control cameras.&lt;/p&gt;&lt;/html&gt;':'&lt;html&gt;Set a valid HTTP or HTTPS backend URL on Config.&lt;/html&gt;';
+    ogscript.setXML('bridge_launcher','&lt;help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;"&gt;&lt;![CDATA['+html+']]&gt;&lt;/help&gt;');
+    cbLinkUrl=url;
+}
+function selected() { return String(params.getValue('camera',0)); }
+function send(action, data, callback) {
+    if (!cbToken) { status('Sign in to control cameras. Lab feedback is read-only.'); return; }
+    if (cbHandover &amp;&amp; action!='stop') { status('Camera handover: waiting for previous stop'); return; }
+    request('command',{camera:selected(),action:action,data:data || {}},callback);
+}
+function nextCamera() {
+    if(cbCameras.length)cameraAt((cbIndex+1)%cbCameras.length);
+}
+function cameraAt(index) {
+    if(index&gt;=cbCameras.length || cbHandover)return;
+    var old=selected(),target=cbCameras[index].id;
+    if(old==target)return;
+    cbEpoch++;cbPending={};cbEdit={};cbHandover=true;
+    var finish=function(r){
+        cbHandover=false;
+        if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
+        cbIndex=index;params.setValue('camera',0,target);poll();
+    };
+    if(cbToken)request('command',{camera:old,action:'stop',data:{}},finish);
+    else finish({readOnly:true});
+}
+function touchEnable() {
+    if(!cbToken){status('Sign in on the Config page first');return;}
+    cbTouchEnabled=!cbTouchEnabled;
+    ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
+    if(!cbTouchEnabled)stop();
+}
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function jog(pan,tilt,zoom,focus) {
+    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
+    var camera=selected(),epoch=cbEpoch;
+    send('claim',{},function(r) {
+        if(!r || epoch!=cbEpoch || camera!=selected())return;
+        var speed=Number(params.getValue('speed',0));
+        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+    });
+}
+function renamePreset() {
+    send('label_preset',{number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))},function(r){if(r)poll();});
+}
+function labBus(bus) {
+    request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
+}
+function changed(key) {
+    if(cbUpdating)return;
+    if(!cbToken){status('Sign in before adjustment');return;}
+    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+}
+function adjust(key,delta,low,high) {
+    if(!cbToken){status('Sign in before adjustment');return;}
+    var value=Number(params.getValue(key,0));
+    params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
+}
+function preset(number) {
+    var store=Number(params.getValue('store',0))==1;
+    if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
+    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    params.setValue('store',0,0);params.setValue('confirmation',0,'');
+}
+function poll() {
+    refreshBridgeLink();
+    if(cbBusy)return; cbBusy=true;
+    var camera=selected(),epoch=cbEpoch;
+    request('state',{},function(r){
+        cbBusy=false; if(!r || epoch!=cbEpoch || camera!=selected())return;
+        cbLastFeedback=new Date().getTime();cbCameras=[];
+        for(var i=0;i&lt;r.cameras.length;i++)if(r.cameras[i].manufacturer==CB_MANUFACTURER)cbCameras.push(r.cameras[i]);
+        var c=null;for(var i=0;i&lt;cbCameras.length;i++)if(cbCameras[i].id==camera){c=cbCameras[i];cbIndex=i;}
+        if(!c){status('Camera ID not configured; use Next camera');return;}
+        ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
+        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        for(var n=0;n&lt;6;n++) {
+            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
+        }
+        ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        if(CB_MANUFACTURER=='Panasonic') {
+            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
+            var ross=r.ross||{};
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+        }
+        cbUpdating=true;
+        var tally=c.tally||{};
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
+        try {
+            for(var key in c.parameters) {
+                var p=c.parameters[key];
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
+                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
+                    // DashBoard blocks local setValue while the parameter is read-only.
+                    params.setAccess(key,1);params.setValue(key,0,p.value);
+                }
+                var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed' &amp;&amp; p.writable!==false;
+                if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
+                if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
+                params.setAccess(key,enabled?1:0);
+            }
+        } finally {cbUpdating=false;}
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+    });
+}
+function tick() {
+    cbTick++;
+    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
+    if(cbTick%5==0)poll();
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+}
+</api>
+  <meta>
+    <params>
+      <param oid="bridge" name="bridge" type="STRING" value="http://127.0.0.1:8088" widget="3" access="1" maxlength="256" />
+      <param oid="username" name="username" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="password" name="password" type="STRING" value="" widget="4" access="1" maxlength="256" />
+      <param oid="camera" name="camera" type="STRING" value="sony1" widget="3" access="0" maxlength="256" />
+      <param oid="speed" type="INT32" value="24" access="1" constrainttype="INT_RANGE" constraint="1;49;" />
+      <param oid="iris" name="Iris (f-number x 100)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;65535;" />
+      <param oid="iris_auto" name="Iris: 1 auto / 2 manual" type="INT32" value="1" access="0" constrainttype="INT_RANGE" constraint="1;2;" />
+      <param oid="focus_auto" name="Focus: 1 auto / 2 manual" type="INT32" value="1" access="0" constrainttype="INT_RANGE" constraint="1;2;" />
+      <param oid="wb_mode" name="White balance: 1 auto / 2 manual" type="INT32" value="1" access="0" constrainttype="INT_RANGE" constraint="1;2;" />
+      <param oid="red_gain" name="Red gain (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
+      <param oid="blue_gain" name="Blue gain (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
+      <param oid="gain" name="Gain dB (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
+      <param oid="shutter" name="Shutter speed (Sony native)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;2147483647;" />
+      <param oid="colour_temperature" name="White balance temperature" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;65535;" />
+      <param oid="zoom" name="Zoom scale (readback)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;2147483647;" />
+    </params>
+    <timer id="bridge_tick" rate="200" autostart="true" />
+    <timertask timerid="bridge_tick" tasktype="ogscript">tick();</timertask>
+  </meta>
+  <ogscript handles="onchange" oid="iris" element="0">changed('iris');</ogscript>
+  <ogscript handles="onchange" oid="iris_auto" element="0">changed('iris_auto');</ogscript>
+  <ogscript handles="onchange" oid="focus_auto" element="0">changed('focus_auto');</ogscript>
+  <ogscript handles="onchange" oid="wb_mode" element="0">changed('wb_mode');</ogscript>
+  <ogscript handles="onchange" oid="red_gain" element="0">changed('red_gain');</ogscript>
+  <ogscript handles="onchange" oid="blue_gain" element="0">changed('blue_gain');</ogscript>
+  <ogscript handles="onchange" oid="gain" element="0">changed('gain');</ogscript>
+  <ogscript handles="onchange" oid="shutter" element="0">changed('shutter');</ogscript>
+  <ogscript handles="onchange" oid="colour_temperature" element="0">changed('colour_temperature');</ogscript>
+  <ogscript handles="onchange" oid="zoom" element="0">changed('zoom');</ogscript>
+  <ogscript handles="onload">highlightPage('Lens');poll();</ogscript>
+  <ogscript handles="onclose">stop();</ogscript>
+  <abs left="8" top="8" width="1350" height="80" style="bg#2c3037;bdr:line;bdr#383d45;">
+    <label name="CameraBridge / Sony" left="16" top="12" width="320" height="30" style="fg#e2e4e9;size:22;txt-align:west;" />
+    <label name="PXW-Z200 · lens &amp; paint" left="16" top="47" width="320" height="24" style="fg#e2e4e9;size:14;txt-align:west;" />
+    <reveal id="nav_lens" name="Lens" targetid="page_lens" left="350" top="12" width="120" height="56" style="bg#494f5b;fg#ffffff;size:16;" />
+    <reveal id="nav_paint" name="Paint" targetid="page_paint" left="480" top="12" width="120" height="56" style="bg#494f5b;fg#ffffff;size:16;" />
+    <reveal id="nav_tally" name="Tally" targetid="page_tally" left="610" top="12" width="120" height="56" style="bg#494f5b;fg#ffffff;size:16;" />
+    <reveal id="nav_config" name="Config" targetid="page_config" left="740" top="12" width="120" height="56" style="bg#494f5b;fg#ffffff;size:16;" />
+    <abs id="bridge_launcher" left="890" top="12" width="180" height="56">
+      <help id="open_bridge" name="Open setup" left="0" top="0" width="180" height="56" title="CameraBridge setup">Set the bridge URL on Config.</help>
+    </abs>
+    <image src="file:///C:/Users/rackpc01/Documents/Codex/2026-10-21/files-pasted-by-the-user-camerabridge/outputs/camerabridge/dashboard/assets/sony.png" left="1150" top="22" width="150" height="29" />
+  </abs>
+  <label name="Camera identification pending" left="164" top="100" width="1180" height="28" style="fg#e2e4e9;size:18;txt-align:west;" id="identity" />
+  <label name="Awaiting feedback" left="164" top="133" width="1180" height="24" style="fg#e2e4e9;size:14;txt-align:west;" id="connection" />
+  <abs left="8" top="104" width="140" height="624" style="bg#2c3037;bdr:line;bdr#383d45;">
+    <label name="CAMERAS" left="10" top="10" width="120" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+    <button name="—" left="8" top="42" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_0">
+      <task tasktype="ogscript">cameraAt(0);</task>
+    </button>
+    <button name="—" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_1">
+      <task tasktype="ogscript">cameraAt(1);</task>
+    </button>
+    <button name="—" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_2">
+      <task tasktype="ogscript">cameraAt(2);</task>
+    </button>
+    <button name="—" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_3">
+      <task tasktype="ogscript">cameraAt(3);</task>
+    </button>
+    <button name="—" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_4">
+      <task tasktype="ogscript">cameraAt(4);</task>
+    </button>
+    <button name="—" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_5">
+      <task tasktype="ogscript">cameraAt(5);</task>
+    </button>
+    <button name="Next" left="8" top="438" width="124" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+      <task tasktype="ogscript">nextCamera();</task>
+    </button>
+    <button name="Refresh" left="8" top="500" width="124" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+      <task tasktype="ogscript">poll();</task>
+    </button>
+    <button name="STOP" left="8" top="564" width="124" height="52" buttontype="push" style="bg#a23d4c;fg#ffffff;bdr:none;size:16;">
+      <task tasktype="ogscript">stop();</task>
+    </button>
+  </abs>
+  <tab left="164" top="164" width="1186" height="564" tabposition="none" onchange="highlightPage(String(this.getTitleAt(this.getSelectedIndex())));">
+    <abs id="page_lens" name="Lens" width="1186" height="564" style="bg#25282e;">
+      <button name="Touch control DISABLED" left="12" top="12" width="560" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="touch_enable">
+        <task tasktype="ogscript">touchEnable();</task>
+      </button>
+      <label name="ZOOM" left="12" top="92" width="560" height="32" style="fg#e2e4e9;size:20;txt-align:west;" />
+      <button name="WIDE" left="12" top="138" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+        <ogscript handles="onmousedown">jog(0,0,-1,0);</ogscript>
+        <ogscript handles="onmouseup">stop();</ogscript>
+        <ogscript handles="onmouseexit">stop();</ogscript>
+      </button>
+      <button name="TELE" left="293" top="138" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+        <ogscript handles="onmousedown">jog(0,0,1,0);</ogscript>
+        <ogscript handles="onmouseup">stop();</ogscript>
+        <ogscript handles="onmouseexit">stop();</ogscript>
+      </button>
+      <label name="FOCUS" left="12" top="270" width="560" height="32" style="fg#e2e4e9;size:20;txt-align:west;" />
+      <button name="NEAR" left="12" top="316" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+        <ogscript handles="onmousedown">jog(0,0,0,-1);</ogscript>
+        <ogscript handles="onmouseup">stop();</ogscript>
+        <ogscript handles="onmouseexit">stop();</ogscript>
+      </button>
+      <button name="FAR" left="293" top="316" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+        <ogscript handles="onmousedown">jog(0,0,0,1);</ogscript>
+        <ogscript handles="onmouseup">stop();</ogscript>
+        <ogscript handles="onmouseexit">stop();</ogscript>
+      </button>
+      <abs left="594" top="12" width="580" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="IRIS" left="16" top="8" width="548" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+        <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('iris',-1,0,65535);</task>
+        </button>
+        <param oid="iris" left="88" top="39" width="404" height="48" showlabel="false" widget="6" style="size:18;" />
+        <button name="+" left="500" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('iris',1,0,65535);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="90" width="548" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_iris" />
+      </abs>
+      <abs left="594" top="182" width="580" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="IRIS MODE" left="16" top="8" width="548" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+        <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('iris_auto',-1,1,2);</task>
+        </button>
+        <param oid="iris_auto" left="88" top="39" width="404" height="48" showlabel="false" widget="6" style="size:18;" />
+        <button name="+" left="500" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('iris_auto',1,1,2);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="90" width="548" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_iris_auto" />
+      </abs>
+      <abs left="594" top="352" width="580" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="FOCUS MODE" left="16" top="8" width="548" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+        <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('focus_auto',-1,1,2);</task>
+        </button>
+        <param oid="focus_auto" left="88" top="39" width="404" height="48" showlabel="false" widget="6" style="size:18;" />
+        <button name="+" left="500" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('focus_auto',1,1,2);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="90" width="548" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_focus_auto" />
+      </abs>
+      <label name="Hold / release stops · fixed-speed SDK lens jog · no pan/tilt motors" left="12" top="506" width="560" height="48" style="fg#a9bbc8;size:14;txt-align:west;" />
+    </abs>
+    <abs id="page_paint" name="Paint" width="1186" height="564" style="bg#25282e;">
+      <abs left="12" top="12" width="212" height="530" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="RED GAIN" left="16" top="12" width="180" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+        <param oid="red_gain" left="16" top="50" width="180" height="48" showlabel="false" widget="6" style="size:18;" />
+        <param oid="red_gain" left="32" top="110" width="148" height="308" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <button name="−" left="16" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('red_gain',-1,-32768,65535);</task>
+        </button>
+        <button name="+" left="116" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('red_gain',1,-32768,65535);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="492" width="180" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_red_gain" />
+      </abs>
+      <abs left="238" top="12" width="212" height="530" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="BLUE GAIN" left="16" top="12" width="180" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+        <param oid="blue_gain" left="16" top="50" width="180" height="48" showlabel="false" widget="6" style="size:18;" />
+        <param oid="blue_gain" left="32" top="110" width="148" height="308" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <button name="−" left="16" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('blue_gain',-1,-32768,65535);</task>
+        </button>
+        <button name="+" left="116" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('blue_gain',1,-32768,65535);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="492" width="180" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_blue_gain" />
+      </abs>
+      <abs left="464" top="12" width="212" height="530" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="COLOUR TEMPERATURE" left="16" top="12" width="180" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+        <param oid="colour_temperature" left="16" top="50" width="180" height="48" showlabel="false" widget="6" style="size:18;" />
+        <param oid="colour_temperature" left="32" top="110" width="148" height="308" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <button name="−" left="16" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('colour_temperature',-1,0,65535);</task>
+        </button>
+        <button name="+" left="116" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('colour_temperature',1,0,65535);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="492" width="180" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_colour_temperature" />
+      </abs>
+      <abs left="704" top="12" width="470" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="WHITE BALANCE" left="16" top="8" width="438" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+        <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('wb_mode',-1,1,2);</task>
+        </button>
+        <param oid="wb_mode" left="88" top="39" width="294" height="48" showlabel="false" widget="6" style="size:18;" />
+        <button name="+" left="390" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('wb_mode',1,1,2);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="90" width="438" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_wb_mode" />
+      </abs>
+      <abs left="704" top="186" width="470" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="GAIN" left="16" top="8" width="438" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+        <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('gain',-1,-32768,65535);</task>
+        </button>
+        <param oid="gain" left="88" top="39" width="294" height="48" showlabel="false" widget="6" style="size:18;" />
+        <button name="+" left="390" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('gain',1,-32768,65535);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="90" width="438" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_gain" />
+      </abs>
+      <abs left="704" top="360" width="470" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="SHUTTER" left="16" top="8" width="438" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+        <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('shutter',-1,0,4294967295);</task>
+        </button>
+        <param oid="shutter" left="88" top="39" width="294" height="48" showlabel="false" widget="6" style="size:18;" />
+        <button name="+" left="390" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">adjust('shutter',1,0,4294967295);</task>
+        </button>
+        <label name="unknown · never read" left="16" top="90" width="438" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_shutter" />
+      </abs>
+    </abs>
+    <abs id="page_tally" name="Tally" width="1186" height="564" style="bg#25282e;">
+      <label name="CAMERA TALLY" left="20" top="16" width="1140" height="36" style="fg#e2e4e9;size:22;txt-align:west;" />
+      <label name="Per-camera enable defaults to ON. Change it in CameraBridge setup." left="20" top="70" width="1140" height="36" style="fg#e2e4e9;size:17;txt-align:west;" />
+      <label name="Awaiting tally feedback" left="20" top="136" width="1140" height="85" style="fg#e2e4e9;size:17;txt-align:west;" id="tally_state" />
+      <button name="PROGRAM" left="20" top="258" width="350" height="80" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">send('tally',{program:true,preview:false},function(r){if(r)poll();});</task>
+      </button>
+      <button name="PREVIEW" left="400" top="258" width="350" height="80" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">send('tally',{program:false,preview:true},function(r){if(r)poll();});</task>
+      </button>
+      <button name="OFF" left="780" top="258" width="350" height="80" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">send('tally',{program:false,preview:false},function(r){if(r)poll();});</task>
+      </button>
+      <label name="PXW-Z200: external tally lamp control is not listed in Sony SDK 2.02.00.&#10;Unsupported lamp requests are reported. Recording is never used as tally." left="20" top="390" width="1130" height="100" style="fg#d7bb8c;size:16;txt-align:west;" />
+    </abs>
+    <abs id="page_config" name="Config" width="1186" height="564" style="bg#25282e;">
+      <label name="Bridge URL" left="20" top="38" width="180" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+      <param oid="bridge" left="210" top="30" width="760" height="56" showlabel="false" style="size:18;" />
+      <label name="Username" left="20" top="118" width="180" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+      <param oid="username" left="210" top="110" width="760" height="56" showlabel="false" style="size:18;" />
+      <label name="Password" left="20" top="198" width="180" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+      <param oid="password" left="210" top="190" width="760" height="56" showlabel="false" style="size:18;" />
+      <button name="Sign in" left="210" top="284" width="260" height="60" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">login();</task>
+      </button>
+      <button name="Sign out" left="490" top="284" width="260" height="60" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">stop();cbToken='';</task>
+      </button>
+      <label name="Set the camera network access and verified SSH fingerprint in CameraBridge setup." left="20" top="386" width="1140" height="60" style="fg#e2e4e9;size:17;txt-align:west;" />
+      <label name="Values use Sony native units. Only available camera controls are writable." left="20" top="470" width="1140" height="48" style="fg#a9bbc8;size:15;txt-align:west;" />
+    </abs>
+  </tab>
+  <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#e2e4e9;size:14;txt-align:west;" id="status" />
+</abs>

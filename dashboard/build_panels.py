@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]))
 from backend.protocol import PANASONIC
 from backend.core import MARSHALL_LAB
+from backend.sony import SONY
 
 HERE=pathlib.Path(__file__).resolve().parent
 COMMON=r'''
@@ -26,7 +27,7 @@ function status(text) {
     ogscript.rename('status', text);
 }
 function highlightPage(name) {
-    var pages=CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
+    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
     for(var i=0;i<pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
 }
 function request(path, data, callback) {
@@ -138,6 +139,8 @@ function poll() {
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
         }
         cbUpdating=true;
+        var tally=c.tally||{};
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
                 var p=c.parameters[key];
@@ -147,7 +150,7 @@ function poll() {
                     // DashBoard blocks local setValue while the parameter is read-only.
                     params.setAccess(key,1);params.setValue(key,0,p.value);
                 }
-                var enabled=!!cbToken && !c.locked && p.confirmation=='confirmed';
+                var enabled=!!cbToken && !c.locked && p.confirmation=='confirmed' && p.writable!==false;
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled && m && m.confirmation=='confirmed' && (','+pair[1]+',').indexOf(','+m.value+',')>=0;}
                 if(CB_MANUFACTURER=='Marshall' && (key=='red_gain'||key=='blue_gain'))enabled=enabled && c.parameters.wb_mode.value==1;
                 params.setAccess(key,enabled?1:0);
@@ -158,7 +161,7 @@ function poll() {
 }
 function tick() {
     cbTick++;
-    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value},null);break;}
+    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
     if(cbLastFeedback && new Date().getTime()-cbLastFeedback>4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
@@ -177,8 +180,11 @@ def button(parent,text,x,y,w,code,h=40,colour='2d4356'):
 def field(parent,oid,x,y,w=130,h=32,widget=None):return node(parent,'param',oid=oid,left=x,top=y,width=w,height=h,showlabel='false',**({'widget':widget} if widget else {}))
 
 def build(manufacturer,defs):
+    if manufacturer=='Sony':
+        from sony_layout import build as build_sony
+        return build_sony(defs)
     from aura_layout import build as build_aura
     return build_aura(manufacturer,defs)
 
 if __name__=='__main__':
-    for manufacturer,defs in [('Panasonic',PANASONIC),('Marshall',MARSHALL_LAB)]:print(build(manufacturer,defs))
+    for manufacturer,defs in [('Panasonic',PANASONIC),('Marshall',MARSHALL_LAB),('Sony',SONY)]:print(build(manufacturer,defs))
