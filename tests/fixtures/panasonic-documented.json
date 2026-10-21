@@ -1,0 +1,9 @@
+{
+  "origin": "Manufacturer documented examples, NOT captured hardware traffic",
+  "source": "https://eww.pass.panasonic.co.jp/pro-av/support/content/guide/DEF/HE50_120_IP/HDIntegratedCamera_InterfaceSpecifications-E.pdf",
+  "cases": [
+    {"command":"#PTS0199","response":"pTS0199","pan":-49,"tilt":49},
+    {"command":"#AXI555","response":"axi555","iris":1365},
+    {"command":"ORI:12C","response":"ORI:12C","red_gain":300}
+  ]
+}

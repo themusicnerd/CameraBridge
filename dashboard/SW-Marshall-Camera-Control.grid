@@ -1,0 +1,322 @@
+<?xml version='1.0' encoding='utf-8'?>
+<abs contexttype="opengear" id="_top" name="CameraBridge Marshall" width="1280" height="880" gridsize="10" keepalive="false" style="bg#141d26;fg#e3edf5;size:14;">
+  <api>var CB_MANUFACTURER = 'Marshall';
+
+var cbToken = '';
+var cbUpdating = false;
+var cbPending = {};
+var cbEdit = {};
+var cbCameras = [];
+var cbIndex = 0;
+var cbEpoch = 0;
+var cbBusy = false;
+var cbTick = 0;
+var cbLastFeedback = 0;
+function status(text) { ogscript.rename('status', text); }
+function request(path, data, callback) {
+    data.token = cbToken;
+    var base = String(params.getValue('bridge', 0));
+    ogscript.asyncPost(base + '/api/' + path, 'request=' + encodeURIComponent(JSON.stringify(data)), function(raw) {
+        try {
+            var result = JSON.parse(String(raw));
+            if (result.error) { status(result.error); if (callback) callback(null); return; }
+            if (callback) callback(result);
+        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+    });
+}
+function login() {
+    var data = {username:String(params.getValue('username',0)),password:String(params.getValue('password',0))};
+    params.setValue('password',0,'');
+    request('login', data, function(r) { if(r) {cbToken = r.token; status('Authenticated ' + r.role); poll();} });
+}
+function selected() { return String(params.getValue('camera',0)); }
+function send(action, data, callback) {
+    if (!cbToken) { status('Sign in to control cameras. Lab feedback is read-only.'); return; }
+    request('command',{camera:selected(),action:action,data:data || {}},callback);
+}
+function nextCamera() {
+    var old = selected();
+    if(cbToken) request('command',{camera:old,action:'stop',data:{}},null);
+    cbEpoch++; cbPending = {}; cbEdit = {};
+    if(cbCameras.length) { cbIndex=(cbIndex+1)%cbCameras.length; params.setValue('camera',0,cbCameras[cbIndex].id); }
+    poll();
+}
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function jog(pan,tilt,zoom,focus) {
+    var camera=selected(),epoch=cbEpoch;
+    send('claim',{},function(r) {
+        if(!r || epoch!=cbEpoch || camera!=selected())return;
+        var speed=Number(params.getValue('speed',0));
+        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+    });
+}
+function changed(key) {
+    if(cbUpdating)return;
+    if(!cbToken){status('Sign in before adjustment');return;}
+    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+}
+function preset(number) {
+    var store=Number(params.getValue('store',0))==1;
+    if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
+    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    params.setValue('store',0,0);params.setValue('confirmation',0,'');
+}
+function poll() {
+    if(cbBusy)return; cbBusy=true;
+    var camera=selected(),epoch=cbEpoch;
+    request('state',{},function(r){
+        cbBusy=false; if(!r || epoch!=cbEpoch || camera!=selected())return;
+        cbLastFeedback=new Date().getTime();cbCameras=[];
+        for(var i=0;i&lt;r.cameras.length;i++)if(r.cameras[i].manufacturer==CB_MANUFACTURER)cbCameras.push(r.cameras[i]);
+        var c=null;for(var i=0;i&lt;cbCameras.length;i++)if(cbCameras[i].id==camera){c=cbCameras[i];cbIndex=i;}
+        if(!c){status('Camera ID not configured; use Next camera');return;}
+        ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
+        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        cbUpdating=true;
+        try {
+            for(var key in c.parameters) {
+                var p=c.parameters[key];
+                var value=p.value===null?'unknown':String(p.value);
+                ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
+                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000))params.setValue(key,0,p.value);
+                var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed';
+                if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
+                if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
+                params.setAccess(key,enabled?1:0);
+            }
+        } finally {cbUpdating=false;}
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+    });
+}
+function tick() {
+    cbTick++;
+    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value},null);break;}
+    if(cbTick%5==0)poll();
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+}
+</api>
+  <meta>
+    <params>
+      <param oid="bridge" name="Backend URL" type="STRING" value="http://127.0.0.1:8088" widget="3" access="1" maxlength="256" />
+      <param oid="username" name="Username" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="password" name="Password" type="STRING" value="" widget="4" access="1" maxlength="256" />
+      <param oid="camera" name="Camera ID" type="STRING" value="marshall1" widget="3" access="0" maxlength="256" />
+      <param oid="confirmation" name="Type OVERWRITE" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="speed" name="Jog speed" type="INT32" value="12" access="1" constrainttype="INT_RANGE" constraint="1;49;" />
+      <param oid="store" name="Store armed: 0 recall / 1 store" type="INT32" value="0" access="1" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="wb_mode" name="White balance: 0 auto / 1 manual / 2 ATW / 3 push" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;3;" />
+      <param oid="red_gain" name="Red gain (LAB range)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;255;" />
+      <param oid="blue_gain" name="Blue gain (LAB range)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;255;" />
+      <param oid="exposure_auto" name="Exposure: 0 manual / 1 auto" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="brightness" name="Brightness" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="gain" name="Gain (LAB range)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="agc_limit" name="AGC limit" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="shutter" name="Shutter (LAB enumeration)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;15;" />
+      <param oid="black_level" name="Black level" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;32;" />
+      <param oid="gamma" name="Gamma x 10" type="INT32" value="3" access="0" constrainttype="INT_RANGE" constraint="3;8;" />
+      <param oid="colour" name="Colour level" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="sharpness" name="Sharpness" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="dnr" name="Noise reduction: 0 off / 1 low / 2 mid / 3 high" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;3;" />
+      <param oid="mirror" name="Mirror" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="flip" name="Flip" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="digital_zoom" name="Digital zoom x 10 (LAB)" type="INT32" value="10" access="0" constrainttype="INT_RANGE" constraint="10;160;" />
+    </params>
+    <timer id="bridge_tick" rate="200" autostart="true" />
+    <timertask timerid="bridge_tick" tasktype="ogscript">tick();</timertask>
+  </meta>
+  <ogscript handles="onload">poll();</ogscript>
+  <ogscript handles="onclose">if(cbToken)request('command',{camera:selected(),action:'stop',data:{}},null);</ogscript>
+  <label name="CAMERABRIDGE / MARSHALL" left="20" top="12" width="700" height="35" style="txt-align:west;fg#dbe5ee;font:bold;" />
+  <label name="Native DashBoard control · CV226 / CV228 LAB — serial protocol pending" left="20" top="48" width="1140" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+  <label name="Bridge" left="20" top="86" width="65" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+  <param oid="bridge" left="85" top="80" width="280" height="32" showlabel="false" />
+  <label name="User" left="380" top="86" width="45" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+  <param oid="username" left="425" top="80" width="140" height="32" showlabel="false" />
+  <label name="Password" left="580" top="86" width="85" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+  <param oid="password" left="665" top="80" width="160" height="32" showlabel="false" />
+  <button name="Sign in" left="835" top="80" width="110" height="34" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+    <task tasktype="ogscript">login();</task>
+  </button>
+  <button name="Sign out" left="955" top="80" width="110" height="34" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+    <task tasktype="ogscript">stop();cbToken='';status('Signed out');</task>
+  </button>
+  <label name="Starting…" left="20" top="120" width="1230" height="28" style="txt-align:west;fg#dbe5ee;font:bold;" id="status" />
+  <label name="Camera identification pending" left="20" top="154" width="1230" height="30" style="txt-align:west;fg#dbe5ee;font:bold;" id="identity" />
+  <label name="Unknown" left="20" top="188" width="1230" height="28" style="txt-align:west;fg#dbe5ee;font:bold;" id="connection" />
+  <param oid="camera" left="20" top="228" width="160" height="32" showlabel="false" />
+  <button name="Next camera" left="190" top="224" width="170" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+    <task tasktype="ogscript">nextCamera();</task>
+  </button>
+  <button name="STOP ALL AXES" left="380" top="224" width="220" height="44" buttontype="push" style="bg#923e3e;fg#ffffff;font:bold;size:14;">
+    <task tasktype="ogscript">stop();</task>
+  </button>
+  <button name="Refresh feedback" left="620" top="224" width="190" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+    <task tasktype="ogscript">poll();</task>
+  </button>
+  <button name="Lock" left="830" top="224" width="110" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+    <task tasktype="ogscript">send('lock',{value:true},null);</task>
+  </button>
+  <button name="Unlock" left="950" top="224" width="110" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+    <task tasktype="ogscript">send('lock',{value:false},null);</task>
+  </button>
+  <abs left="20" top="285" width="370" height="545" style="bg#1c2935;">
+    <label name="FIXED CAMERA / NO MECHANICAL PTZ" left="12" top="10" width="350" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <label name="RS485 address: 1 · gateway: LAB" left="12" top="42" width="350" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <label name="Firmware: unknown · feedback: simulated" left="12" top="73" width="350" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <label name="OSD NAVIGATION — simulator only" left="12" top="125" width="350" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <button name="MENU" left="126" top="175" width="98" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+      <task tasktype="ogscript">send('osd',{key:'menu'},function(r){if(r)status(r.status);});</task>
+    </button>
+    <button name="UP" left="126" top="222" width="98" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+      <task tasktype="ogscript">send('osd',{key:'up'},function(r){if(r)status(r.status);});</task>
+    </button>
+    <button name="LEFT" left="18" top="269" width="98" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+      <task tasktype="ogscript">send('osd',{key:'left'},function(r){if(r)status(r.status);});</task>
+    </button>
+    <button name="ENTER" left="126" top="269" width="98" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+      <task tasktype="ogscript">send('osd',{key:'enter'},function(r){if(r)status(r.status);});</task>
+    </button>
+    <button name="RIGHT" left="234" top="269" width="98" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+      <task tasktype="ogscript">send('osd',{key:'right'},function(r){if(r)status(r.status);});</task>
+    </button>
+    <button name="DOWN" left="126" top="316" width="98" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+      <task tasktype="ogscript">send('osd',{key:'down'},function(r){if(r)status(r.status);});</task>
+    </button>
+    <button name="BACK" left="126" top="363" width="98" height="40" buttontype="push" style="bg#2d4356;fg#ffffff;font:bold;size:14;">
+      <task tasktype="ogscript">send('osd',{key:'back'},function(r){if(r)status(r.status);});</task>
+    </button>
+    <label name="Direct serial commands are disabled." left="12" top="430" width="350" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <label name="Lab ranges do not certify wire support." left="12" top="463" width="350" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+  </abs>
+  <abs left="410" top="285" width="850" height="545" style="bg#1c2935;">
+    <label name="PAINT / confirmed value · state · age" left="16" top="10" width="800" height="24" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <label name="White balance: 0 auto / 1 manual / 2 ATW / 3 push" left="16" top="45" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="wb_mode" left="16" top="64" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('wb_mode');</ogscript>
+    </param>
+    <param oid="wb_mode" left="316" top="64" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('wb_mode');</ogscript>
+    </param>
+    <label name="unknown" left="16" top="89" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_wb_mode" />
+    <label name="Red gain (LAB range)" left="16" top="106" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="red_gain" left="16" top="125" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('red_gain');</ogscript>
+    </param>
+    <param oid="red_gain" left="316" top="125" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('red_gain');</ogscript>
+    </param>
+    <label name="unknown" left="16" top="150" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_red_gain" />
+    <label name="Blue gain (LAB range)" left="16" top="167" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="blue_gain" left="16" top="186" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('blue_gain');</ogscript>
+    </param>
+    <param oid="blue_gain" left="316" top="186" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('blue_gain');</ogscript>
+    </param>
+    <label name="unknown" left="16" top="211" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_blue_gain" />
+    <label name="Exposure: 0 manual / 1 auto" left="16" top="228" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="exposure_auto" left="16" top="247" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('exposure_auto');</ogscript>
+    </param>
+    <param oid="exposure_auto" left="316" top="247" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('exposure_auto');</ogscript>
+    </param>
+    <label name="unknown" left="16" top="272" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_exposure_auto" />
+    <label name="Brightness" left="16" top="289" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="brightness" left="16" top="308" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('brightness');</ogscript>
+    </param>
+    <param oid="brightness" left="316" top="308" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('brightness');</ogscript>
+    </param>
+    <label name="unknown" left="16" top="333" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_brightness" />
+    <label name="Gain (LAB range)" left="16" top="350" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="gain" left="16" top="369" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('gain');</ogscript>
+    </param>
+    <param oid="gain" left="316" top="369" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('gain');</ogscript>
+    </param>
+    <label name="unknown" left="16" top="394" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_gain" />
+    <label name="AGC limit" left="16" top="411" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="agc_limit" left="16" top="430" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('agc_limit');</ogscript>
+    </param>
+    <param oid="agc_limit" left="316" top="430" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('agc_limit');</ogscript>
+    </param>
+    <label name="unknown" left="16" top="455" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_agc_limit" />
+    <label name="Shutter (LAB enumeration)" left="16" top="472" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="shutter" left="16" top="491" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('shutter');</ogscript>
+    </param>
+    <param oid="shutter" left="316" top="491" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('shutter');</ogscript>
+    </param>
+    <label name="unknown" left="16" top="516" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_shutter" />
+    <label name="Black level" left="436" top="45" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="black_level" left="436" top="64" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('black_level');</ogscript>
+    </param>
+    <param oid="black_level" left="736" top="64" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('black_level');</ogscript>
+    </param>
+    <label name="unknown" left="436" top="89" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_black_level" />
+    <label name="Gamma x 10" left="436" top="106" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="gamma" left="436" top="125" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('gamma');</ogscript>
+    </param>
+    <param oid="gamma" left="736" top="125" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('gamma');</ogscript>
+    </param>
+    <label name="unknown" left="436" top="150" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_gamma" />
+    <label name="Colour level" left="436" top="167" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="colour" left="436" top="186" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('colour');</ogscript>
+    </param>
+    <param oid="colour" left="736" top="186" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('colour');</ogscript>
+    </param>
+    <label name="unknown" left="436" top="211" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_colour" />
+    <label name="Sharpness" left="436" top="228" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="sharpness" left="436" top="247" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('sharpness');</ogscript>
+    </param>
+    <param oid="sharpness" left="736" top="247" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('sharpness');</ogscript>
+    </param>
+    <label name="unknown" left="436" top="272" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_sharpness" />
+    <label name="Noise reduction: 0 off / 1 low / 2 mid / 3 high" left="436" top="289" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="dnr" left="436" top="308" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('dnr');</ogscript>
+    </param>
+    <param oid="dnr" left="736" top="308" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('dnr');</ogscript>
+    </param>
+    <label name="unknown" left="436" top="333" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_dnr" />
+    <label name="Mirror" left="436" top="350" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="mirror" left="436" top="369" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('mirror');</ogscript>
+    </param>
+    <param oid="mirror" left="736" top="369" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('mirror');</ogscript>
+    </param>
+    <label name="unknown" left="436" top="394" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_mirror" />
+    <label name="Flip" left="436" top="411" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="flip" left="436" top="430" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('flip');</ogscript>
+    </param>
+    <param oid="flip" left="736" top="430" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('flip');</ogscript>
+    </param>
+    <label name="unknown" left="436" top="455" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_flip" />
+    <label name="Digital zoom x 10 (LAB)" left="436" top="472" width="405" height="18" style="txt-align:west;fg#dbe5ee;font:bold;" />
+    <param oid="digital_zoom" left="436" top="491" width="290" height="25" showlabel="false" widget="3">
+      <ogscript handles="onchange">changed('digital_zoom');</ogscript>
+    </param>
+    <param oid="digital_zoom" left="736" top="491" width="92" height="25" showlabel="false" widget="6">
+      <ogscript handles="onchange">changed('digital_zoom');</ogscript>
+    </param>
+    <label name="unknown" left="436" top="516" width="400" height="17" style="fg#83cfc2;size:11;txt-align:west;" id="actual_digital_zoom" />
+  </abs>
+</abs>

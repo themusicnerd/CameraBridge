@@ -1,0 +1,18 @@
+{
+  "timestamp_utc": "2026-10-21T07:00:10.223676+00:00",
+  "architecture": "AMD64",
+  "cpu": "Intel64 Family 6 Model 165 Stepping 5, GenuineIntel",
+  "os": "Windows-10-10.0.19045-SP0",
+  "python": "3.12.14",
+  "hostname": "SW-RACKPC-01",
+  "storage": {
+    "total": 997908062208,
+    "used": 459052793856,
+    "free": 538855268352
+  },
+  "home_writable": true,
+  "vendor_permission": "Not established; confirm with Ross before TD1C deployment",
+  "update_persistence": "Unknown; verify vendor-supported persistent location",
+  "loopback": true,
+  "note": "Windows development host; this is not TD1C evidence"
+}
