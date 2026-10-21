@@ -4,7 +4,7 @@ Native Ross DashBoard camera panels, a shared Python backend, and a Windows/Linu
 
 **Development release 0.1 — 21 October 2026. Not production accepted.**
 
-The current development focus is the two separate native DashBoard panels and local camera emulation, as requested. No software has been installed on the TD1C and no switcher configuration has been changed.
+The two native DashBoard panels are deployed on the development TouchDrive. The backend and camera emulators run on Windows. Carbonite slot 0 Beauty uses PIVOTCam_1.1 at the simulator relay, with Input 1 / channel 1 restored. Positioner motion, shot store/recall and an operator-triggered Custom Control recall have reached the simulator. Continuous motion, actual bus following and physical-camera completion remain acceptance items.
 
 ## Start the lab
 
@@ -26,7 +26,7 @@ In **DashBoard → File → Open**, open:
 
 Use the same CameraBridge login in each panel. The URL defaults to `http://127.0.0.1:8088`. The panels use native OGLML controls and ogScript `asyncPost`; they do not embed a browser. Password entries clear after sign-in; sessions are held in memory. Do not save a panel containing a typed password.
 
-The panels now follow the flat Aura reference: manufacturer logos, camera rail, separate pages, vertical lens/paint controls and a large Panasonic touch direction pad. Login is on the Config page. Enable touch control on PTZ before jogging. Persistent shot names are edited on Presets. Regenerate with `python dashboard/build_panels.py` after moving the project so local logo URLs resolve on the new host.
+The panels follow the flat Aura reference with manufacturer logos and larger native fader handles. Navigation targets are 104×56; command buttons and entries are at least 48 pixels high. Marshall Paint and Image each hold four faders. The 1366×800 canvas fits inside the TD's 1920×1080 DashBoard desktop with its tree and tabs visible. Login is on Config. Enable touch control on PTZ before jogging. Persistent shot names are edited on Presets. Regenerate with `python dashboard/build_panels.py` after moving the project so local logo URLs resolve on the new host. See [touch layout verification](docs/touch-layout-validation.md).
 
 To stop the lab, press Ctrl+C in its terminal. Stop controls and the watchdog cannot guarantee a physical camera stops if its network is broken; see the safety limitations.
 
@@ -36,7 +36,7 @@ The AW-HE130 driver implements variable pan/tilt, zoom/focus speed, neutral stop
 
 Marshall paint/OSD controls currently operate **only the lab model**. The RS485 TCP transport and bus mutex exist, but CV226/CV228 direct command bytes are deliberately blocked until an exact-model command list or annotated captures establish them.
 
-Modern Ross gateway transport is documented as serial VISCA over TCP. A working **lab-only** bridge now translates a tested subset to the Panasonic CGI emulators. Explicit simulator Preset events select a target; Program events do not. Handover stops the old camera and requires fresh neutral input. The actual Carbonite/PIVOTCam command sequence, physical delegation and Custom Controls are **not hardware verified**; production/LAN targets are rejected. See `docs/ross-lab-protocol.md` and `docs/ross-hardware-acceptance.md`.
+Modern Ross gateway transport is documented as serial VISCA over TCP. A **lab-only** bridge translates a tested subset to the Panasonic CGI emulators. Its core listener rejects LAN binds and physical targets; a separate IP-restricted development relay accepts the Carbonite. Actual frame capture verifies initialization, variable motion and shot commands through the simulator, including an operator-triggered Custom Control recall. Explicit simulator Preset events select a target; these are not actual switcher bus feedback. Handover stops the old camera and requires fresh neutral input. See `docs/ross-lab-protocol.md` and `docs/ross-hardware-acceptance.md` for partial passes and remaining work.
 
 Run `python tools/visca_lab_demo.py` for the controller demonstration. Intentional simulator remote stores require `--visca-allow-store` on the service and `--store` on the demo. Store is otherwise blocked at the raw gateway.
 

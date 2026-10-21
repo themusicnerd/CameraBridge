@@ -142,6 +142,19 @@ class IntegrationTests(unittest.TestCase):
         finally:api.shutdown();api.server_close()
 
 class PanelTests(unittest.TestCase):
+    def test_touch_targets_and_faders(self):
+        for manufacturer in ('Panasonic','Marshall'):
+            root=ET.parse(ROOT/'dashboard'/f'SW-{manufacturer}-Camera-Control.grid').getroot()
+            self.assertEqual((root.get('width'),root.get('height')),('1366','800'))
+            for control in root.findall('.//button')+root.findall('.//reveal'):
+                self.assertGreaterEqual(int(control.get('width')),48,control.get('name'))
+                self.assertGreaterEqual(int(control.get('height')),48,control.get('name'))
+            for control in root.findall('.//param[@left]'):
+                self.assertGreaterEqual(int(control.get('height')),48,control.get('oid'))
+            faders=root.findall('.//param[@widget="26"]')
+            self.assertGreaterEqual(len(faders),6 if manufacturer=='Panasonic' else 8)
+            self.assertFalse(root.findall('.//param[@left][@widget="4"]'))
+            if manufacturer=='Marshall':self.assertIsNotNone(root.find(".//abs[@id='page_image']"))
     def test_aura_pages_logos_and_no_overflow(self):
         from urllib.parse import urlparse
         from urllib.request import url2pathname

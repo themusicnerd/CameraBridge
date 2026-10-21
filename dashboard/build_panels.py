@@ -22,7 +22,7 @@ var cbHandover = false;
 var cbTouchEnabled = false;
 function status(text) { ogscript.rename('status', text); }
 function highlightPage(name) {
-    var pages=CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Exposure','OSD','Config'];
+    var pages=CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
     for(var i=0;i<pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
 }
 function request(path, data, callback) {
@@ -90,6 +90,11 @@ function changed(key) {
     if(!cbToken){status('Sign in before adjustment');return;}
     cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
 }
+function adjust(key,delta,low,high) {
+    if(!cbToken){status('Sign in before adjustment');return;}
+    var value=Number(params.getValue(key,0));
+    params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
+}
 function preset(number) {
     var store=Number(params.getValue('store',0))==1;
     if(store && String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
@@ -110,7 +115,7 @@ function poll() {
         for(var n=0;n<6;n++) {
             var caption=n<cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
             ogscript.rename('camera_pick_'+n,n<cbCameras.length?'CAM '+(n+1)+'\n'+caption.slice(0,12):'—');
-            ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:13;');
+            ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
         if(CB_MANUFACTURER=='Panasonic') {
