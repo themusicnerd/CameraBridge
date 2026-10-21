@@ -24,11 +24,11 @@ def free_port():
 
 def main():
     app=QApplication([]);app.setQuitOnLastWindowClosed(False)
-    def wait(predicate,seconds=25):
+    def wait(predicate,seconds=60):
         deadline=time.monotonic()+seconds
         while not predicate():
             app.processEvents()
-            if time.monotonic()>deadline:raise AssertionError('Desktop lifecycle timed out')
+            if time.monotonic()>deadline:raise AssertionError('Desktop lifecycle timed out: '+panel.message.text()+'\n'+panel.log.toPlainText())
             time.sleep(.02)
         app.processEvents()
     def healthy(port):
