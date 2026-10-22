@@ -43,6 +43,14 @@ class FixedMotionTests(unittest.TestCase):
         self.move('pan_tilt',{'pan':0,'tilt':0},age=2)
         self.assertEqual(self.driver.motion_state['#PTS'],'#PTS5050');self.assertFalse(self.camera['moving'])
         with self.assertRaises(ValueError):self.move('pan_tilt',{'pan':12,'tilt':0},age=2)
+    def test_queued_motion_before_stop_cannot_restart_fixed_endpoint(self):
+        generation=self.camera['generation']
+        self.engine.stop('p1');self.driver.send.reset_mock()
+        with self.assertRaisesRegex(ValueError,'superseded by stop'):
+            self.follower.apply_motion('p1','pan_tilt',{'pan':12,'tilt':0},self.follower.epoch,time.monotonic(),generation)
+        self.driver.send.assert_not_called()
+        self.move('pan_tilt',{'pan':12,'tilt':0})
+        self.assertTrue(self.camera['moving'])
     def test_repeated_speed_renews_watchdog_without_duplicate_http(self):
         self.move('pan_tilt',{'pan':12,'tilt':0});deadline=self.camera['motion_deadline']
         self.driver.send.reset_mock();time.sleep(.02)

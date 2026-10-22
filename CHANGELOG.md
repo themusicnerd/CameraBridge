@@ -1,6 +1,8 @@
 # Change record
 
-## 0.3.0rc15
+## 0.3.0rc16
+
+- Reject movement queued before a stop, without requiring a new neutral sequence.
 
 - Accept positioner movement immediately on a fixed camera port.
 - Give motion and stop requests priority over camera polling.

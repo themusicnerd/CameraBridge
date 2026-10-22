@@ -84,7 +84,7 @@ class PresetFollower:
             self.update_status();self.engine.event(camera,'lab-preset-selection',previous=previous,epoch=self.epoch)
             return {'changed':True,'selected':camera,'epoch':self.epoch}
 
-    def apply_motion(self,camera,kind,axes,epoch,received):
+    def apply_motion(self,camera,kind,axes,epoch,received,generation=None):
         with self.lock:
             if camera!=self.selected or epoch!=self.epoch:raise ViscaError('Stale selection or wrong camera',0x41)
             neutral=not any(axes.values())
@@ -95,6 +95,8 @@ class PresetFollower:
                 record('motion-io-acquired',camera=camera,age_ms=round((time.monotonic()-received)*1000,3))
                 if not neutral and time.monotonic()-received>.3:raise ViscaError('Motion expired while waiting for camera',0x41)
                 with self.engine.lock:
+                    if not neutral and generation is not None and generation!=c['generation']:
+                        raise ViscaError('Motion superseded by stop',0x41)
                     if self.generation!=c['generation']:
                         self.generation=c['generation'];self.neutral=set();self.axes=dict.fromkeys(self.axes,0)
                     neutral=not any(axes.values())
@@ -215,7 +217,8 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                                         record('pivot-coalesced',camera=self.server.camera,hex=queue[i][2].hex(' '),received=queue[i][3],replacement=stamp)
                                         del queue[i];break
                             if len(queue)>=32:raise ValueError('VISCA queue overflow')
-                            queue.append((kind,data,frame,stamp,self.server.follower.epoch));condition.notify()
+                            with self.server.engine.lock:generation=self.server.engine.cameras[self.server.camera]['generation']
+                            queue.append((kind,data,frame,stamp,self.server.follower.epoch,generation));condition.notify()
                     if len(buffer)>16:raise ValueError('Oversized unterminated VISCA packet')
             except (OSError,ValueError):pass
             finally:
@@ -227,7 +230,7 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                 with condition:
                     if not queue:condition.wait(.1)
                     if not queue:continue
-                    kind,data,frame,received,epoch=queue.popleft()
+                    kind,data,frame,received,epoch,generation=queue.popleft()
                 context(f'{self.server.camera}:{received:.9f}')
                 record('pivot-dispatch',camera=self.server.camera,hex=frame.hex(' '),kind=kind,received=received,age_ms=round((time.monotonic()-received)*1000,3))
                 self.server.engine.event(self.server.camera,'visca-rx',hex=frame.hex(' '))
@@ -248,7 +251,7 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                         self.request.sendall(bytes([0x90,0x50,2 if auto else 3,0xff]));continue
                     # No ACK is sent until the request has passed policy checks.
                     if kind in ('pan_tilt','zoom','focus'):
-                        self.server.follower.apply_motion(self.server.camera,kind,data,epoch,received)
+                        self.server.follower.apply_motion(self.server.camera,kind,data,epoch,received,generation)
                     elif kind=='focus_mode':
                         c=self.server.engine.cameras[self.server.camera]
                         with c['io']:

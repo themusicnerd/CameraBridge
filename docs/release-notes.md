@@ -1,4 +1,4 @@
-# CameraBridge 0.3.0rc15
+# CameraBridge 0.3.0rc16
 
 Windows x64 and Linux x64 packages include these control updates.
 
