@@ -14,9 +14,9 @@ class CameraControlsTests(unittest.TestCase):
         c.send.reset_mock();c.stop();self.assertEqual(c.send.call_count,3)
 
     def test_gain_wire_and_public_normalization(self):
-        c=Panasonic('192.0.2.1',model='AW-HE40');c.send=Mock(return_value='ORG:1E')
+        c=Panasonic('192.0.2.1',model='AW-HE40');c.send=Mock(return_value='OGR:1E')
         self.assertEqual(c.query('red_gain'),150);c.send.assert_called_with('QGR')
-        c.send=Mock(side_effect=['ORG:1F','ORG:1F']);self.assertEqual(c.write('red_gain',155),155)
+        c.send=Mock(side_effect=['ORG:1F','OGR:1F']);self.assertEqual(c.write('red_gain',155),155)
         self.assertEqual(c.send.call_args_list[0].args,('ORG:1F',))
         with self.assertRaises(ValueError):c.write('red_gain',151)
 

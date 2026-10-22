@@ -65,7 +65,7 @@ class Panasonic:
         try:
             if name in ('red_gain','blue_gain') and MODELS[self.model] in ('HE40','HE42','UE70','HE50','HE60'):
                 answer=self.send('QGR' if name=='red_gain' else 'QGB')
-                prefix='ORG:' if name=='red_gain' else 'OBG:'
+                prefix='OGR:' if name=='red_gain' else 'OGB:'
                 if not re.fullmatch(prefix+r'[0-9a-fA-F]{2}',answer):raise ValueError('Malformed gain feedback')
                 return p.validate(int(answer[4:],16)*5)
             if self.model=='AW-HE2' and name=='iris':

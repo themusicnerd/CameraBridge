@@ -52,7 +52,7 @@ class HE40Tests(unittest.TestCase):
 
     def test_mode_restriction_is_retested_and_does_not_hide_transport_errors(self):
         camera=Panasonic('192.0.2.1',model='AW-HE40')
-        camera.send=Mock(side_effect=[PanasonicRejected('ER3:QGR'),'ORG:1E'])
+        camera.send=Mock(side_effect=[PanasonicRejected('ER3:QGR'),'OGR:1E'])
         self.assertIsNone(camera.query('red_gain'))
         self.assertEqual(camera.query('red_gain'),150)
         for error in (PanasonicRejected('ER2:QRI'),TimeoutError('offline'),ValueError('malformed')):

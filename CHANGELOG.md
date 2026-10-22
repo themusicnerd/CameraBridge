@@ -1,5 +1,9 @@
 # Change record
 
+## 0.3.0rc12
+
+- Parse HE40 OGR and OGB gain query replies, as confirmed on the camera.
+
 ## 0.3.0rc11
 
 - Align fader endpoint labels and buttons with high-up slider values.
