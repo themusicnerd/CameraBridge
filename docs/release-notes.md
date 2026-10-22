@@ -1,9 +1,16 @@
-# CameraBridge 0.3.0rc6
+# CameraBridge 0.3.0rc7
 
 This is a development prerelease for Windows x64 and Linux x64.
 Physical camera acceptance is incomplete.
 
 ## Changes
+
+- Fix Add camera when Camera setup was opened before sign-in.
+- Load setup automatically after administrator sign-in.
+- Add clear loading, retry, account access, and unsaved-change status.
+- Move the camera form before the roster and group network settings in a separate section.
+- Clear setup access when a session ends or the service restarts.
+- Add browser checks for the reported sign-in sequence and related failure paths.
 
 - Add one native CameraBridge panel with camera setup and manufacturer control pages.
 - Add camera creation, edits, removal, Sony access, and saved-setup application in DashBoard.

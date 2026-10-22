@@ -1,5 +1,15 @@
 # Change record
 
+## 0.3.0rc7
+
+- Load camera setup automatically after administrator sign-in.
+- Fix Add camera when setup was opened before sign-in.
+- Show account access, setup loading, load errors, and retry controls.
+- Clear camera drafts and access fields on sign-out or session expiry.
+- Place the camera form before the roster and group network settings in a separate section.
+- Show unsaved changes and the camera's PIVOTCam port.
+- Test the browser sign-in, setup failure, retry, and session-expiry paths.
+
 ## 0.3.0rc6
 
 - Add a unified native DashBoard panel for camera setup and camera control.

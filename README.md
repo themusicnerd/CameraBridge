@@ -3,7 +3,7 @@
 CameraBridge connects native Ross DashBoard panels to one camera control service.
 It includes Panasonic camera emulators and a Marshall lab model.
 
-**Version 0.3.0rc6 is a development release. Production acceptance is incomplete.**
+**Version 0.3.0rc7 is a development release. Production acceptance is incomplete.**
 
 ## Download and start
 

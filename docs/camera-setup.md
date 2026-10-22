@@ -15,6 +15,18 @@
 11. Select **Save and restart**.
 12. Check the running camera identity and confirmed feedback.
 
+Administrator sign-in opens camera setup and loads the camera list automatically.
+Wait for the setup-ready message before selecting **Add camera**.
+The camera form appears before the camera cards.
+Saving a camera to the draft does not connect it immediately.
+Select **Save and restart** to apply the draft.
+Sign in again after the service restarts.
+
+If loading fails, select **Reload setup** to try again.
+Operator accounts cannot change camera setup.
+Sign-out clears the local draft and hides its editor.
+Open **Switcher and tally network settings** to change the receiver settings.
+
 The real Panasonic profile supports AW-HE130 CGI.
 The camera port is normally 80 for that profile.
 The camera connection port is separate from the PIVOTCam listening port.
