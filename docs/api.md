@@ -165,3 +165,8 @@ The panel displays each native step as one gain step.
 Dashboard button release uses `stop` with `active_only` set to true.
 Unknown axis states are always stopped.
 The Stop button and watchdog still send all supported axis stops.
+
+Neutral Carbonite keepalives do not acquire an idle camera lease.
+They do not stop a different operator's active movement.
+A completed paint write releases ownership when no other command or movement is pending.
+Active movement retains exclusive ownership.

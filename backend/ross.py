@@ -95,11 +95,16 @@ class PresetFollower:
                     neutral=not any(axes.values())
                     if neutral:self.neutral.add(kind)
                     if not neutral and not {'pan_tilt','zoom'}<=self.neutral:raise ViscaError('Return positioner to neutral after handover',0x41)
-                    self.engine.claim(c,self.owner)
+                    if neutral and c['owner']!=self.owner and c['lease_until']>time.monotonic():
+                        self.axes.update(axes)
+                        self.update_status();self.engine.event(camera,'visca-idle-kept-owner')
+                        return
+                    if not neutral or (c['owner']==self.owner and c['moving']):self.engine.claim(c,self.owner)
                     if axes.get('focus'):self.engine.check_mode(c,'focus')
                     if c['config']['driver']=='sony-sdk' and kind=='pan_tilt' and any(axes.values()):raise ViscaError('PXW-Z200 has no pan/tilt motors',0x41)
                     self.axes.update(axes)
-                    c['moving']=any(self.axes.values());c['motion_deadline']=received+.9
+                    c['moving']=any(self.axes.values());c['motion_deadline']=received+.9 if c['moving'] else 0
+                    if not c['moving'] and c['owner']==self.owner:c['owner']=None;c['lease_until']=0
                 if c['config']['driver']=='sony-sdk':
                     c['driver'].move(**self.axes)
                     self.update_status();self.engine.event(camera,'sony-visca-lens',axes=dict(self.axes));return
@@ -107,7 +112,10 @@ class PresetFollower:
                     command=movement(self.axes['pan'],self.axes['tilt'])[0];expected='pTS'+command[4:]
                 elif kind=='zoom':command=f'#Z{self.axes["zoom"]+50:02d}';expected='zS'+command[2:]
                 else:command=f'#F{self.axes["focus"]+50:02d}';expected='fS'+command[2:]
-                c['driver'].motion_state.pop(command[:4] if command.startswith('#PTS') else command[:2],None)
+                axis=command[:4] if command.startswith('#PTS') else command[:2]
+                if neutral and c['driver'].motion_state.get(axis)==command:
+                    self.update_status();return
+                c['driver'].motion_state.pop(axis,None)
                 response=c['driver'].send(command)
                 if response!=expected:raise ViscaError('Downstream speed command not acknowledged',0x41)
                 c['driver'].motion_state[command[:4] if command.startswith('#PTS') else command[:2]]=command

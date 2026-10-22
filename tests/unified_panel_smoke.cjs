@@ -12,6 +12,9 @@ const config={cameras:[{id:'pana1',number:1,name:'Panasonic',manufacturer:'Panas
  {id:'sony2',number:2,name:'Sony',manufacturer:'Sony',model:'PXW-Z200',driver:'sony-sdk',host:'192.168.96.21',carbonite_input:2}]};
 let revision='r1',failStop=false;
 const state={cameras:config.cameras.map(c=>({...c,health:'online',locked:false,tally:{enabled:true,status:'off'},parameters:{wb_mode:{label:'White balance'},iris:{value:1300,confirmation:'confirmed',age_seconds:0,low:0,high:65535,supported:true,writable:true}}}))};
+state.cameras[0].capabilities={gain_display_divisor:5};
+state.cameras[0].parameters.detail={value:2,confirmation:'confirmed',age_seconds:0,low:0,high:2,writable:true};
+state.cameras[0].parameters.red_gain={value:150,confirmation:'confirmed',age_seconds:0,low:0,high:300,writable:true,display_divisor:5};
 const ctx=vm.createContext({JSON,Date,Math,String,Number,encodeURIComponent,
  params:{replaceConstraint:(oid,id)=>{assert.ok(xml.includes('id="'+id+'"'));},getValue:k=>values[k],setValue:(k,i,v)=>{assert.equal(access[k],1,'locked parameter '+k);values[k]=v;},setAccess:(k,v)=>{access[k]=v;},getParam:k=>({replaceConstraint:r=>assert.ok(values[k]!==undefined)})},
  ogscript:{rename:(id,text)=>{assert.ok(ids.has(id),'unknown label '+id);labels[id]=text;},setStyle:id=>assert.ok(ids.has(id),'unknown style '+id),

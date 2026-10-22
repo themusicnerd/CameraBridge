@@ -276,7 +276,9 @@ class Engine:
                         else:
                             with self.lock:self.check_mode(c,key)
                             actual=driver.write(key,value)
-                            with self.lock:c['params'][key].update(value=actual,confirmation='confirmed' if actual==value else 'mismatch',last_query=time.time(),error=None)
+                            with self.lock:
+                                c['params'][key].update(value=actual,confirmation='confirmed' if actual==value else 'mismatch',last_query=time.time(),error=None)
+                                if not c['moving'] and not c['pending'] and c['owner']==owner:c['owner']=None;c['lease_until']=0
                             self.event(cid,'readback',parameter=key,value=actual)
                 elif time.monotonic()>=next_poll:
                     with c['io']:

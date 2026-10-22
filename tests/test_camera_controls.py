@@ -63,3 +63,24 @@ class CameraControlsTests(unittest.TestCase):
         c=Panasonic('192.0.2.1',model='AW-HE40');c.send=Mock(return_value='unexpected')
         with self.assertRaises(ValueError):c.move(pan=12)
         self.assertNotIn('#PTS',c.motion_state)
+
+    def test_neutral_visca_keepalives_do_not_claim_or_stop_another_operator(self):
+        from backend.ross import FixedCameraController
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg={'cameras':[{'id':'p1','manufacturer':'Panasonic','model':'AW-HE40','driver':'panasonic','host':'192.0.2.1'}]}
+            e=Engine(cfg,pathlib.Path(tmp));c=e.cameras['p1'];driver=c['driver']
+            driver.send=Mock(side_effect=lambda cmd:'pTS'+cmd[4:] if cmd.startswith('#PTS') else cmd[1].lower()+'S'+cmd[2:])
+            follower=FixedCameraController(e,'p1');e.claim(c,'dashboard');c['moving']=True;deadline=c['motion_deadline']=time.monotonic()+.9
+            follower.apply_motion('p1','pan_tilt',{'pan':0,'tilt':0},follower.epoch,time.monotonic())
+            follower.apply_motion('p1','zoom',{'zoom':0},follower.epoch,time.monotonic())
+            self.assertEqual(c['owner'],'dashboard');self.assertTrue(c['moving']);self.assertEqual(c['motion_deadline'],deadline);driver.send.assert_not_called()
+            c.update(owner=None,lease_until=0,moving=False)
+            follower.apply_motion('p1','pan_tilt',{'pan':0,'tilt':0},follower.epoch,time.monotonic())
+            self.assertIsNone(c['owner']);driver.send.reset_mock()
+            follower.apply_motion('p1','pan_tilt',{'pan':0,'tilt':0},follower.epoch,time.monotonic())
+            driver.send.assert_not_called()
+            follower.apply_motion('p1','pan_tilt',{'pan':5,'tilt':0},follower.epoch,time.monotonic())
+            self.assertEqual(c['owner'],follower.owner);self.assertTrue(c['moving'])
+            follower.apply_motion('p1','pan_tilt',{'pan':0,'tilt':0},follower.epoch,time.monotonic())
+            self.assertIsNone(c['owner']);self.assertFalse(c['moving'])

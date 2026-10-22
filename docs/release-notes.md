@@ -1,4 +1,4 @@
-# CameraBridge 0.3.0rc13
+# CameraBridge 0.3.0rc14
 
 Windows x64 and Linux x64 packages include these control updates.
 
@@ -18,3 +18,6 @@ Camera completion notifications are not received in this release.
 Preset motion completion is also not confirmed.
 
 See [Help](quick-start.md) for control procedures.
+
+Idle Carbonite positioner packets do not take ownership from a dashboard operator.
+Completed paint writes release an idle camera lease.

@@ -1,5 +1,10 @@
 # Change record
 
+## 0.3.0rc14
+
+- Prevent neutral Carbonite keepalives from taking dashboard ownership.
+- Release idle ownership after a confirmed paint write.
+
 ## 0.3.0rc13
 
 - Use the native global range-constraint API supported by TouchDrive DashBoard.
