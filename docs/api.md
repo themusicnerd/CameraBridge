@@ -135,3 +135,33 @@ Open-access tokens issued while authentication is disabled are revoked when auth
 The state response includes `tsl` with enabled, listening, source, bind, port, packet counts, and last-packet age.
 Its `state` is disabled, not listening, waiting, receiving, or stale.
 Each camera tally object separates `received`, `requested`, `actual`, and readback status.
+
+
+## Preset Recall Speed
+
+Each camera state contains `preset_speeds`, keyed by shot number.
+Use `label_preset` with `number`, `name`, and `speed` to save metadata.
+This operation does not store a camera position.
+The `preset` action accepts `speed` from 1 to 30.
+A store saves this speed after the camera accepts the store command.
+A recall uses the saved speed if the request has no override.
+An override applies to that recall and does not replace the saved value.
+Carbonite and custom-control recalls also use the saved value.
+The driver sets and queries the camera speed before it sends the recall.
+A failed speed check prevents that recall.
+Supported speed profiles are HE40, HE42, UE70, HE50, HE60, HE120, and HE130 families.
+
+## White Balance and Movement
+
+Use `write` with `wb_mode` for ATW or a manual memory.
+Use `white_balance_once` after the selected manual memory is confirmed.
+The `white_balance_once` state separates command delivery from completion.
+Camera completion notifications are not received in this release.
+HE40-family gain commands use QGR, QGB, ORG, and OBG.
+The public gain range stays 0 to 300, with 150 as zero.
+These camera families use steps of 5 in that range.
+The panel displays each native step as one gain step.
+
+Dashboard button release uses `stop` with `active_only` set to true.
+Unknown axis states are always stopped.
+The Stop button and watchdog still send all supported axis stops.

@@ -29,20 +29,21 @@ class Panasonic:
         if family in ('UB300','CX350'):self.supported=set()
         self.lock = threading.RLock()
         self.last = 0
+        self.motion_state = {}
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def metadata(self,name):
         return {'supported':name in self.supported,'writable':name in self.supported,
                 'display_divisor':self.capabilities['gain_display_divisor'] if name in ('red_gain','blue_gain') else 1}
 
-    def send(self, command):
+    def send(self, command, response=True):
         with self.lock:
             # Panasonic recommends a minimum 130ms between requests to one camera.
             delay = 0.13 - (time.monotonic() - self.last)
             if delay > 0:
                 time.sleep(delay)
             endpoint = 'aw_ptz' if command.startswith('#') else 'aw_cam'
-            url = self.url + endpoint + '?' + urllib.parse.urlencode({'cmd':command,'res':1})
+            url = self.url + endpoint + '?' + urllib.parse.urlencode({'cmd':command,'res':int(response)})
             try:
                 with self.opener.open(url, timeout=self.timeout) as response:
                     data = response.read(513)
@@ -62,6 +63,11 @@ class Panasonic:
             return None
         p = self.parameters[name]
         try:
+            if name in ('red_gain','blue_gain') and MODELS[self.model] in ('HE40','HE42','UE70','HE50','HE60'):
+                answer=self.send('QGR' if name=='red_gain' else 'QGB')
+                prefix='ORG:' if name=='red_gain' else 'OBG:'
+                if not re.fullmatch(prefix+r'[0-9a-fA-F]{2}',answer):raise ValueError('Malformed gain feedback')
+                return p.validate(int(answer[4:],16)*5)
             if self.model=='AW-HE2' and name=='iris':
                 answer=self.send('#GI')
                 if not re.fullmatch(r'gi[0-9a-fA-F]{3}[01]',answer):raise ValueError('Malformed HE2 iris feedback')
@@ -78,6 +84,9 @@ class Panasonic:
         if name not in self.supported:raise NotImplementedError('Control is unavailable in this model profile')
         p = self.parameters[name]
         command = p.encode(value)
+        if name in ('red_gain','blue_gain') and MODELS[self.model] in ('HE40','HE42','UE70','HE50','HE60'):
+            if value%5:raise ValueError('This model uses gain steps of 5 native units')
+            command=('ORG:' if name=='red_gain' else 'OBG:')+f'{value//5:02X}'
         # OAW control uses 1=A,2=B; HE130 query uses 2=A,3=B.
         if self.model!='AW-HE2' and name == 'wb_mode' and value in (2,3):
             command = 'OAW:' + str(value-1)
@@ -89,22 +98,31 @@ class Panasonic:
         for keys,cap in [(('pan','tilt'),'pan_tilt'),(('zoom',),'zoom_jog'),(('focus',),'focus_jog')]:
             if any(axes.get(k,0) for k in keys) and not self.capabilities[cap]:raise NotImplementedError('This model does not support '+cap)
         for command in self.motion_commands(commands):
-            self.send_motion(command)
+            axis=command[:4] if command.startswith('#PTS') else command[:2]
+            if self.motion_state.get(axis)!=command:self.send_motion(command)
 
     def motion_commands(self,commands):
         return [cmd for cmd,cap in zip(commands,('pan_tilt','zoom_jog','focus_jog')) if self.capabilities[cap]]
 
     def send_motion(self,command):
-        try:self.send(command)
+        self.motion_state.pop(command[:4] if command.startswith('#PTS') else command[:2],None)
+        try:
+            answer=self.send(command)
+            expected='pTS'+command[4:] if command.startswith('#PTS') else command[1].lower()+'S'+command[2:]
+            if answer!=expected:raise ValueError('Movement acknowledgement mismatch')
+            self.motion_state[command[:4] if command.startswith('#PTS') else command[:2]]=command
         except PanasonicRejected as exc:
             # HE40 rejects even a neutral focus jog in autofocus. Confirm AF
             # before accepting that response; manual-focus stop must succeed.
-            if command=='#F50' and exc.reply.lower().startswith('er3:') and self.query('focus_auto')==1:return
+            if command=='#F50' and exc.reply.lower().startswith('er3:') and self.query('focus_auto')==1:
+                self.motion_state['#F']=command;return
             raise
 
-    def stop(self):
+    def stop(self,active_only=False):
         errors=[]
         for command in self.motion_commands(movement()):
+            axis=command[:4] if command.startswith('#PTS') else command[:2]
+            if active_only and self.motion_state.get(axis)==command:continue
             try: self.send_motion(command)
             except Exception as exc: errors.append(exc)
         if errors: raise errors[0]
@@ -113,6 +131,22 @@ class Panasonic:
         preset(number,store)
         if number>self.capabilities['preset_max']:raise ValueError('Preset is outside this camera model range')
         self.send(preset(number,store))
+
+    def recall_speed(self,speed):
+        if not self.capabilities['preset_speed']:raise NotImplementedError('Preset speed is unavailable for this profile')
+        if type(speed) is not int or not 1<=speed<=30:raise ValueError('Recall speed must be 1..30')
+        wire=min(999,250+25*speed)
+        self.send('#UPVS'+str(wire))
+        actual=self.send('#UPVS')
+        if actual!='uPVS'+str(wire):raise ValueError('Recall speed readback mismatch')
+        return speed
+
+    def white_balance_once(self):
+        mode=self.query('wb_mode')
+        if mode not in ((1,2) if self.model=='AW-HE2' else (2,3)):
+            raise ValueError('Select Manual A or Manual B before One Shot')
+        self.send('OWS',response=False)
+        return {'status':'sent','completion':'unavailable','mode':mode,'time':time.time()}
 
     def tally(self,program,preview=False):
         # AW-HE130 CGI: enable network tally input, drive red lamp, read back.

@@ -36,7 +36,8 @@ Red and blue changes require a fresh supported manual white-balance memory.
 The driver queries values independently after writes.
 HTTP success or a command echo does not confirm a physical value.
 
-HE40 and HE120 profiles, additional paint families and AWB execution are incomplete.
+HE40 gain feedback and One Shot command delivery are supported.
+Additional paint families remain incomplete.
 Notification processing and physical shot completion are also incomplete.
 The release does not establish NDI availability or licensing.
 

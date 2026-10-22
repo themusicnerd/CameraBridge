@@ -121,7 +121,38 @@ Use the **Presets** page to recall a camera shot.
 Keep **Preset Overwrite Enabled** off unless you want Carbonite to store shots.
 CameraBridge does not follow the Carbonite Preset bus automatically.
 
-## 6. Set Up Tally
+## 6. Camera Shots and White Balance
+
+1. Open **Presets** on the camera panel.
+2. Set **Shot Number**, **Shot Name**, and **Recall Speed**.
+3. Use speed `1` for slow movement or `30` for fast movement.
+4. Select **Save Name and Speed** to save the shot settings in CameraBridge.
+
+This button does not store a camera position.
+To store a position, select **Store** under **Action**.
+Enter `OVERWRITE`, then select the shot button.
+The camera must accept the store before CameraBridge saves its speed.
+To recall, select **Recall**, then select a shot button.
+Use **Saved** under **Recall Speed Mode** to use that shot's saved speed.
+Use **Override** to use the speed field for this recall.
+An override does not replace the saved speed.
+Carbonite custom controls also use the saved speed.
+Speed control is available on the supported legacy Panasonic profiles.
+
+1. Open **Paint** on the camera panel.
+2. Select **Auto ATW** for continuous automatic white balance.
+3. Select **Manual A** or **Manual B** to hold a white-balance memory.
+4. Wait for the mode feedback to show the selected memory as confirmed.
+5. Adjust **Red Gain** and **Blue Gain**, or select **One Shot**.
+
+One Shot adjusts the selected manual memory once.
+The panel reports command delivery and the current mode and gains.
+It does not report One Shot completion from camera notifications.
+Use the camera picture to check the result.
+Release a jog button to stop that movement.
+Select **Stop** to stop all supported movement axes.
+
+## 7. Set Up Tally
 
 1. Open **Switcher and Tally Network Settings**.
 2. Set **TSL Listen IP** to the bridge LAN address, or use `0.0.0.0` for all local interfaces.
@@ -149,7 +180,7 @@ An HE40 has a red lamp. Its Preview indicator does not turn that lamp green.
 TSL uses UDP. It does not have a persistent connection.
 Some senders send a packet only when tally changes.
 
-## 7. Sign-In and the Tray
+## 8. Sign-In and the Tray
 
 The browser keeps its sign-in after a page refresh or service restart.
 Select **Sign Out** to end that browser session.

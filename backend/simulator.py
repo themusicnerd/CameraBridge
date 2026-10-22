@@ -14,12 +14,16 @@ class PanasonicModel:
         self.presets={}
         self.history=[]
         self.lock=threading.RLock()
-        self.tally_enabled=False;self.tally_on=False
+        self.tally_enabled=False;self.tally_on=False;self.preset_speed=999
 
     def command(self,command):
         with self.lock:
             self.history.append(command)
             self.history=self.history[-200:]
+            if command=='OWS':return 'OWS'
+            if command=='#UPVS':return 'uPVS'+str(self.preset_speed)
+            if command.startswith('#UPVS'):
+                self.preset_speed=int(command[5:]);return 'uPVS'+str(self.preset_speed)
             if command in ('#TAE0','#TAE1'):
                 self.tally_enabled=command[-1]=='1';return 'tAE'+command[-1]
             if command in ('#DA0','#DA1'):

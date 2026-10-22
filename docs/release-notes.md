@@ -1,36 +1,20 @@
-# CameraBridge 0.3.0rc10
+# CameraBridge 0.3.0rc11
 
-Windows x64 and Linux x64 packages are available.
+Windows x64 and Linux x64 packages include these control updates.
 
-## Setup Interface
+- Put Open and Tele at the high end of the native faders.
+- Put Close and Wide at the low end.
+- Serialize quick direction changes and button releases.
+- Send changed movement axes and stop all axes with unknown state.
+- Save a speed from 1 to 30 for each shot.
+- Apply saved speeds to panel, Carbonite, and custom-control recalls.
+- Set an override speed for one recall without changing the saved speed.
+- Add ATW, Manual A, Manual B, and One Shot controls.
+- Show mode and gain feedback with camera readback.
+- Correct HE40-family gain query and control commands.
 
-- Edit camera settings inside each expandable row.
-- Use Manufacturer and Model lists.
-- Use four field columns on wide screens and fewer columns on small screens.
-- Save and apply valid changes automatically.
-- Keep fields open and browser sessions active during updates.
-- Restore the previous setup if a network change fails.
-- Open device web interfaces from IP links.
-- Add the CameraBridge, Sony, and Ross identification artwork.
-- Remove Advanced JSON, simulator choices, and hardware-confirmation notices from setup.
-- Start new installations with an empty camera list.
-- Add Help for camera setup, Carbonite, TouchDrive, panel installation, and tally.
+One Shot command delivery is reported separately from completion.
+Camera completion notifications are not received in this release.
+Preset motion completion is also not confirmed.
 
-## Sessions and Tray
-
-- Keep browser sign-in across page refreshes and service restarts.
-- Revoke sessions on sign-out or an account password change.
-- Store a hash of each persistent session token.
-- Add an Authentication Required switch, enabled by default.
-- Retain trusted-host and origin checks when sign-in is disabled.
-- Restore and centre the desktop control panel when selected from the tray.
-
-## Tally Feedback
-
-- Show TSL listener status, valid packet age, and packet counts.
-- Show Program in red and Preview in green.
-- Keep incoming indicators separate from camera lamp readback.
-- Keep incoming tally visible when lamp control is disabled.
-- Poll Panasonic lamp state without changing it.
-
-See the [quick-start guide](quick-start.md) and [API reference](api.md).
+See [Help](quick-start.md) for control procedures.

@@ -26,7 +26,10 @@ var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
 var cbRanges = {};
+var cbGainStep=1;
 var cbCapabilities = {};
+var cbPresetSpeeds = {};
+var cbMotionFlight=false, cbMotionIntent=null, cbMotionHeld=null, cbMotionLast=0, cbMotionStop=false, cbMotionFull=false;
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -43,7 +46,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { cbNoticeUntil=new Date().getTime()+10000;status('Panel Error: '+String(e)); if (callback) callback(null); }
     });
 }
 function login() {
@@ -73,7 +76,7 @@ function cameraAt(index) {
     if(index&gt;=cbCameras.length || cbHandover)return;
     var old=selected(),target=cbCameras[index].id;
     if(old==target)return;
-    cbEpoch++;cbPending={};cbEdit={};cbHandover=true;
+    cbEpoch++;cbPending={};cbEdit={};cbMotionHeld=null;cbMotionIntent=null;cbHandover=true;
     var finish=function(r){
         cbHandover=false;
         if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
@@ -88,18 +91,52 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
-function jog(pan,tilt,zoom,focus) {
-    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
-    var camera=selected(),epoch=cbEpoch;
-    send('claim',{},function(r) {
-        if(!r || epoch!=cbEpoch || camera!=selected())return;
-        var speed=Number(params.getValue('speed',0));
-        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+function pumpMotion() {
+    if(cbMotionFlight || cbHandover)return;
+    if(cbMotionStop) {
+        cbMotionStop=false;var full=cbMotionFull;cbMotionFull=false;cbMotionFlight=true;
+        request('command',{camera:selected(),action:'stop',data:{active_only:!full}},function(r){
+            cbMotionFlight=false;
+            if(!r){cbMotionIntent=null;cbMotionHeld=null;cbTouchEnabled=false;ogscript.rename('touch_enable','Touch control DISABLED');status('Stop failed; movement remains disabled');return;}
+            pumpMotion();
+        });return;
+    }
+    var intent=cbMotionIntent;if(!intent)return;cbMotionIntent=null;cbMotionFlight=true;
+    request('command',{camera:intent.camera,action:'claim',data:{}},function(r){
+        if(!r || intent.epoch!=cbEpoch || intent.camera!=selected() || cbMotionStop || cbMotionIntent){cbMotionFlight=false;pumpMotion();return;}
+        var d=intent.axes;d.generation=r.generation;
+        request('command',{camera:intent.camera,action:'move',data:d},function(result){
+            cbMotionFlight=false;if(!result)cbMotionIntent=null;pumpMotion();
+        });
     });
 }
+function release() {
+    if(!cbToken)return;
+    cbEpoch++;cbMotionIntent=null;cbMotionHeld=null;cbMotionStop=true;pumpMotion();
+}
+function stop() {
+    if(!cbToken)return;
+    cbEpoch++;cbPending={};cbMotionIntent=null;cbMotionHeld=null;cbMotionStop=true;cbMotionFull=true;pumpMotion();
+}
+function jog(pan,tilt,zoom,focus) {
+    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
+    if(!cbToken)return;
+    var speed=Number(params.getValue('speed',0));
+    cbMotionLast=new Date().getTime();
+    cbMotionIntent={camera:selected(),epoch:cbEpoch,axes:{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed}};
+    cbMotionHeld=cbMotionIntent;pumpMotion();
+}
+function whiteBalance(mode) {
+    if(cbCapabilities.pan_tilt_type=='digital' &amp;&amp; mode&gt;0)mode--;
+    send('write',{parameter:'wb_mode',value:mode},function(r){if(r)poll();});
+}
+function oneShot() {
+    send('white_balance_once',{},function(r){if(r){status('One Shot Sent; completion is not reported');poll();}});
+}
 function renamePreset() {
-    send('label_preset',{number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))},function(r){if(r)poll();});
+    var d={number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))};
+    if(cbCapabilities.preset_speed)d.speed=Number(params.getValue('recall_speed',0));
+    send('label_preset',d,function(r){if(r)poll();});
 }
 function labBus(bus) {
     request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
@@ -107,19 +144,24 @@ function labBus(bus) {
 function changed(key) {
     if(cbUpdating)return;
     if(!cbToken){status('Sign in before adjustment');return;}
-    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+    var value=Number(params.getValue(key,0));
+    if(key=='red_gain'||key=='blue_gain')value=Math.round(value/cbGainStep)*cbGainStep;
+    cbPending[key]=value; cbEdit[key]=new Date().getTime();
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
     if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
+    if(key=='red_gain'||key=='blue_gain')delta*=cbGainStep;
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
     if(cbCapabilities.preset_max!==undefined &amp;&amp; number&gt;cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
-    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    var d={number:number,store:store,confirm:String(params.getValue('confirmation',0))};
+    if(cbCapabilities.preset_speed &amp;&amp; (store || Number(params.getValue('use_saved_speed',0))==0))d.speed=Number(params.getValue('recall_speed',0));
+    send('preset',d,function(r){if(r){status(r.status);poll();}});
     params.setValue('store',0,0);params.setValue('confirmation',0,'');
 }
 function poll() {
@@ -141,10 +183,14 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
-        cbCapabilities=c.capabilities||{};
+        cbCapabilities=c.capabilities||{};cbGainStep=cbCapabilities.gain_display_divisor||1;
         if(CB_MANUFACTURER=='Panasonic') {
-            ogscript.rename('paint_help',c.parameters.wb_mode.label);
-            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
+            cbPresetSpeeds=c.preset_speeds||{};
+            ogscript.rename('paint_help','Auto ATW follows the scene. Manual A / B hold white balance and allow gain adjustment.');
+            if(c.white_balance_once)ogscript.rename('awb_result','One Shot: '+c.white_balance_once.status+(c.white_balance_once.error?' | '+c.white_balance_once.error:' | completion not reported'));
+            var active=c.active_preset||{};
+            ogscript.rename('preset_feedback',active.number?'Shot '+active.number+' | Speed '+(active.speed||'Camera Default')+' | '+active.state:'No Shot Recalled');
+            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n)+(cbPresetSpeeds[String(n)]?' | S'+cbPresetSpeeds[String(n)]:''));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
@@ -154,11 +200,13 @@ function poll() {
         try {
             for(var key in c.parameters) {
                 var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
-                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='detail'||key=='wb_mode')) &amp;&amp; p.low&lt;=p.high) {
+                try {
+                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='detail') &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
+                if(CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='wb_mode'){var wbNames=cbCapabilities.pan_tilt_type=='digital'?{0:'Auto ATW',1:'Manual A',2:'Manual B',3:'Auto ATW',4:'3200K',5:'5600K'}:{0:'Auto ATW',2:'Manual A',3:'Manual B',4:'3200K',5:'5600K',9:'Variable'};value=wbNames[p.value]||value;}
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -168,6 +216,7 @@ function poll() {
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
                 if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
                 params.setAccess(key,enabled?1:0);
+                } catch(panelError) { cbNoticeUntil=new Date().getTime()+10000;status('Panel '+key+': '+String(panelError)); }
             }
         } finally {cbUpdating=false;}
         status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
@@ -175,6 +224,7 @@ function poll() {
 }
 function tick() {
     cbTick++;
+    if(cbMotionHeld &amp;&amp; !cbMotionFlight &amp;&amp; !cbHandover &amp;&amp; new Date().getTime()-cbMotionLast&gt;=300){cbMotionIntent=cbMotionHeld;cbMotionLast=new Date().getTime();pumpMotion();}
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
     if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
@@ -224,7 +274,10 @@ var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
 var cbRanges = {};
+var cbGainStep=1;
 var cbCapabilities = {};
+var cbPresetSpeeds = {};
+var cbMotionFlight=false, cbMotionIntent=null, cbMotionHeld=null, cbMotionLast=0, cbMotionStop=false, cbMotionFull=false;
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -241,7 +294,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { cbNoticeUntil=new Date().getTime()+10000;status('Panel Error: '+String(e)); if (callback) callback(null); }
     });
 }
 function login() {
@@ -271,7 +324,7 @@ function cameraAt(index) {
     if(index&gt;=cbCameras.length || cbHandover)return;
     var old=selected(),target=cbCameras[index].id;
     if(old==target)return;
-    cbEpoch++;cbPending={};cbEdit={};cbHandover=true;
+    cbEpoch++;cbPending={};cbEdit={};cbMotionHeld=null;cbMotionIntent=null;cbHandover=true;
     var finish=function(r){
         cbHandover=false;
         if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
@@ -286,18 +339,52 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
-function jog(pan,tilt,zoom,focus) {
-    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
-    var camera=selected(),epoch=cbEpoch;
-    send('claim',{},function(r) {
-        if(!r || epoch!=cbEpoch || camera!=selected())return;
-        var speed=Number(params.getValue('speed',0));
-        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+function pumpMotion() {
+    if(cbMotionFlight || cbHandover)return;
+    if(cbMotionStop) {
+        cbMotionStop=false;var full=cbMotionFull;cbMotionFull=false;cbMotionFlight=true;
+        request('command',{camera:selected(),action:'stop',data:{active_only:!full}},function(r){
+            cbMotionFlight=false;
+            if(!r){cbMotionIntent=null;cbMotionHeld=null;cbTouchEnabled=false;ogscript.rename('touch_enable','Touch control DISABLED');status('Stop failed; movement remains disabled');return;}
+            pumpMotion();
+        });return;
+    }
+    var intent=cbMotionIntent;if(!intent)return;cbMotionIntent=null;cbMotionFlight=true;
+    request('command',{camera:intent.camera,action:'claim',data:{}},function(r){
+        if(!r || intent.epoch!=cbEpoch || intent.camera!=selected() || cbMotionStop || cbMotionIntent){cbMotionFlight=false;pumpMotion();return;}
+        var d=intent.axes;d.generation=r.generation;
+        request('command',{camera:intent.camera,action:'move',data:d},function(result){
+            cbMotionFlight=false;if(!result)cbMotionIntent=null;pumpMotion();
+        });
     });
 }
+function release() {
+    if(!cbToken)return;
+    cbEpoch++;cbMotionIntent=null;cbMotionHeld=null;cbMotionStop=true;pumpMotion();
+}
+function stop() {
+    if(!cbToken)return;
+    cbEpoch++;cbPending={};cbMotionIntent=null;cbMotionHeld=null;cbMotionStop=true;cbMotionFull=true;pumpMotion();
+}
+function jog(pan,tilt,zoom,focus) {
+    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
+    if(!cbToken)return;
+    var speed=Number(params.getValue('speed',0));
+    cbMotionLast=new Date().getTime();
+    cbMotionIntent={camera:selected(),epoch:cbEpoch,axes:{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed}};
+    cbMotionHeld=cbMotionIntent;pumpMotion();
+}
+function whiteBalance(mode) {
+    if(cbCapabilities.pan_tilt_type=='digital' &amp;&amp; mode&gt;0)mode--;
+    send('write',{parameter:'wb_mode',value:mode},function(r){if(r)poll();});
+}
+function oneShot() {
+    send('white_balance_once',{},function(r){if(r){status('One Shot Sent; completion is not reported');poll();}});
+}
 function renamePreset() {
-    send('label_preset',{number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))},function(r){if(r)poll();});
+    var d={number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))};
+    if(cbCapabilities.preset_speed)d.speed=Number(params.getValue('recall_speed',0));
+    send('label_preset',d,function(r){if(r)poll();});
 }
 function labBus(bus) {
     request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
@@ -305,19 +392,24 @@ function labBus(bus) {
 function changed(key) {
     if(cbUpdating)return;
     if(!cbToken){status('Sign in before adjustment');return;}
-    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+    var value=Number(params.getValue(key,0));
+    if(key=='red_gain'||key=='blue_gain')value=Math.round(value/cbGainStep)*cbGainStep;
+    cbPending[key]=value; cbEdit[key]=new Date().getTime();
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
     if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
+    if(key=='red_gain'||key=='blue_gain')delta*=cbGainStep;
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
     if(cbCapabilities.preset_max!==undefined &amp;&amp; number&gt;cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
-    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    var d={number:number,store:store,confirm:String(params.getValue('confirmation',0))};
+    if(cbCapabilities.preset_speed &amp;&amp; (store || Number(params.getValue('use_saved_speed',0))==0))d.speed=Number(params.getValue('recall_speed',0));
+    send('preset',d,function(r){if(r){status(r.status);poll();}});
     params.setValue('store',0,0);params.setValue('confirmation',0,'');
 }
 function poll() {
@@ -339,10 +431,14 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
-        cbCapabilities=c.capabilities||{};
+        cbCapabilities=c.capabilities||{};cbGainStep=cbCapabilities.gain_display_divisor||1;
         if(CB_MANUFACTURER=='Panasonic') {
-            ogscript.rename('paint_help',c.parameters.wb_mode.label);
-            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
+            cbPresetSpeeds=c.preset_speeds||{};
+            ogscript.rename('paint_help','Auto ATW follows the scene. Manual A / B hold white balance and allow gain adjustment.');
+            if(c.white_balance_once)ogscript.rename('awb_result','One Shot: '+c.white_balance_once.status+(c.white_balance_once.error?' | '+c.white_balance_once.error:' | completion not reported'));
+            var active=c.active_preset||{};
+            ogscript.rename('preset_feedback',active.number?'Shot '+active.number+' | Speed '+(active.speed||'Camera Default')+' | '+active.state:'No Shot Recalled');
+            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n)+(cbPresetSpeeds[String(n)]?' | S'+cbPresetSpeeds[String(n)]:''));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
@@ -352,11 +448,13 @@ function poll() {
         try {
             for(var key in c.parameters) {
                 var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
-                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='detail'||key=='wb_mode')) &amp;&amp; p.low&lt;=p.high) {
+                try {
+                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='detail') &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
+                if(CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='wb_mode'){var wbNames=cbCapabilities.pan_tilt_type=='digital'?{0:'Auto ATW',1:'Manual A',2:'Manual B',3:'Auto ATW',4:'3200K',5:'5600K'}:{0:'Auto ATW',2:'Manual A',3:'Manual B',4:'3200K',5:'5600K',9:'Variable'};value=wbNames[p.value]||value;}
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -366,6 +464,7 @@ function poll() {
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
                 if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
                 params.setAccess(key,enabled?1:0);
+                } catch(panelError) { cbNoticeUntil=new Date().getTime()+10000;status('Panel '+key+': '+String(panelError)); }
             }
         } finally {cbUpdating=false;}
         status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
@@ -373,6 +472,7 @@ function poll() {
 }
 function tick() {
     cbTick++;
+    if(cbMotionHeld &amp;&amp; !cbMotionFlight &amp;&amp; !cbHandover &amp;&amp; new Date().getTime()-cbMotionLast&gt;=300){cbMotionIntent=cbMotionHeld;cbMotionLast=new Date().getTime();pumpMotion();}
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
     if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
@@ -422,7 +522,10 @@ var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
 var cbRanges = {};
+var cbGainStep=1;
 var cbCapabilities = {};
+var cbPresetSpeeds = {};
+var cbMotionFlight=false, cbMotionIntent=null, cbMotionHeld=null, cbMotionLast=0, cbMotionStop=false, cbMotionFull=false;
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -439,7 +542,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { cbNoticeUntil=new Date().getTime()+10000;status('Panel Error: '+String(e)); if (callback) callback(null); }
     });
 }
 function login() {
@@ -469,7 +572,7 @@ function cameraAt(index) {
     if(index&gt;=cbCameras.length || cbHandover)return;
     var old=selected(),target=cbCameras[index].id;
     if(old==target)return;
-    cbEpoch++;cbPending={};cbEdit={};cbHandover=true;
+    cbEpoch++;cbPending={};cbEdit={};cbMotionHeld=null;cbMotionIntent=null;cbHandover=true;
     var finish=function(r){
         cbHandover=false;
         if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
@@ -484,18 +587,52 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
-function jog(pan,tilt,zoom,focus) {
-    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
-    var camera=selected(),epoch=cbEpoch;
-    send('claim',{},function(r) {
-        if(!r || epoch!=cbEpoch || camera!=selected())return;
-        var speed=Number(params.getValue('speed',0));
-        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+function pumpMotion() {
+    if(cbMotionFlight || cbHandover)return;
+    if(cbMotionStop) {
+        cbMotionStop=false;var full=cbMotionFull;cbMotionFull=false;cbMotionFlight=true;
+        request('command',{camera:selected(),action:'stop',data:{active_only:!full}},function(r){
+            cbMotionFlight=false;
+            if(!r){cbMotionIntent=null;cbMotionHeld=null;cbTouchEnabled=false;ogscript.rename('touch_enable','Touch control DISABLED');status('Stop failed; movement remains disabled');return;}
+            pumpMotion();
+        });return;
+    }
+    var intent=cbMotionIntent;if(!intent)return;cbMotionIntent=null;cbMotionFlight=true;
+    request('command',{camera:intent.camera,action:'claim',data:{}},function(r){
+        if(!r || intent.epoch!=cbEpoch || intent.camera!=selected() || cbMotionStop || cbMotionIntent){cbMotionFlight=false;pumpMotion();return;}
+        var d=intent.axes;d.generation=r.generation;
+        request('command',{camera:intent.camera,action:'move',data:d},function(result){
+            cbMotionFlight=false;if(!result)cbMotionIntent=null;pumpMotion();
+        });
     });
 }
+function release() {
+    if(!cbToken)return;
+    cbEpoch++;cbMotionIntent=null;cbMotionHeld=null;cbMotionStop=true;pumpMotion();
+}
+function stop() {
+    if(!cbToken)return;
+    cbEpoch++;cbPending={};cbMotionIntent=null;cbMotionHeld=null;cbMotionStop=true;cbMotionFull=true;pumpMotion();
+}
+function jog(pan,tilt,zoom,focus) {
+    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
+    if(!cbToken)return;
+    var speed=Number(params.getValue('speed',0));
+    cbMotionLast=new Date().getTime();
+    cbMotionIntent={camera:selected(),epoch:cbEpoch,axes:{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed}};
+    cbMotionHeld=cbMotionIntent;pumpMotion();
+}
+function whiteBalance(mode) {
+    if(cbCapabilities.pan_tilt_type=='digital' &amp;&amp; mode&gt;0)mode--;
+    send('write',{parameter:'wb_mode',value:mode},function(r){if(r)poll();});
+}
+function oneShot() {
+    send('white_balance_once',{},function(r){if(r){status('One Shot Sent; completion is not reported');poll();}});
+}
 function renamePreset() {
-    send('label_preset',{number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))},function(r){if(r)poll();});
+    var d={number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))};
+    if(cbCapabilities.preset_speed)d.speed=Number(params.getValue('recall_speed',0));
+    send('label_preset',d,function(r){if(r)poll();});
 }
 function labBus(bus) {
     request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
@@ -503,19 +640,24 @@ function labBus(bus) {
 function changed(key) {
     if(cbUpdating)return;
     if(!cbToken){status('Sign in before adjustment');return;}
-    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+    var value=Number(params.getValue(key,0));
+    if(key=='red_gain'||key=='blue_gain')value=Math.round(value/cbGainStep)*cbGainStep;
+    cbPending[key]=value; cbEdit[key]=new Date().getTime();
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
     if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
+    if(key=='red_gain'||key=='blue_gain')delta*=cbGainStep;
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
     if(cbCapabilities.preset_max!==undefined &amp;&amp; number&gt;cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
-    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    var d={number:number,store:store,confirm:String(params.getValue('confirmation',0))};
+    if(cbCapabilities.preset_speed &amp;&amp; (store || Number(params.getValue('use_saved_speed',0))==0))d.speed=Number(params.getValue('recall_speed',0));
+    send('preset',d,function(r){if(r){status(r.status);poll();}});
     params.setValue('store',0,0);params.setValue('confirmation',0,'');
 }
 function poll() {
@@ -537,10 +679,14 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
-        cbCapabilities=c.capabilities||{};
+        cbCapabilities=c.capabilities||{};cbGainStep=cbCapabilities.gain_display_divisor||1;
         if(CB_MANUFACTURER=='Panasonic') {
-            ogscript.rename('paint_help',c.parameters.wb_mode.label);
-            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
+            cbPresetSpeeds=c.preset_speeds||{};
+            ogscript.rename('paint_help','Auto ATW follows the scene. Manual A / B hold white balance and allow gain adjustment.');
+            if(c.white_balance_once)ogscript.rename('awb_result','One Shot: '+c.white_balance_once.status+(c.white_balance_once.error?' | '+c.white_balance_once.error:' | completion not reported'));
+            var active=c.active_preset||{};
+            ogscript.rename('preset_feedback',active.number?'Shot '+active.number+' | Speed '+(active.speed||'Camera Default')+' | '+active.state:'No Shot Recalled');
+            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n)+(cbPresetSpeeds[String(n)]?' | S'+cbPresetSpeeds[String(n)]:''));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
@@ -550,11 +696,13 @@ function poll() {
         try {
             for(var key in c.parameters) {
                 var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
-                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='detail'||key=='wb_mode')) &amp;&amp; p.low&lt;=p.high) {
+                try {
+                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='detail') &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
+                if(CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='wb_mode'){var wbNames=cbCapabilities.pan_tilt_type=='digital'?{0:'Auto ATW',1:'Manual A',2:'Manual B',3:'Auto ATW',4:'3200K',5:'5600K'}:{0:'Auto ATW',2:'Manual A',3:'Manual B',4:'3200K',5:'5600K',9:'Variable'};value=wbNames[p.value]||value;}
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -564,6 +712,7 @@ function poll() {
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
                 if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
                 params.setAccess(key,enabled?1:0);
+                } catch(panelError) { cbNoticeUntil=new Date().getTime()+10000;status('Panel '+key+': '+String(panelError)); }
             }
         } finally {cbUpdating=false;}
         status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
@@ -571,6 +720,7 @@ function poll() {
 }
 function tick() {
     cbTick++;
+    if(cbMotionHeld &amp;&amp; !cbMotionFlight &amp;&amp; !cbHandover &amp;&amp; new Date().getTime()-cbMotionLast&gt;=300){cbMotionIntent=cbMotionHeld;cbMotionLast=new Date().getTime();pumpMotion();}
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
     if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
@@ -825,8 +975,16 @@ function uBridgeSave(){
       <param oid="panasonic_confirmation" name="Type OVERWRITE" type="STRING" value="" widget="3" access="1" maxlength="256" />
       <param oid="panasonic_shot_name" name="Shot name" type="STRING" value="" widget="3" access="1" maxlength="256" />
       <param oid="panasonic_speed" name="Jog speed" type="INT32" value="12" access="1" constrainttype="INT_RANGE" constraint="1;49;" />
-      <param oid="panasonic_store" name="Store armed" type="INT32" value="0" access="1" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="panasonic_store" name="Store armed" type="INT32" value="0" access="1" constrainttype="INT_CHOICE">
+        <constraint key="0">Recall</constraint>
+        <constraint key="1">Store</constraint>
+      </param>
       <param oid="panasonic_shot_number" name="Shot number" type="INT32" value="1" access="1" constrainttype="INT_RANGE" constraint="1;100;" />
+      <param oid="panasonic_recall_speed" name="Recall Speed" type="INT32" value="15" access="1" constrainttype="INT_RANGE" constraint="1;30;" />
+      <param oid="panasonic_use_saved_speed" name="Use Saved Speed" type="INT32" value="1" access="1" constrainttype="INT_CHOICE">
+        <constraint key="0">Override</constraint>
+        <constraint key="1">Saved</constraint>
+      </param>
       <param oid="panasonic_iris_auto" name="IRIS MODE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
       <param oid="panasonic_iris" name="IRIS" type="INT32" value="1365" access="0" constrainttype="INT_RANGE" constraint="1365;4095;" />
       <param oid="panasonic_focus_auto" name="FOCUS MODE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
@@ -843,8 +1001,16 @@ function uBridgeSave(){
       <param oid="marshall_confirmation" name="Type OVERWRITE" type="STRING" value="" widget="3" access="1" maxlength="256" />
       <param oid="marshall_shot_name" name="Shot name" type="STRING" value="" widget="3" access="1" maxlength="256" />
       <param oid="marshall_speed" name="Jog speed" type="INT32" value="12" access="1" constrainttype="INT_RANGE" constraint="1;49;" />
-      <param oid="marshall_store" name="Store armed" type="INT32" value="0" access="1" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="marshall_store" name="Store armed" type="INT32" value="0" access="1" constrainttype="INT_CHOICE">
+        <constraint key="0">Recall</constraint>
+        <constraint key="1">Store</constraint>
+      </param>
       <param oid="marshall_shot_number" name="Shot number" type="INT32" value="1" access="1" constrainttype="INT_RANGE" constraint="1;100;" />
+      <param oid="marshall_recall_speed" name="Recall Speed" type="INT32" value="15" access="1" constrainttype="INT_RANGE" constraint="1;30;" />
+      <param oid="marshall_use_saved_speed" name="Use Saved Speed" type="INT32" value="1" access="1" constrainttype="INT_CHOICE">
+        <constraint key="0">Override</constraint>
+        <constraint key="1">Saved</constraint>
+      </param>
       <param oid="marshall_wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;3;" />
       <param oid="marshall_red_gain" name="RED GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;255;" />
       <param oid="marshall_blue_gain" name="BLUE GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;255;" />
@@ -1101,43 +1267,43 @@ function uBridgeSave(){
           <abs left="12" top="96" width="408" height="344" style="bg#2c3037;bdr:line;bdr#383d45;">
             <button name="↖" left="8" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(-1,1,0,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <button name="UP" left="142" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,1,0,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <button name="↗" left="276" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(1,1,0,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <button name="LEFT" left="8" top="120" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(-1,0,0,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <button name="RIGHT" left="276" top="120" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(1,0,0,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <button name="↙" left="8" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(-1,-1,0,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <button name="DOWN" left="142" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,-1,0,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <button name="↘" left="276" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(1,-1,0,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <button name="STOP" left="142" top="120" width="124" height="104" buttontype="push" style="bg#91414b;fg#ffffff;bdr:none;size:16;">
               <task tasktype="ogscript">CB_Panasonic.run("stop();",this);</task>
@@ -1155,11 +1321,11 @@ function uBridgeSave(){
           <abs left="440" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
             <label name="IRIS" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
             <param oid="panasonic_iris" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
-            <button name="CLOSE" left="14" top="108" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
-              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris',value:1365},null);",this);</task>
-            </button>
-            <button name="OPEN" left="14" top="405" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <button name="OPEN" left="14" top="108" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
               <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris',value:4095},null);",this);</task>
+            </button>
+            <button name="CLOSE" left="14" top="405" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris',value:1365},null);",this);</task>
             </button>
             <param oid="panasonic_iris" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
             <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_iris" />
@@ -1173,15 +1339,15 @@ function uBridgeSave(){
           <abs left="684" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
             <label name="ZOOM POSITION" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
             <param oid="panasonic_zoom" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
-            <button name="WIDE" left="14" top="108" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,-1,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
-            </button>
-            <button name="TELE" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+            <button name="TELE" left="14" top="108" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,1,0);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
+            </button>
+            <button name="WIDE" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,-1,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <param oid="panasonic_zoom" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
             <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_zoom" />
@@ -1189,15 +1355,15 @@ function uBridgeSave(){
           <abs left="928" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
             <label name="FOCUS POSITION" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
             <param oid="panasonic_focus" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
-            <button name="NEAR" left="14" top="108" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,0,-1);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
-            </button>
-            <button name="FAR" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+            <button name="FAR" left="14" top="108" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
               <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,0,1);",this);</ogscript>
-              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
-              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
+            </button>
+            <button name="NEAR" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,0,-1);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("release();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("release();",this);</ogscript>
             </button>
             <param oid="panasonic_focus" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
             <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_focus" />
@@ -1273,18 +1439,21 @@ function uBridgeSave(){
           </button>
           <abs left="874" top="42" width="300" height="516" style="bg#2c3037;bdr:line;bdr#383d45;">
             <label name="RECALL / STORE" left="14" top="12" width="272" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
-            <label name="0 recall / 1 store" left="14" top="49" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
-            <param oid="panasonic_store" left="14" top="80" width="272" height="48" showlabel="false" widget="6" style="size:18;" />
-            <label name="Overwrite confirmation" left="14" top="143" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
-            <param oid="panasonic_confirmation" left="14" top="176" width="272" height="48" showlabel="false" style="size:18;" />
-            <label name="Type OVERWRITE before storing." left="14" top="232" width="272" height="45" style="fg#a9bbc8;size:13;txt-align:west;" />
-            <label name="NAME A SHOT" left="14" top="288" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
-            <param oid="panasonic_shot_number" left="14" top="324" width="80" height="48" showlabel="false" widget="6" style="size:18;" />
-            <param oid="panasonic_shot_name" left="102" top="324" width="184" height="48" showlabel="false" style="size:18;" />
-            <button name="Save shot name" left="14" top="388" width="272" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <label name="Action" left="14" top="43" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+            <param oid="panasonic_store" left="14" top="70" width="272" height="48" showlabel="false" widget="7" style="size:18;" />
+            <label name="Type OVERWRITE to Store" left="14" top="114" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+            <param oid="panasonic_confirmation" left="14" top="142" width="272" height="48" showlabel="false" style="size:18;" />
+            <label name="Recall Speed: 1 Slow / 30 Fast" left="14" top="188" width="272" height="24" style="fg#e2e4e9;size:13;txt-align:west;" />
+            <param oid="panasonic_recall_speed" left="14" top="214" width="272" height="48" showlabel="false" widget="6" style="size:18;" />
+            <label name="Recall Speed Mode" left="14" top="260" width="272" height="24" style="fg#e2e4e9;size:13;txt-align:west;" />
+            <param oid="panasonic_use_saved_speed" left="14" top="286" width="272" height="48" showlabel="false" widget="7" style="size:18;" />
+            <label name="Shot Number / Name" left="14" top="332" width="272" height="24" style="fg#e2e4e9;size:13;txt-align:west;" />
+            <param oid="panasonic_shot_number" left="14" top="358" width="70" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="panasonic_shot_name" left="92" top="358" width="194" height="48" showlabel="false" style="size:18;" />
+            <button name="Save Name and Speed" left="14" top="406" width="272" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
               <task tasktype="ogscript">CB_Panasonic.run("renamePreset();",this);</task>
             </button>
-            <label name="Physical recall completion&#10;requires camera feedback." left="14" top="454" width="272" height="48" style="fg#a9bbc8;size:13;txt-align:west;" />
+            <label name="No Shot Recalled" left="14" top="460" width="272" height="48" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_preset_feedback" />
           </abs>
         </abs>
         <abs id="panasonic_page_paint" name="Paint" width="1186" height="564" style="bg#25282e;">
@@ -1324,30 +1493,43 @@ function uBridgeSave(){
             </button>
             <label name="unknown · never read" left="16" top="462" width="176" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_detail" />
           </abs>
-          <abs left="700" top="12" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
+          <abs left="700" top="12" width="474" height="246" style="bg#2c3037;bdr:line;bdr#383d45;">
             <label name="WHITE BALANCE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
-            <param oid="panasonic_wb_mode" left="16" top="50" width="442" height="56" showlabel="false" widget="6" style="size:18;" />
-            <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_wb_mode" />
+            <button name="Auto ATW" left="16" top="48" width="138" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("whiteBalance(0);",this);</task>
+            </button>
+            <button name="Manual A" left="164" top="48" width="138" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("whiteBalance(2);",this);</task>
+            </button>
+            <button name="Manual B" left="312" top="48" width="146" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("whiteBalance(3);",this);</task>
+            </button>
+            <button name="One Shot" left="16" top="106" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("oneShot();",this);</task>
+            </button>
+            <param oid="panasonic_wb_mode" left="244" top="106" width="214" height="48" showlabel="false" widget="6" style="size:18;" />
+            <label name="unknown · never read" left="16" top="166" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_wb_mode" />
+            <label name="One Shot: Not Requested" left="16" top="204" width="442" height="30" style="fg#e2e4e9;size:12;txt-align:west;" id="panasonic_awb_result" />
           </abs>
-          <abs left="700" top="176" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
-            <label name="IRIS MODE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
-            <button name="Manual" left="16" top="50" width="214" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <abs left="700" top="270" width="474" height="116" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="IRIS MODE" left="16" top="4" width="442" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="Manual" left="16" top="34" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
               <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris_auto',value:0},null);",this);</task>
             </button>
-            <button name="Auto" left="244" top="50" width="214" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <button name="Auto" left="244" top="34" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
               <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris_auto',value:1},null);",this);</task>
             </button>
-            <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_iris_auto" />
+            <label name="unknown · never read" left="16" top="84" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_iris_auto" />
           </abs>
-          <abs left="700" top="340" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
-            <label name="FOCUS MODE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
-            <button name="Manual" left="16" top="50" width="214" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <abs left="700" top="394" width="474" height="116" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="FOCUS MODE" left="16" top="4" width="442" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="Manual" left="16" top="34" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
               <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'focus_auto',value:0},null);",this);</task>
             </button>
-            <button name="Auto" left="244" top="50" width="214" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <button name="Auto" left="244" top="34" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
               <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'focus_auto',value:1},null);",this);</task>
             </button>
-            <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_focus_auto" />
+            <label name="unknown · never read" left="16" top="84" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_focus_auto" />
           </abs>
           <label name="White balance values depend on the selected model." left="12" top="528" width="1162" height="30" style="fg#a9bbc8;size:13;txt-align:west;" id="panasonic_paint_help" />
         </abs>
@@ -1747,24 +1929,24 @@ function uBridgeSave(){
           <label name="ZOOM" left="12" top="92" width="560" height="32" style="fg#e2e4e9;size:20;txt-align:west;" />
           <button name="WIDE" left="12" top="138" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
             <ogscript handles="onmousedown">CB_Sony.run("jog(0,0,-1,0);",this);</ogscript>
-            <ogscript handles="onmouseup">CB_Sony.run("stop();",this);</ogscript>
-            <ogscript handles="onmouseexit">CB_Sony.run("stop();",this);</ogscript>
+            <ogscript handles="onmouseup">CB_Sony.run("release();",this);</ogscript>
+            <ogscript handles="onmouseexit">CB_Sony.run("release();",this);</ogscript>
           </button>
           <button name="TELE" left="293" top="138" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
             <ogscript handles="onmousedown">CB_Sony.run("jog(0,0,1,0);",this);</ogscript>
-            <ogscript handles="onmouseup">CB_Sony.run("stop();",this);</ogscript>
-            <ogscript handles="onmouseexit">CB_Sony.run("stop();",this);</ogscript>
+            <ogscript handles="onmouseup">CB_Sony.run("release();",this);</ogscript>
+            <ogscript handles="onmouseexit">CB_Sony.run("release();",this);</ogscript>
           </button>
           <label name="FOCUS" left="12" top="270" width="560" height="32" style="fg#e2e4e9;size:20;txt-align:west;" />
           <button name="NEAR" left="12" top="316" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
             <ogscript handles="onmousedown">CB_Sony.run("jog(0,0,0,-1);",this);</ogscript>
-            <ogscript handles="onmouseup">CB_Sony.run("stop();",this);</ogscript>
-            <ogscript handles="onmouseexit">CB_Sony.run("stop();",this);</ogscript>
+            <ogscript handles="onmouseup">CB_Sony.run("release();",this);</ogscript>
+            <ogscript handles="onmouseexit">CB_Sony.run("release();",this);</ogscript>
           </button>
           <button name="FAR" left="293" top="316" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
             <ogscript handles="onmousedown">CB_Sony.run("jog(0,0,0,1);",this);</ogscript>
-            <ogscript handles="onmouseup">CB_Sony.run("stop();",this);</ogscript>
-            <ogscript handles="onmouseexit">CB_Sony.run("stop();",this);</ogscript>
+            <ogscript handles="onmouseup">CB_Sony.run("release();",this);</ogscript>
+            <ogscript handles="onmouseexit">CB_Sony.run("release();",this);</ogscript>
           </button>
           <abs left="594" top="12" width="580" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
             <label name="IRIS" left="16" top="8" width="548" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />

@@ -17,7 +17,10 @@ var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
 var cbRanges = {};
+var cbGainStep=1;
 var cbCapabilities = {};
+var cbPresetSpeeds = {};
+var cbMotionFlight=false, cbMotionIntent=null, cbMotionHeld=null, cbMotionLast=0, cbMotionStop=false, cbMotionFull=false;
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -34,7 +37,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { cbNoticeUntil=new Date().getTime()+10000;status('Panel Error: '+String(e)); if (callback) callback(null); }
     });
 }
 function login() {
@@ -64,7 +67,7 @@ function cameraAt(index) {
     if(index&gt;=cbCameras.length || cbHandover)return;
     var old=selected(),target=cbCameras[index].id;
     if(old==target)return;
-    cbEpoch++;cbPending={};cbEdit={};cbHandover=true;
+    cbEpoch++;cbPending={};cbEdit={};cbMotionHeld=null;cbMotionIntent=null;cbHandover=true;
     var finish=function(r){
         cbHandover=false;
         if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
@@ -79,18 +82,52 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
-function jog(pan,tilt,zoom,focus) {
-    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
-    var camera=selected(),epoch=cbEpoch;
-    send('claim',{},function(r) {
-        if(!r || epoch!=cbEpoch || camera!=selected())return;
-        var speed=Number(params.getValue('speed',0));
-        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+function pumpMotion() {
+    if(cbMotionFlight || cbHandover)return;
+    if(cbMotionStop) {
+        cbMotionStop=false;var full=cbMotionFull;cbMotionFull=false;cbMotionFlight=true;
+        request('command',{camera:selected(),action:'stop',data:{active_only:!full}},function(r){
+            cbMotionFlight=false;
+            if(!r){cbMotionIntent=null;cbMotionHeld=null;cbTouchEnabled=false;ogscript.rename('touch_enable','Touch control DISABLED');status('Stop failed; movement remains disabled');return;}
+            pumpMotion();
+        });return;
+    }
+    var intent=cbMotionIntent;if(!intent)return;cbMotionIntent=null;cbMotionFlight=true;
+    request('command',{camera:intent.camera,action:'claim',data:{}},function(r){
+        if(!r || intent.epoch!=cbEpoch || intent.camera!=selected() || cbMotionStop || cbMotionIntent){cbMotionFlight=false;pumpMotion();return;}
+        var d=intent.axes;d.generation=r.generation;
+        request('command',{camera:intent.camera,action:'move',data:d},function(result){
+            cbMotionFlight=false;if(!result)cbMotionIntent=null;pumpMotion();
+        });
     });
 }
+function release() {
+    if(!cbToken)return;
+    cbEpoch++;cbMotionIntent=null;cbMotionHeld=null;cbMotionStop=true;pumpMotion();
+}
+function stop() {
+    if(!cbToken)return;
+    cbEpoch++;cbPending={};cbMotionIntent=null;cbMotionHeld=null;cbMotionStop=true;cbMotionFull=true;pumpMotion();
+}
+function jog(pan,tilt,zoom,focus) {
+    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
+    if(!cbToken)return;
+    var speed=Number(params.getValue('speed',0));
+    cbMotionLast=new Date().getTime();
+    cbMotionIntent={camera:selected(),epoch:cbEpoch,axes:{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed}};
+    cbMotionHeld=cbMotionIntent;pumpMotion();
+}
+function whiteBalance(mode) {
+    if(cbCapabilities.pan_tilt_type=='digital' &amp;&amp; mode&gt;0)mode--;
+    send('write',{parameter:'wb_mode',value:mode},function(r){if(r)poll();});
+}
+function oneShot() {
+    send('white_balance_once',{},function(r){if(r){status('One Shot Sent; completion is not reported');poll();}});
+}
 function renamePreset() {
-    send('label_preset',{number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))},function(r){if(r)poll();});
+    var d={number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))};
+    if(cbCapabilities.preset_speed)d.speed=Number(params.getValue('recall_speed',0));
+    send('label_preset',d,function(r){if(r)poll();});
 }
 function labBus(bus) {
     request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
@@ -98,19 +135,24 @@ function labBus(bus) {
 function changed(key) {
     if(cbUpdating)return;
     if(!cbToken){status('Sign in before adjustment');return;}
-    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+    var value=Number(params.getValue(key,0));
+    if(key=='red_gain'||key=='blue_gain')value=Math.round(value/cbGainStep)*cbGainStep;
+    cbPending[key]=value; cbEdit[key]=new Date().getTime();
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
     if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
+    if(key=='red_gain'||key=='blue_gain')delta*=cbGainStep;
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
     if(cbCapabilities.preset_max!==undefined &amp;&amp; number&gt;cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
-    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    var d={number:number,store:store,confirm:String(params.getValue('confirmation',0))};
+    if(cbCapabilities.preset_speed &amp;&amp; (store || Number(params.getValue('use_saved_speed',0))==0))d.speed=Number(params.getValue('recall_speed',0));
+    send('preset',d,function(r){if(r){status(r.status);poll();}});
     params.setValue('store',0,0);params.setValue('confirmation',0,'');
 }
 function poll() {
@@ -132,10 +174,14 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
-        cbCapabilities=c.capabilities||{};
+        cbCapabilities=c.capabilities||{};cbGainStep=cbCapabilities.gain_display_divisor||1;
         if(CB_MANUFACTURER=='Panasonic') {
-            ogscript.rename('paint_help',c.parameters.wb_mode.label);
-            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
+            cbPresetSpeeds=c.preset_speeds||{};
+            ogscript.rename('paint_help','Auto ATW follows the scene. Manual A / B hold white balance and allow gain adjustment.');
+            if(c.white_balance_once)ogscript.rename('awb_result','One Shot: '+c.white_balance_once.status+(c.white_balance_once.error?' | '+c.white_balance_once.error:' | completion not reported'));
+            var active=c.active_preset||{};
+            ogscript.rename('preset_feedback',active.number?'Shot '+active.number+' | Speed '+(active.speed||'Camera Default')+' | '+active.state:'No Shot Recalled');
+            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n)+(cbPresetSpeeds[String(n)]?' | S'+cbPresetSpeeds[String(n)]:''));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
@@ -145,11 +191,13 @@ function poll() {
         try {
             for(var key in c.parameters) {
                 var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
-                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='detail'||key=='wb_mode')) &amp;&amp; p.low&lt;=p.high) {
+                try {
+                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='detail') &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
+                if(CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='wb_mode'){var wbNames=cbCapabilities.pan_tilt_type=='digital'?{0:'Auto ATW',1:'Manual A',2:'Manual B',3:'Auto ATW',4:'3200K',5:'5600K'}:{0:'Auto ATW',2:'Manual A',3:'Manual B',4:'3200K',5:'5600K',9:'Variable'};value=wbNames[p.value]||value;}
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -159,6 +207,7 @@ function poll() {
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
                 if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
                 params.setAccess(key,enabled?1:0);
+                } catch(panelError) { cbNoticeUntil=new Date().getTime()+10000;status('Panel '+key+': '+String(panelError)); }
             }
         } finally {cbUpdating=false;}
         status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
@@ -166,6 +215,7 @@ function poll() {
 }
 function tick() {
     cbTick++;
+    if(cbMotionHeld &amp;&amp; !cbMotionFlight &amp;&amp; !cbHandover &amp;&amp; new Date().getTime()-cbMotionLast&gt;=300){cbMotionIntent=cbMotionHeld;cbMotionLast=new Date().getTime();pumpMotion();}
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
     if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
@@ -180,8 +230,16 @@ function tick() {
       <param oid="confirmation" name="Type OVERWRITE" type="STRING" value="" widget="3" access="1" maxlength="256" />
       <param oid="shot_name" name="Shot name" type="STRING" value="" widget="3" access="1" maxlength="256" />
       <param oid="speed" name="Jog speed" type="INT32" value="12" access="1" constrainttype="INT_RANGE" constraint="1;49;" />
-      <param oid="store" name="Store armed" type="INT32" value="0" access="1" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="store" name="Store armed" type="INT32" value="0" access="1" constrainttype="INT_CHOICE">
+        <constraint key="0">Recall</constraint>
+        <constraint key="1">Store</constraint>
+      </param>
       <param oid="shot_number" name="Shot number" type="INT32" value="1" access="1" constrainttype="INT_RANGE" constraint="1;100;" />
+      <param oid="recall_speed" name="Recall Speed" type="INT32" value="15" access="1" constrainttype="INT_RANGE" constraint="1;30;" />
+      <param oid="use_saved_speed" name="Use Saved Speed" type="INT32" value="1" access="1" constrainttype="INT_CHOICE">
+        <constraint key="0">Override</constraint>
+        <constraint key="1">Saved</constraint>
+      </param>
       <param oid="wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;3;" />
       <param oid="red_gain" name="RED GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;255;" />
       <param oid="blue_gain" name="BLUE GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;255;" />

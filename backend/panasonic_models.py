@@ -22,6 +22,7 @@ def capabilities(model):
     return {'pan_tilt':not fixed,'pan_tilt_type':'digital' if family in ('HE2','UE4') else 'none' if fixed else 'mechanical',
             'zoom_jog':not fixed,'focus_jog':not fixed and family not in ('HE2','UE4'),
             'preset_max':0 if fixed else 9 if family=='HE2' else 100,
+            'preset_speed':family in ('HE40','HE42','UE70','HE50','HE60','HE120','HE130'),
             'hardware_tested':model=='AW-HE40',
             'compatibility':'HE40 tested on hardware; other models require camera acceptance',
             'gain_display_divisor':5 if family in ('HE40','HE42','UE70','HE50','HE60') else 1}

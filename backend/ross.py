@@ -88,6 +88,7 @@ class PresetFollower:
             if time.monotonic()-received>.3:raise ViscaError('Stale motion packet',0x41)
             c=self.engine.cameras[camera]
             with c['io']:
+                if time.monotonic()-received>.3:raise ViscaError('Motion expired while waiting for camera',0x41)
                 with self.engine.lock:
                     if self.generation!=c['generation']:
                         self.generation=c['generation'];self.neutral=set();self.axes=dict.fromkeys(self.axes,0)
@@ -106,8 +107,10 @@ class PresetFollower:
                     command=movement(self.axes['pan'],self.axes['tilt'])[0];expected='pTS'+command[4:]
                 elif kind=='zoom':command=f'#Z{self.axes["zoom"]+50:02d}';expected='zS'+command[2:]
                 else:command=f'#F{self.axes["focus"]+50:02d}';expected='fS'+command[2:]
+                c['driver'].motion_state.pop(command[:4] if command.startswith('#PTS') else command[:2],None)
                 response=c['driver'].send(command)
                 if response!=expected:raise ViscaError('Downstream speed command not acknowledged',0x41)
+                c['driver'].motion_state[command[:4] if command.startswith('#PTS') else command[:2]]=command
             self.update_status();self.engine.event(camera,'lab-visca-motion',axes=dict(self.axes))
 
     def halt(self,camera):

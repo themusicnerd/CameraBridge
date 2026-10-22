@@ -1,5 +1,15 @@
 # Change record
 
+## 0.3.0rc11
+
+- Align fader endpoint labels and buttons with high-up slider values.
+- Serialize jog and release requests; coalesce direction changes and renew held controls.
+- Stop unknown axes after ambiguous motion failures.
+- Save a recall speed per shot and accept a speed override on recall.
+- Apply saved speeds to Carbonite and custom-control recalls.
+- Add ATW, Manual A, Manual B, and One Shot controls with mode and gain feedback.
+- Use the HE40-family red and blue gain commands.
+
 ## 0.3.0rc10
 
 - Wait for confirmed camera mode before the packaged iris test.

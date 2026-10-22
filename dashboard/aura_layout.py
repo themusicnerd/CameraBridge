@@ -48,7 +48,7 @@ def horizontal(parent,key,p,x,y,w=572):
 def jog_button(parent,text,x,y,w,h,axes):
     b=node(parent,'button',name=text,left=x,top=y,width=w,height=h,style='bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;')
     script(b,'jog('+','.join(map(str,axes))+');','onmousedown')
-    script(b,'stop();','onmouseup');script(b,'stop();','onmouseexit');return b
+    script(b,'release();','onmouseup');script(b,'release();','onmouseexit');return b
 
 def build(manufacturer,defs):
     pana=manufacturer=='Panasonic'
@@ -59,8 +59,11 @@ def build(manufacturer,defs):
     meta=node(root,'meta');params=node(meta,'params')
     for oid,name,value,widget,access in [('bridge','Backend URL','http://127.0.0.1:8088',3,1),('username','Username','',3,1),('password','Password','',4,1),('camera','Camera ID','pana1' if pana else 'marshall1',3,0),('confirmation','Type OVERWRITE','',3,1),('shot_name','Shot name','',3,1)]:
         node(params,'param',oid=oid,name=name,type='STRING',value=value,widget=widget,access=access,maxlength=256)
-    for oid,name,low,high,value in [('speed','Jog speed',1,49,12),('store','Store armed',0,1,0),('shot_number','Shot number',1,100,1)]:
-        node(params,'param',oid=oid,name=name,type='INT32',value=value,access=1,constrainttype='INT_RANGE',constraint=f'{low};{high};')
+    for oid,name,low,high,value in [('speed','Jog speed',1,49,12),('store','Store armed',0,1,0),('shot_number','Shot number',1,100,1),('recall_speed','Recall Speed',1,30,15),('use_saved_speed','Use Saved Speed',0,1,1)]:
+        n=node(params,'param',oid=oid,name=name,type='INT32',value=value,access=1,constrainttype='INT_RANGE',constraint=f'{low};{high};')
+        if oid in ('store','use_saved_speed'):
+            n.set('constrainttype','INT_CHOICE');n.attrib.pop('constraint')
+            for v,caption in enumerate(('Recall','Store') if oid=='store' else ('Override','Saved')):node(n,'constraint',key=v).text=caption
     for key,p in defs.items():
         n=node(params,'param',oid=key,name=SHORT.get(key,p.label),type='INT32',value=p.low,access=0)
         if p.allowed and not (pana and key=='wb_mode'):
@@ -102,13 +105,13 @@ def build(manufacturer,defs):
         button(pad,'STOP',142,120,124,'stop();',104,'91414b')
         label(ptz,'JOG SPEED',12,451,408,26,size=14);steps(ptz,'speed',1,49,12,482,408)
         label(ptz,'Release / exit stops · 0.9s watchdog',12,537,408,26,colour='a9bbc8',size=13)
-        for key,x,top,bottom in [('iris',440,'CLOSE','OPEN'),('zoom',684,'WIDE','TELE'),('focus',928,'NEAR','FAR')]:
+        for key,x,top,bottom in [('iris',440,'OPEN','CLOSE'),('zoom',684,'TELE','WIDE'),('focus',928,'FAR','NEAR')]:
             box=card(ptz,x,0,228,560);label(box,SHORT[key],14,10,200,28,size=16);entry(box,key,14,48,200)
             if key=='iris':
-                button(box,top,14,108,200,"send('write',{parameter:'iris',value:1365},null);",52)
-                button(box,bottom,14,405,200,"send('write',{parameter:'iris',value:4095},null);",52)
+                button(box,top,14,108,200,"send('write',{parameter:'iris',value:4095},null);",52)
+                button(box,bottom,14,405,200,"send('write',{parameter:'iris',value:1365},null);",52)
             else:
-                axes=(0,0,-1,0) if key=='zoom' else (0,0,0,-1)
+                axes=(0,0,1,0) if key=='zoom' else (0,0,0,1)
                 jog_button(box,top,14,108,200,52,axes);jog_button(box,bottom,14,405,200,52,tuple(-v for v in axes))
             fader(box,key,42,172,144,221);feedback(box,key,14,465,200)
             if key in ('iris','focus'):
@@ -118,21 +121,28 @@ def build(manufacturer,defs):
         presets=content['Presets'];label(presets,'CAMERA SHOTS / BANK 01–20',12,0,1162,30,size=17)
         for i in range(20):button(presets,f'{i+1:02d}\nShot {i+1}',12+(i%5)*170,42+(i//5)*126,158,f'preset({i+1});',114,BUTTON,'shot_'+str(i+1))
         side=card(presets,874,42,300,516);label(side,'RECALL / STORE',14,12,272,28,size=17)
-        label(side,'0 recall / 1 store',14,49,272);entry(side,'store',14,80,272)
-        label(side,'Overwrite confirmation',14,143,272);entry(side,'confirmation',14,176,272,48,None)
-        label(side,'Type OVERWRITE before storing.',14,232,272,45,colour='a9bbc8',size=13)
-        label(side,'NAME A SHOT',14,288,272);entry(side,'shot_number',14,324,80);entry(side,'shot_name',102,324,184,48,None)
-        button(side,'Save shot name',14,388,272,'renamePreset();',52)
-        label(side,'Physical recall completion\nrequires camera feedback.',14,454,272,48,colour='a9bbc8',size=13)
+        label(side,'Action',14,43,272);entry(side,'store',14,70,272,48,7)
+        label(side,'Type OVERWRITE to Store',14,114,272);entry(side,'confirmation',14,142,272,48,None)
+        label(side,'Recall Speed: 1 Slow / 30 Fast',14,188,272,24,size=13);entry(side,'recall_speed',14,214,272,48)
+        label(side,'Recall Speed Mode',14,260,272,24,size=13);entry(side,'use_saved_speed',14,286,272,48,7)
+        label(side,'Shot Number / Name',14,332,272,24,size=13);entry(side,'shot_number',14,358,70,48);entry(side,'shot_name',92,358,194,48,None)
+        button(side,'Save Name and Speed',14,406,272,'renamePreset();',48)
+        label(side,'No Shot Recalled',14,460,272,48,'preset_feedback',colour='a9bbc8',size=12)
         paint=content['Paint']
         for i,key in enumerate(['red_gain','blue_gain','detail']):vertical(paint,key,defs[key],12+i*224,12,208,500)
-        for i,key in enumerate(['wb_mode','iris_auto','focus_auto']):
-            box=card(paint,700,12+i*164,474,148);label(box,SHORT[key],16,10,442,28,size=17)
-            if key=='wb_mode':entry(box,key,16,50,442,56,6)
-            else:
-                button(box,'Manual',16,50,214,f"send('write',{{parameter:'{key}',value:0}},null);",56)
-                button(box,'Auto',244,50,214,f"send('write',{{parameter:'{key}',value:1}},null);",56)
-            feedback(box,key,16,114,442)
+        wb=card(paint,700,12,474,246);label(wb,'WHITE BALANCE',16,10,442,28,size=17)
+        button(wb,'Auto ATW',16,48,138,'whiteBalance(0);',48)
+        button(wb,'Manual A',164,48,138,'whiteBalance(2);',48)
+        button(wb,'Manual B',312,48,146,'whiteBalance(3);',48)
+        button(wb,'One Shot',16,106,214,'oneShot();',48)
+        entry(wb,'wb_mode',244,106,214,48,6)
+        feedback(wb,'wb_mode',16,166,442)
+        label(wb,'One Shot: Not Requested',16,204,442,30,'awb_result',size=12)
+        for i,key in enumerate(['iris_auto','focus_auto']):
+            box=card(paint,700,270+i*124,474,116);label(box,SHORT[key],16,4,442,26,size=16)
+            button(box,'Manual',16,34,214,f"send('write',{{parameter:'{key}',value:0}},null);",48)
+            button(box,'Auto',244,34,214,f"send('write',{{parameter:'{key}',value:1}},null);",48)
+            feedback(box,key,16,84,442)
         label(paint,'White balance values depend on the selected model.',12,528,1162,30,'paint_help',colour='a9bbc8',size=13)
         td=content['TD1C'];label(td,'TOUCHDRIVE / CARBONITE CAMERA BRIDGE',16,12,1154,32,size=19)
         label(td,'Connection not verified',16,60,1154,52,'ross_state')

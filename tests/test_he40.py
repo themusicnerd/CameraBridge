@@ -5,7 +5,7 @@ from backend.protocol import panasonic_parameters
 
 class HE40Tests(unittest.TestCase):
     def test_he2_digital_ptz_has_no_focus_and_only_nine_shots(self):
-        camera=Panasonic('192.0.2.1',model='AW-HE2');camera.send=Mock(return_value='ack')
+        camera=Panasonic('192.0.2.1',model='AW-HE2');camera.send=Mock(side_effect=lambda cmd: 'pTS'+cmd[4:] if cmd.startswith('#PTS') else cmd[1].lower()+'S'+cmd[2:])
         camera.move(pan=5,zoom=5)
         self.assertEqual([c.args[0] for c in camera.send.call_args_list],['#PTS5550','#Z55'])
         camera.send.reset_mock();camera.stop()
@@ -52,7 +52,7 @@ class HE40Tests(unittest.TestCase):
 
     def test_mode_restriction_is_retested_and_does_not_hide_transport_errors(self):
         camera=Panasonic('192.0.2.1',model='AW-HE40')
-        camera.send=Mock(side_effect=[PanasonicRejected('ER3:QRI'),'ORI:096'])
+        camera.send=Mock(side_effect=[PanasonicRejected('ER3:QGR'),'ORG:1E'])
         self.assertIsNone(camera.query('red_gain'))
         self.assertEqual(camera.query('red_gain'),150)
         for error in (PanasonicRejected('ER2:QRI'),TimeoutError('offline'),ValueError('malformed')):

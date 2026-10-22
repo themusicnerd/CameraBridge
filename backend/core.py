@@ -51,6 +51,8 @@ class Engine:
         self.tsl={'enabled':False,'listening':False,'last_packet':None,'packets':0,'messages':0,'invalid_packets':0,'rejected_sources':0,'source':None}
         names_path=self.storage/'preset-names.json'
         self.preset_names=json.loads(names_path.read_text()) if names_path.exists() else {}
+        speeds_path=self.storage/'preset-speeds.json'
+        self.preset_speeds=json.loads(speeds_path.read_text()) if speeds_path.exists() else {}
         for c in configuration['cameras']:
             if not c.get('enabled',True):continue
             lab=c['driver']=='marshall-lab'
@@ -62,7 +64,7 @@ class Engine:
             self.cameras[c['id']]={'config':c,'driver':driver,'defs':definitions,'io':threading.RLock(),
                 'params':{k:{'value':None,'requested':None,'confirmation':'unknown','last_query':None,'last_command':None,'error':None} for k in definitions},
                 'pending':{},'owner':None,'lease_until':0,'generation':0,'motion_deadline':0,'moving':False,'locked':False,'error':None,
-                'health':'unknown','last_poll':0,'active_preset':None,
+                'health':'unknown','last_poll':0,'active_preset':None,'white_balance_once':None,
                 'tally':{'enabled':c.get('tally_enabled',True),'requested':None,'actual':None,'status':'unknown' if c.get('tally_enabled',True) else 'disabled','source':None,'updated':None},'tally_pending':None}
 
     def event(self,camera,kind,**data):
@@ -88,7 +90,7 @@ class Engine:
                     parameters[key]=dict(c['defs'][key].metadata(),**v)
                     parameters[key].update(confirmation=status,age_seconds=age)
                     if isinstance(c['driver'],(Sony,Panasonic)):parameters[key].update(c['driver'].metadata(key))
-                result.append(dict(c['config'],parameters=parameters,preset_names=dict(self.preset_names.get(cid,{})),health=c['health'],error=c['error'],locked=c['locked'],
+                result.append(dict(c['config'],parameters=parameters,preset_names=dict(self.preset_names.get(cid,{})),preset_speeds=dict(self.preset_speeds.get(cid,{})),white_balance_once=c['white_balance_once'],health=c['health'],error=c['error'],locked=c['locked'],
                     owner=c['owner'] if c['lease_until']>time.monotonic() else None,generation=c['generation'],moving=c['moving'],active_preset=c['active_preset'],tally=dict(c['tally'])))
                 if isinstance(c['driver'],Panasonic):result[-1]['capabilities']=dict(c['driver'].capabilities)
             tsl=dict(self.tsl)
@@ -107,7 +109,7 @@ class Engine:
         c=self.cameras[cid]
         if action=='tally':return self.set_tally(cid,data.get('program',False),data.get('preview',False),'manual')
         if action=='stop':
-            self.stop(cid);return {'status':'stop sent'}
+            self.stop(cid,active_only=data.get('active_only') is True);return {'status':'stop sent'}
         if action=='claim':
             with self.lock:self.claim(c,owner)
             return {'generation':c['generation']}
@@ -122,9 +124,11 @@ class Engine:
                 preset(data['number'])
                 name=data['name']
                 if not isinstance(name,str) or not 1<=len(name)<=80:raise ValueError('Shot name must contain 1..80 characters')
+                if 'speed' in data:self.validate_preset_speed(c,data['speed'])
                 self.preset_names.setdefault(cid,{})[str(data['number'])]=name
                 target=self.storage/'preset-names.json';temporary=target.with_suffix('.tmp')
                 temporary.write_text(json.dumps(self.preset_names,indent=2));temporary.replace(target)
+                if 'speed' in data:self.save_preset_speed(cid,data['number'],data['speed'])
                 self.event(cid,'shot-name',number=data['number'])
                 return {'status':'name saved'}
             if action=='write':
@@ -151,13 +155,30 @@ class Engine:
                 c['moving']=any(axes.values())
                 c['pending']['@motion']=(axes,c['generation'],owner)
                 return {'status':'queued','watchdog_ms':900}
+        if action=='white_balance_once':
+            if not isinstance(c['driver'],Panasonic):raise ValueError('One Shot is unavailable for this profile')
+            try:
+                with c['io']:result=c['driver'].white_balance_once()
+            except Exception as error:
+                with self.lock:c['white_balance_once']={'status':'failed','error':str(error)[:180],'time':time.time(),'completion':'unavailable'}
+                raise
+            with self.lock:c['white_balance_once']=result
+            self.event(cid,'white-balance-once',status=result['status'])
+            return result
         if action=='preset':
             if c['config']['manufacturer']!='Panasonic':raise ValueError('PTZ presets unavailable')
             store=data.get('store',False)
             if store and data.get('confirm')!='OVERWRITE':raise ValueError('Preset storage requires OVERWRITE confirmation')
+            from .protocol import preset
+            preset(data['number'],store)
+            speed=data.get('speed',self.preset_speeds.get(cid,{}).get(str(data['number'])))
+            if speed is not None:self.validate_preset_speed(c,speed)
             self.stop(cid)
-            with c['io']:c['driver'].preset(data['number'],store)
-            with self.lock:c['active_preset']={'number':data['number'],'state':'last command sent, unverified'}
+            with c['io']:
+                if speed is not None and not store:c['driver'].recall_speed(speed)
+                c['driver'].preset(data['number'],store)
+            if store and speed is not None:self.save_preset_speed(cid,data['number'],speed)
+            with self.lock:c['active_preset']={'number':data['number'],'speed':speed,'speed_confirmation':'saved' if store else 'confirmed' if speed is not None else 'camera default','state':'last command sent, unverified'}
             self.event(cid,'preset',number=data['number'],store=store)
             return {'status':'last command sent, unverified'}
         if action=='osd':
@@ -166,6 +187,16 @@ class Engine:
             c['driver'].osd.append(data['key']);self.event(cid,'lab-osd',key=data['key'])
             return {'status':'simulator only'}
         raise ValueError('Unknown action')
+
+    def validate_preset_speed(self,c,speed):
+        if type(speed) is not int or not 1<=speed<=30:raise ValueError('Recall speed must be 1..30')
+        if not isinstance(c['driver'],Panasonic) or not c['driver'].capabilities['preset_speed']:raise ValueError('Preset speed is unavailable for this profile')
+
+    def save_preset_speed(self,cid,number,speed):
+        with self.lock:
+            self.preset_speeds.setdefault(cid,{})[str(number)]=speed
+            target=self.storage/'preset-speeds.json';temporary=target.with_suffix('.tmp')
+            temporary.write_text(json.dumps(self.preset_speeds,indent=2));temporary.replace(target)
 
     def check_mode(self,c,key):
         requirement='focus_auto=2' if isinstance(c['driver'],Sony) and key=='focus' else c['defs'][key].dependency
@@ -191,12 +222,14 @@ class Engine:
             self.revision+=1
         return {'status':'queued'}
 
-    def stop(self,cid):
+    def stop(self,cid,active_only=False):
         c=self.cameras[cid]
         with self.lock:
             c['generation']+=1;c['pending'].pop('@motion',None);c['moving']=False;c['motion_deadline']=0
         try:
-            with c['io']:c['driver'].stop()
+            with c['io']:
+                if isinstance(c['driver'],Panasonic):c['driver'].stop(active_only=active_only)
+                else:c['driver'].stop()
             self.event(cid,'stop')
         except Exception:
             with self.lock:c['error']='Stop delivery failed; physical status unknown';c['health']='error'
