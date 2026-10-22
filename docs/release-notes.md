@@ -1,6 +1,12 @@
-# CameraBridge 0.3.0rc14
+# CameraBridge 0.3.0rc15
 
 Windows x64 and Linux x64 packages include these control updates.
+
+- Accept positioner movement on a fixed port without a lab handover gate.
+- Give stops and movement priority over camera polling.
+- Release camera access before the polling worker waits during movement.
+- Keep delayed neutral stops valid.
+- Skip repeated confirmed speed requests while renewing the watchdog.
 
 - Put Open and Tele at the high end of the native faders.
 - Put Close and Wide at the low end.

@@ -4,6 +4,7 @@ import json
 import pathlib
 import threading
 import time
+from .scheduling import CameraAccess
 from .protocol import PANASONIC,Parameter,panasonic_parameters
 from .drivers import Panasonic
 from .sony import Sony,SONY
@@ -61,7 +62,7 @@ class Engine:
                 raise ValueError('Unsupported production driver; no guessed Marshall serial commands')
             definitions=SONY if sony else MARSHALL_LAB if lab else panasonic_parameters(c.get('model','AW-HE130'))
             driver=Sony(c,storage) if sony else LabMarshall() if lab else Panasonic(c['host'],c.get('port',80),model=c.get('model','AW-HE130'))
-            self.cameras[c['id']]={'config':c,'driver':driver,'defs':definitions,'io':threading.RLock(),
+            self.cameras[c['id']]={'config':c,'driver':driver,'defs':definitions,'io':CameraAccess(),
                 'params':{k:{'value':None,'requested':None,'confirmation':'unknown','last_query':None,'last_command':None,'error':None} for k in definitions},
                 'pending':{},'owner':None,'lease_until':0,'generation':0,'motion_deadline':0,'moving':False,'locked':False,'error':None,
                 'health':'unknown','last_poll':0,'active_preset':None,'white_balance_once':None,
@@ -227,7 +228,7 @@ class Engine:
         with self.lock:
             c['generation']+=1;c['pending'].pop('@motion',None);c['moving']=False;c['motion_deadline']=0
         try:
-            with c['io']:
+            with c['io'].priority(-20):
                 if isinstance(c['driver'],Panasonic):c['driver'].stop(active_only=active_only)
                 else:c['driver'].stop()
             self.event(cid,'stop')
@@ -252,7 +253,7 @@ class Engine:
             if tally is not None:
                 try:
                     if not hasattr(driver,'tally'):raise NotImplementedError('No tally driver for this camera')
-                    with c['io']:actual=driver.tally(**tally)
+                    with c['io'].priority(5):actual=driver.tally(**tally)
                     expected={'program':tally['program'],'preview':tally['preview'] if isinstance(driver,Sony) else False}
                     with self.lock:c['tally'].update(actual=actual,status='confirmed' if actual==expected else 'mismatch',error=None,updated=time.time());self.revision+=1
                     self.event(cid,'tally-readback',actual=actual)
@@ -281,10 +282,14 @@ class Engine:
                                 if not c['moving'] and not c['pending'] and c['owner']==owner:c['owner']=None;c['lease_until']=0
                             self.event(cid,'readback',parameter=key,value=actual)
                 elif time.monotonic()>=next_poll:
-                    with c['io']:
+                    with self.lock:moving=c['moving']
+                    if moving:
+                        self.closed.wait(.03);continue
+                    with c['io'].priority(10):
+                        # Motion may have started while this poll waited. Never
+                        # sleep with camera access held, or poll ahead of a jog.
                         with self.lock:moving=c['moving']
-                        if moving:
-                            self.closed.wait(.03);continue
+                        if moving:continue
                         try:key=next(poll_keys)
                         except StopIteration:
                             if hasattr(driver,'tally_state'):
@@ -293,8 +298,10 @@ class Engine:
                                     with self.lock:c['tally'].update(actual=actual_tally,readback_status='confirmed',readback_time=time.time())
                                 except Exception as exc:
                                     with self.lock:c['tally'].update(readback_status='unavailable',readback_error=str(exc)[:100])
-                            poll_keys=iter(c['defs']);key=next(poll_keys)
-                            next_poll=time.monotonic()+self.config.get('poll_seconds',4)
+                            poll_keys=iter(c['defs'])
+                            # Release access after tally readback so that a waiting
+                            # stop or jog can run before the next parameter query.
+                            continue
                         actual=driver.query(key)
                         with self.lock:
                             v=c['params'][key]

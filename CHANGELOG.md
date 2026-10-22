@@ -1,5 +1,14 @@
 # Change record
 
+## 0.3.0rc15
+
+- Accept positioner movement immediately on a fixed camera port.
+- Give motion and stop requests priority over camera polling.
+- Keep camera access free while the polling worker waits during movement.
+- Deliver neutral stop packets even when they exceed the movement expiry limit.
+- Skip repeated confirmed speed commands while renewing the movement watchdog.
+- Add optional local timing capture for PIVOTCam input and camera HTTP output.
+
 ## 0.3.0rc14
 
 - Prevent neutral Carbonite keepalives from taking dashboard ownership.

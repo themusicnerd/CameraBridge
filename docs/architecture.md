@@ -2,6 +2,8 @@
 
 One Python process owns the central state engine.
 Each camera has one worker and one input/output lock.
+Stop requests have priority over movement, ordinary commands, and polling.
+The worker does not hold camera access while it waits during movement.
 Native panels and the web interface read the same state.
 
 ```text
@@ -28,6 +30,10 @@ The lab VISCA listener stops its selected target when a controller connection en
 The lab follower accepts explicit simulator bus events.
 It requires fresh pan/tilt and zoom neutral input after a target change or stop.
 It does not read the actual Carbonite bus.
+A fixed numbered endpoint has no target selection change.
+It accepts movement without the lab neutral gate.
+Neutral stops do not expire in the movement queue.
+Repeated confirmed speed commands renew the watchdog without another HTTP request.
 
 One SerialBus object must serve each shared physical RS485 connection.
 The production Marshall command profile is not registered.

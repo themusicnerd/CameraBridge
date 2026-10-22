@@ -10,6 +10,7 @@ import socketserver
 import threading
 import time
 import uuid
+from .trace import record,context
 from .protocol import movement,preset
 
 class ViscaError(ValueError):
@@ -52,6 +53,7 @@ class PresetFollower:
     this class. Non-neutral input after a handover is rejected until both PT and
     zoom neutral have been observed in the new epoch.
     """
+    require_neutral=True
     def __init__(self,engine):
         self.engine=engine;self.lock=threading.RLock();self.selected=None;self.epoch=0
         self.neutral=set();self.axes={'pan':0,'tilt':0,'zoom':0,'focus':0}
@@ -85,16 +87,19 @@ class PresetFollower:
     def apply_motion(self,camera,kind,axes,epoch,received):
         with self.lock:
             if camera!=self.selected or epoch!=self.epoch:raise ViscaError('Stale selection or wrong camera',0x41)
-            if time.monotonic()-received>.3:raise ViscaError('Stale motion packet',0x41)
+            neutral=not any(axes.values())
+            if not neutral and time.monotonic()-received>.3:raise ViscaError('Stale motion packet',0x41)
             c=self.engine.cameras[camera]
-            with c['io']:
-                if time.monotonic()-received>.3:raise ViscaError('Motion expired while waiting for camera',0x41)
+            record('motion-io-wait',camera=camera,axes=axes)
+            with c['io'].priority(-20 if neutral else -10):
+                record('motion-io-acquired',camera=camera,age_ms=round((time.monotonic()-received)*1000,3))
+                if not neutral and time.monotonic()-received>.3:raise ViscaError('Motion expired while waiting for camera',0x41)
                 with self.engine.lock:
                     if self.generation!=c['generation']:
                         self.generation=c['generation'];self.neutral=set();self.axes=dict.fromkeys(self.axes,0)
                     neutral=not any(axes.values())
                     if neutral:self.neutral.add(kind)
-                    if not neutral and not {'pan_tilt','zoom'}<=self.neutral:raise ViscaError('Return positioner to neutral after handover',0x41)
+                    if self.require_neutral and not neutral and not {'pan_tilt','zoom'}<=self.neutral:raise ViscaError('Return positioner to neutral after handover',0x41)
                     if neutral and c['owner']!=self.owner and c['lease_until']>time.monotonic():
                         self.axes.update(axes)
                         self.update_status();self.engine.event(camera,'visca-idle-kept-owner')
@@ -113,7 +118,8 @@ class PresetFollower:
                 elif kind=='zoom':command=f'#Z{self.axes["zoom"]+50:02d}';expected='zS'+command[2:]
                 else:command=f'#F{self.axes["focus"]+50:02d}';expected='fS'+command[2:]
                 axis=command[:4] if command.startswith('#PTS') else command[:2]
-                if neutral and c['driver'].motion_state.get(axis)==command:
+                if c['driver'].motion_state.get(axis)==command:
+                    record('motion-skip-unchanged',camera=camera,command=command)
                     self.update_status();return
                 c['driver'].motion_state.pop(axis,None)
                 response=c['driver'].send(command)
@@ -129,6 +135,8 @@ class PresetFollower:
 
 class FixedCameraController(PresetFollower):
     """One numbered endpoint always controls one explicitly configured camera."""
+    # There is no camera-selection handover on a dedicated numbered port.
+    require_neutral=False
     def __init__(self,engine,camera):
         super().__init__(engine);self.bus_event('preset',camera)
 
@@ -137,7 +145,7 @@ class FixedCameraController(PresetFollower):
         with self.engine.lock:
             endpoints=self.engine.ross_status.setdefault('endpoints',{})
             endpoints[self.selected]={'number':self.engine.cameras[self.selected]['config'].get('number'),
-                'neutral_ready':{'pan_tilt','zoom'}<=self.neutral,'selection':'fixed endpoint'}
+                'neutral_ready':True,'selection':'fixed endpoint'}
             self.engine.ross_status.update(state='Configured PIVOTCam endpoints — equipment acceptance pending',preset_follow='fixed camera per TCP port')
 
 class LabViscaServer(socketserver.ThreadingTCPServer):
@@ -197,12 +205,15 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                         try:kind,data=decode(frame)
                         except (ValueError,IndexError):kind,data='invalid',{}
                         stamp=time.monotonic()
+                        record('pivot-rx',camera=self.server.camera,peer=self.client_address[0],port=self.server.server_address[1],hex=frame.hex(' '),kind=kind,decoded=data,received=stamp)
                         with condition:
                             # Coalesce motion only after the last non-motion barrier.
                             if kind in ('pan_tilt','zoom','focus'):
                                 for i in range(len(queue)-1,-1,-1):
                                     if queue[i][0] not in ('pan_tilt','zoom','focus'):break
-                                    if queue[i][0]==kind:del queue[i];break
+                                    if queue[i][0]==kind:
+                                        record('pivot-coalesced',camera=self.server.camera,hex=queue[i][2].hex(' '),received=queue[i][3],replacement=stamp)
+                                        del queue[i];break
                             if len(queue)>=32:raise ValueError('VISCA queue overflow')
                             queue.append((kind,data,frame,stamp,self.server.follower.epoch));condition.notify()
                     if len(buffer)>16:raise ValueError('Oversized unterminated VISCA packet')
@@ -217,6 +228,8 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                     if not queue:condition.wait(.1)
                     if not queue:continue
                     kind,data,frame,received,epoch=queue.popleft()
+                context(f'{self.server.camera}:{received:.9f}')
+                record('pivot-dispatch',camera=self.server.camera,hex=frame.hex(' '),kind=kind,received=received,age_ms=round((time.monotonic()-received)*1000,3))
                 self.server.engine.event(self.server.camera,'visca-rx',hex=frame.hex(' '))
                 try:
                     if kind=='invalid':raise ViscaError('Invalid frame')
@@ -249,10 +262,18 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                         result=self.server.engine.command(self.server.camera,'preset',dict(data,confirm='OVERWRITE' if data['store'] else ''),self.server.follower.owner)
                         self.server.follower.recalled[self.server.camera]=data['number']
                     self.request.sendall(bytes.fromhex('90 41 FF 90 51 FF'))
+                    record('pivot-accepted',camera=self.server.camera,kind=kind,total_ms=round((time.monotonic()-received)*1000,3))
                     self.server.engine.event(self.server.camera,'visca-lab-accepted',command=kind)
-                except ViscaError as exc:self.request.sendall(bytes([0x90,0x60,exc.code,0xff]))
-                except (ValueError,PermissionError,KeyError):self.request.sendall(bytes.fromhex('90 60 41 FF'))
-                except OSError:break
+                except ViscaError as exc:
+                    record('pivot-rejected',camera=self.server.camera,error=str(exc),code=exc.code)
+                    self.request.sendall(bytes([0x90,0x60,exc.code,0xff]))
+                except (ValueError,PermissionError,KeyError) as exc:
+                    record('pivot-rejected',camera=self.server.camera,error=str(exc),code=65)
+                    self.request.sendall(bytes.fromhex('90 60 41 FF'))
+                except OSError as exc:
+                    record('pivot-transport-error',camera=self.server.camera,error=str(exc))
+                    break
+                finally:context(None)
         finally:
             alive.clear()
             # A dropped controller connection cannot leave its selected target moving.

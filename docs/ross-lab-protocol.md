@@ -52,7 +52,9 @@ It disconnects unsupported initial framing without an invented reply.
 Frames end with FF and have a 16-byte limit.
 The reader supports fragmented and combined TCP data.
 The movement queue has limits and replaces older matching movement entries.
-Movement can be rejected after 300 milliseconds in the queue.
+Non-neutral movement can be rejected after 300 milliseconds in the queue.
+Neutral stops do not expire.
+Stops and movement have priority over polling.
 The watchdog interval is 900 milliseconds.
 Speed conversion is software normalization, not measured optical calibration.
 
@@ -64,6 +66,10 @@ A Preset event changes the lab target and stops the previous target.
 A Program event does not change the target.
 Both pan/tilt and zoom neutral input are required after a target change or stop.
 Old selection epochs cannot move the new target.
+
+A fixed numbered camera endpoint does not use the lab target selection gate.
+Pan/tilt input does not require a separate zoom-neutral packet on that endpoint.
+Repeated confirmed speed commands update the watchdog without another camera request.
 
 ## Equipment evidence
 

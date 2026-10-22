@@ -5,6 +5,7 @@ import time
 import urllib.request
 import urllib.parse
 import re
+from .trace import record
 from .panasonic_models import MODELS,capabilities
 from .protocol import panasonic_parameters, movement, preset
 
@@ -37,7 +38,10 @@ class Panasonic:
                 'display_divisor':self.capabilities['gain_display_divisor'] if name in ('red_gain','blue_gain') else 1}
 
     def send(self, command, response=True):
+        started=time.monotonic()
+        record('camera-request',target=self.url,command=command)
         with self.lock:
+            record('camera-lock',command=command,wait_ms=round((time.monotonic()-started)*1000,3))
             # Panasonic recommends a minimum 130ms between requests to one camera.
             delay = 0.13 - (time.monotonic() - self.last)
             if delay > 0:
@@ -45,14 +49,19 @@ class Panasonic:
             endpoint = 'aw_ptz' if command.startswith('#') else 'aw_cam'
             url = self.url + endpoint + '?' + urllib.parse.urlencode({'cmd':command,'res':int(response)})
             try:
+                record('camera-send',target=self.url,command=command,wait_ms=round((time.monotonic()-started)*1000,3),pacing_ms=round(max(0,delay)*1000,3))
                 with self.opener.open(url, timeout=self.timeout) as response:
                     data = response.read(513)
                 if len(data)>512:
                     raise ValueError('Oversized camera reply')
                 answer = data.decode('ascii').strip()
+                record('camera-reply',command=command,reply=answer,total_ms=round((time.monotonic()-started)*1000,3))
                 if answer.startswith(('ER','eR')):
                     raise PanasonicRejected(answer)
                 return answer
+            except Exception as exc:
+                record('camera-error',command=command,error=str(exc),total_ms=round((time.monotonic()-started)*1000,3))
+                raise
             finally:
                 self.last = time.monotonic()
 
