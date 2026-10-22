@@ -54,6 +54,14 @@ def main():
             camera=dict(roster['configuration']['cameras'][0],name='Packaged native setup check')
             saved=json.loads(api('/api/setup',{'token':login['token'],'operation':'save','revision':roster['revision'],'previous':camera['id'],'camera':camera}))
             assert saved['configuration']['cameras'][0]['name']==camera['name'] and saved['pending']
+            # The HTTP listener can start before the first camera poll completes.
+            deadline=time.monotonic()+15
+            while True:
+                state=json.loads(api('/api/state',{'token':login['token']}))
+                mode=state['cameras'][0]['parameters']['iris_auto']
+                if mode['confirmation']=='confirmed' and mode['value']==0:break
+                if time.monotonic()>deadline:raise RuntimeError('Packaged camera did not confirm manual iris mode')
+                time.sleep(.2)
             api('/api/command',{'token':login['token'],'camera':'pana1','action':'write','data':{'parameter':'iris','value':1400}})
             deadline=time.monotonic()+15
             while True:

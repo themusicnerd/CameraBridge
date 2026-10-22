@@ -1,5 +1,10 @@
 # Change record
 
+## 0.3.0rc10
+
+- Wait for confirmed camera mode before the packaged iris test.
+- Clarify downloaded panel names in TouchDrive installation Help.
+
 ## 0.3.0rc9
 
 - Add inline camera setup, automatic save and application, switches, and separate manufacturer/model lists.

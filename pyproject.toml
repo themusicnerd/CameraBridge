@@ -1,6 +1,6 @@
 [project]
 name = "camerabridge"
-version = "0.3.0rc9"
+version = "0.3.0rc10"
 description = "Native DashBoard camera-control panels and independent camera bridge lab"
 requires-python = ">=3.11"
 dependencies = []

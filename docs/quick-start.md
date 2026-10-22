@@ -88,6 +88,9 @@ The Carbonite input number and camera number can be different.
 14. Replace the old file if DashBoard asks.
 15. Open the saved file from the DashBoard File Navigator.
 
+If the browser adds a number to the file name, open that downloaded file.
+For example, the file can be `CameraBridge (1).grid`.
+
 The panel download contains the bridge URL for this network.
 Use the computer LAN address in this URL.
 Keep the `assets` folder with a panel that uses local images.

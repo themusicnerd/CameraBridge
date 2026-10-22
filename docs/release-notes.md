@@ -1,4 +1,4 @@
-# CameraBridge 0.3.0rc9
+# CameraBridge 0.3.0rc10
 
 Windows x64 and Linux x64 packages are available.
 
