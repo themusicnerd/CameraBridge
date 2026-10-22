@@ -3,6 +3,7 @@ import copy
 import json
 import xml.etree.ElementTree as ET
 from build_panels import HERE, node, script
+from backend.panasonic_models import MODELS,profile_id,label as model_label
 from aura_layout import BG, BLUE, label, button, entry
 
 
@@ -59,8 +60,8 @@ def build():
         entry(parent, 'setup_'+key, x, y+28, width, 48, None)
 
     value('name','Camera name',0,0,default='New camera')
-    value('profile','Manufacturer / model',438,0,default=0,choices=['Panasonic AW-HE130','Panasonic simulator','Sony PXW-Z200 / SDK','Marshall CV226 / pending','Marshall CV228 / pending','Marshall simulator'])
-    listener=script(root, "uProfile(); if(Number(uValue('profile'))>=3){uSet('pivot',0);if(Number(uValue('profile'))<5)uSet('enabled',0);}", 'onchange');listener.set('oid','setup_profile');listener.set('element','0')
+    value('profile','Manufacturer / model',438,0,default=0,choices=['Panasonic AW-HE130','Panasonic simulator','Sony PXW-Z200 / SDK','Marshall CV226 / pending','Marshall CV228 / pending','Marshall simulator']+[model_label(m) for m in MODELS if m!='AW-HE130'])
+    listener=script(root, "uProfile(); if(Number(uValue('profile'))>=3 && Number(uValue('profile'))<=5){uSet('pivot',0);if(Number(uValue('profile'))<5)uSet('enabled',0);}", 'onchange');listener.set('oid','setup_profile');listener.set('element','0')
     value('host','Camera IP / host',0,84)
     value('port','Camera port (Sony SDK uses its own transport)',438,84,default=80,low=1,high=65535)
     value('number','Camera number / PIVOTCam port = base + number',0,168,default=1,low=1,high=255)
@@ -158,7 +159,7 @@ var CB_MAKER=(function(nativeParams,nativeScript){
             child.append(element)
     node(meta,'timer',id='unified_tick',rate=200,autostart='true')
     node(meta,'timertask',timerid='unified_tick',tasktype='ogscript').text='uTick();'
-    api.text='\n'.join(wrappers)+'\nvar U_PANELS={Panasonic:CB_Panasonic,Marshall:CB_Marshall,Sony:CB_Sony};\n'+(HERE/'unified.js').read_text(encoding='utf-8')
+    api.text='\n'.join(wrappers)+'\nvar U_PANELS={Panasonic:CB_Panasonic,Marshall:CB_Marshall,Sony:CB_Sony};\n'+(HERE/'unified.js').read_text(encoding='utf-8').replace('__PANASONIC_PROFILES__',json.dumps([profile_id(m) for m in MODELS if m!='AW-HE130']))
     script(root,"uNew();uStatus('Set the bridge URL and sign in.');",'onload')
     script(root,'uClose();','onclose')
     path=HERE/'CameraBridge.grid';ET.indent(root);ET.ElementTree(root).write(path,encoding='utf-8',xml_declaration=True)

@@ -23,6 +23,8 @@ var cbHandover = false;
 var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
+var cbRanges = {};
+var cbCapabilities = {};
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 && new Date().getTime()<cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -107,10 +109,12 @@ function changed(key) {
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
+    if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
+    if(cbCapabilities.preset_max!==undefined && number>cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store && String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
     send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
@@ -135,7 +139,9 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        cbCapabilities=c.capabilities||{};
         if(CB_MANUFACTURER=='Panasonic') {
+            ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n<=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
@@ -145,12 +151,12 @@ function poll() {
         if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
-                var p=c.parameters[key];
-                if(CB_MANUFACTURER=='Sony' && key!='shutter' && key!='zoom' && p.supported && p.low<=p.high) {
+                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
+                if((CB_MANUFACTURER=='Sony' && key!='shutter' && key!='zoom' && p.supported || CB_MANUFACTURER=='Panasonic' && (key=='detail'||key=='wb_mode')) && p.low<=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
-                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' && !cbPending.hasOwnProperty(key) && (!cbEdit[key] || new Date().getTime()-cbEdit[key]>1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -193,6 +199,8 @@ def build(manufacturer,defs):
     return build_aura(manufacturer,defs)
 
 if __name__=='__main__':
+    from build_model_options import build as build_options
+    build_options()
     for manufacturer,defs in [('Panasonic',PANASONIC),('Marshall',MARSHALL_LAB),('Sony',SONY)]:print(build(manufacturer,defs))
     from unified_layout import build as build_unified
     print(build_unified())

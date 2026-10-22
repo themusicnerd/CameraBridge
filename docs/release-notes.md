@@ -1,33 +1,24 @@
-# CameraBridge 0.3.0rc7
+# CameraBridge 0.3.0rc8
 
-This is a development prerelease for Windows x64 and Linux x64.
-Physical camera acceptance is incomplete.
+This development prerelease supports Windows x64 and Linux x64.
+Production acceptance is incomplete.
 
 ## Changes
 
-- Fix Add camera when Camera setup was opened before sign-in.
-- Load setup automatically after administrator sign-in.
-- Add clear loading, retry, account access, and unsaved-change status.
-- Move the camera form before the roster and group network settings in a separate section.
-- Clear setup access when a session ends or the service restarts.
-- Add browser checks for the reported sign-in sequence and related failure paths.
+- Show one expandable row per camera, with a manufacturer image.
+- Keep camera setup available after administrator sign-in.
+- Add the Panasonic camera catalog used by the Bitfocus module.
+- Add model capabilities and control limits to backend feedback.
+- Add HE2 digital PTZ, iris, white balance, and shots 1 through 9.
+- Prevent HE2 focus commands and unsupported model controls.
+- Add the HE40 detail range and gain display scaling.
+- Treat mode-restricted replies separately from transport failures.
+- Confirm autofocus before accepting a rejected neutral focus command.
 
-- Add one native CameraBridge panel with camera setup and manufacturer control pages.
-- Add camera creation, edits, removal, Sony access, and saved-setup application in DashBoard.
-- Add PIVOTCam and TSL receiver setup in DashBoard.
-- Check setup revisions to prevent accidental changes from older open panels.
-- Stop the previous camera before changing control pages.
-- Keep the existing manufacturer panels available.
-
-- Add a native Sony SDK 2.02.00 adapter and local camera access setup.
-- Add Sony PXW-Z200 lens and paint controls with capability feedback.
-- Add a Sony native DashBoard panel and a touch web dashboard.
-- Add PIVOTCam lens and focus-mode translation for the Sony profile.
-- Add Panasonic red tally commands and independent lamp readback.
-- Add Sony SDK tally property handling with explicit unsupported-model feedback.
-- Add a per-camera tally option, enabled by default.
-- Add manual tally tests and a source-restricted TSL UMD 3.1 UDP receiver.
-- Keep release downloads separate from Actions artifact storage.
+HE40 hardware checks confirmed zoom feedback, white-balance memory control, gain feedback, and red tally feedback.
+The checks restored the starting zoom, white balance, tally state, and tally input setting.
+Zoom readback differed from the requested position by one native unit.
+The service reports actual feedback without inventing an exact match.
 
 ## Installation
 
@@ -35,13 +26,20 @@ Extract the complete platform archive.
 Keep the Sony helper and its libraries with the application.
 Check the supplied SHA-256 file before use.
 The packages are not signed by a publisher.
-See [installation](installation.md) and [Sony setup](sony-pxw-z200.md).
+See [installation](installation.md), [camera setup](camera-setup.md), and [Panasonic models](panasonic-models.md).
 
 ## Limits
 
-The PXW-Z200 SDK profile does not support external tally lamps or mechanical pan/tilt.
-Lens jog uses fixed speed and requires physical stop acceptance.
+A catalog entry does not mean every camera function is available.
+HE40 is the only Panasonic model tested on physical hardware for this release.
+Other models require hardware acceptance.
+Basic CGI controls depend on the model and camera mode.
+Advanced paint controls are restricted to verified command profiles.
+HE2 has digital PTZ and no focus control.
+HE2 absolute zoom position control is not available.
+Sony PXW-Z200 remains the implemented Sony SDK profile.
+FR7 and other Sony PTZ profiles are not included in this prerelease.
 Marshall hardware control and actual Preset-bus following remain incomplete.
 TSL 4 and TSL 5 are not supported.
-Physical Sony, Panasonic tally and Carbonite tally tests remain required.
+Physical Carbonite tally acceptance remains required.
 The documentation checks do not establish full ASD-STE100 compliance.

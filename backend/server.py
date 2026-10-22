@@ -16,6 +16,7 @@ from contextlib import closing
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlsplit,parse_qs
 from .core import Engine
+from .panasonic_models import MODELS as PANASONIC_MODELS
 
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 
@@ -108,7 +109,8 @@ def validate_config(c):
             if camera['driver']=='sony-sdk' and camera.get('model')!='PXW-Z200':raise ValueError('Unknown Sony profile')
             if camera['driver']=='marshall-pending' and camera.get('model') not in ('CV226','CV228'):raise ValueError('Unknown Marshall profile')
         if camera['driver']=='marshall-lab' and not camera.get('simulator'):raise ValueError('Marshall lab must be labelled simulator')
-        if camera['driver']=='panasonic' and camera['model']!='AW-HE130':raise ValueError('This release validates HE130 only; other model profiles pending')
+        if camera['driver']=='panasonic' and camera['model'] not in PANASONIC_MODELS:raise ValueError('Unknown Panasonic model profile')
+        if camera['driver']=='panasonic' and camera.get('simulator') and camera['model']!='AW-HE130':raise ValueError('The Panasonic simulator uses the HE130 profile')
         if camera['driver'] in ('panasonic','sony-sdk'):
             if camera.get('manufacturer')!=('Sony' if camera['driver']=='sony-sdk' else 'Panasonic'):raise ValueError('Driver/manufacturer mismatch')
             host=camera.get('host','')
@@ -171,7 +173,8 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=='/':self.send((ROOT/'web/admin.html').read_bytes(),mime='text/html; charset=utf-8');return
         if path=='/sony':self.send((ROOT/'web/sony.html').read_bytes(),mime='text/html; charset=utf-8');return
-        if path=='/assets/sony.png':self.send((ROOT/'dashboard/assets/sony.png').read_bytes(),mime='image/png');return
+        if path in ('/assets/sony.png','/assets/panasonic.png','/assets/marshall.png'):
+            self.send((ROOT/'dashboard/assets'/path.rsplit('/',1)[-1]).read_bytes(),mime='image/png');return
         if path=='/health':self.send({'service':'CameraBridge','mode':'LAB' if self.server.lab else 'hardware'});return
         token=self.headers.get('Authorization','').removeprefix('Bearer ')
         role=self.server.auth.role(token)

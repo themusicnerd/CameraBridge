@@ -1,5 +1,5 @@
 """AW-HE130 protocol subset. See docs/panasonic-aw-he130.md for provenance."""
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 import re
 
 @dataclass(frozen=True)
@@ -55,6 +55,21 @@ PANASONIC = {
         Parameter('detail','Detail: 0 off / 1 on',0,1,'ODT:','QDT','ODT:',1,10),
     ]
 }
+
+def panasonic_parameters(model='AW-HE130'):
+    """Model-specific wire values. Never infer a model from its IP address."""
+    if model == 'AW-HE130':return PANASONIC
+    from .panasonic_models import MODELS
+    if model not in MODELS:raise ValueError('Unknown Panasonic model profile')
+    result=dict(PANASONIC)
+    if MODELS[model] in ('HE40','HE42','UE70','HE50','HE60','HE120'):
+        result['detail']=replace(result['detail'],label='Detail: 0 off / 1 low / 2 high',high=2)
+    if MODELS[model] in ('HE40','HE42','UE70','HE50','HE60'):
+        for key in ('red_gain','blue_gain'):
+            result[key]=replace(result[key],label=key.replace('_',' ').title()+' (native: 150 = zero; 5 = one step)')
+    if model=='AW-HE2':
+        result['wb_mode']=replace(result['wb_mode'],high=8,allowed=tuple(range(9)),label='WB: ATW 0/3, A 1, B 2, 3200K 4, 5600K 5, 4500K 6, 6000K 7, 2800K 8')
+    return result
 
 def movement(pan=0, tilt=0, zoom=0, focus=0):
     for value in (pan,tilt,zoom,focus):

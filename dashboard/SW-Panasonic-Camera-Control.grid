@@ -16,6 +16,8 @@ var cbHandover = false;
 var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
+var cbRanges = {};
+var cbCapabilities = {};
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -100,10 +102,12 @@ function changed(key) {
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
+    if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
+    if(cbCapabilities.preset_max!==undefined &amp;&amp; number&gt;cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
     send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
@@ -128,7 +132,9 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        cbCapabilities=c.capabilities||{};
         if(CB_MANUFACTURER=='Panasonic') {
+            ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
@@ -138,12 +144,12 @@ function poll() {
         if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
-                var p=c.parameters[key];
-                if(CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported &amp;&amp; p.low&lt;=p.high) {
+                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
+                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='detail'||key=='wb_mode')) &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
-                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -183,14 +189,7 @@ function tick() {
       <param oid="focus" name="FOCUS POSITION" type="INT32" value="1365" access="0" constrainttype="INT_RANGE" constraint="1365;4095;" />
       <param oid="red_gain" name="RED GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
       <param oid="blue_gain" name="BLUE GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
-      <param oid="wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_CHOICE">
-        <constraint key="0">ATW</constraint>
-        <constraint key="2">AWB A</constraint>
-        <constraint key="3">AWB B</constraint>
-        <constraint key="4">3200K</constraint>
-        <constraint key="5">5600K</constraint>
-        <constraint key="9">VAR</constraint>
-      </param>
+      <param oid="wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;9;" />
       <param oid="detail" name="DETAIL" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
     </params>
     <timer id="bridge_tick" rate="200" autostart="true" />
@@ -486,7 +485,7 @@ function tick() {
       </abs>
       <abs left="700" top="12" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="WHITE BALANCE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
-        <param oid="wb_mode" left="16" top="50" width="442" height="56" showlabel="false" widget="7" style="size:18;" />
+        <param oid="wb_mode" left="16" top="50" width="442" height="56" showlabel="false" widget="6" style="size:18;" />
         <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_wb_mode" />
       </abs>
       <abs left="700" top="176" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
@@ -509,7 +508,7 @@ function tick() {
         </button>
         <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_focus_auto" />
       </abs>
-      <label name="R/B gain: −150..+150 · enable a manual white-balance memory to adjust." left="12" top="528" width="1162" height="30" style="fg#a9bbc8;size:13;txt-align:west;" />
+      <label name="White balance values depend on the selected model." left="12" top="528" width="1162" height="30" style="fg#a9bbc8;size:13;txt-align:west;" id="paint_help" />
     </abs>
     <abs id="page_td1c" name="TD1C" width="1186" height="564" style="bg#25282e;">
       <label name="TOUCHDRIVE / CARBONITE CAMERA BRIDGE" left="16" top="12" width="1154" height="32" style="fg#e2e4e9;size:19;txt-align:west;" />

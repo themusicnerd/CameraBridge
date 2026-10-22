@@ -1,5 +1,16 @@
 # Change record
 
+## 0.3.0rc8
+
+- Add expandable camera rows and manufacturer identification images.
+- Add the Panasonic model catalog from the Bitfocus module.
+- Add HE2 digital PTZ, iris, white balance, and its nine-shot limit.
+- Disable controls that are unavailable in a model profile.
+- Add HE40 detail range and gain display scaling.
+- Handle mode-restricted feedback and autofocus neutral commands.
+- Verify HE40 zoom, white balance, gain feedback, and red tally on real hardware.
+- Preserve the observed camera settings after hardware checks.
+
 ## 0.3.0rc7
 
 - Load camera setup automatically after administrator sign-in.

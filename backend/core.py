@@ -4,7 +4,7 @@ import json
 import pathlib
 import threading
 import time
-from .protocol import PANASONIC,Parameter
+from .protocol import PANASONIC,Parameter,panasonic_parameters
 from .drivers import Panasonic
 from .sony import Sony,SONY
 
@@ -56,8 +56,8 @@ class Engine:
             sony=c['driver']=='sony-sdk'
             if not lab and not sony and c['driver']!='panasonic':
                 raise ValueError('Unsupported production driver; no guessed Marshall serial commands')
-            definitions=SONY if sony else MARSHALL_LAB if lab else PANASONIC
-            driver=Sony(c,storage) if sony else LabMarshall() if lab else Panasonic(c['host'],c.get('port',80))
+            definitions=SONY if sony else MARSHALL_LAB if lab else panasonic_parameters(c.get('model','AW-HE130'))
+            driver=Sony(c,storage) if sony else LabMarshall() if lab else Panasonic(c['host'],c.get('port',80),model=c.get('model','AW-HE130'))
             self.cameras[c['id']]={'config':c,'driver':driver,'defs':definitions,'io':threading.RLock(),
                 'params':{k:{'value':None,'requested':None,'confirmation':'unknown','last_query':None,'last_command':None,'error':None} for k in definitions},
                 'pending':{},'owner':None,'lease_until':0,'generation':0,'motion_deadline':0,'moving':False,'locked':False,'error':None,
@@ -86,9 +86,10 @@ class Engine:
                     status='stale' if age is not None and age>max(10,self.config.get('poll_seconds',4)*3) and v['confirmation']=='confirmed' else v['confirmation']
                     parameters[key]=dict(c['defs'][key].metadata(),**v)
                     parameters[key].update(confirmation=status,age_seconds=age)
-                    if isinstance(c['driver'],Sony):parameters[key].update(c['driver'].metadata(key))
+                    if isinstance(c['driver'],(Sony,Panasonic)):parameters[key].update(c['driver'].metadata(key))
                 result.append(dict(c['config'],parameters=parameters,preset_names=dict(self.preset_names.get(cid,{})),health=c['health'],error=c['error'],locked=c['locked'],
                     owner=c['owner'] if c['lease_until']>time.monotonic() else None,generation=c['generation'],moving=c['moving'],active_preset=c['active_preset'],tally=dict(c['tally'])))
+                if isinstance(c['driver'],Panasonic):result[-1]['capabilities']=dict(c['driver'].capabilities)
             return {'revision':self.revision,'time':now,'cameras':result,'ross':dict(self.ross_status),'events':list(self.events)}
 
     def claim(self,c,owner):
@@ -124,6 +125,7 @@ class Engine:
                 return {'status':'name saved'}
             if action=='write':
                 key=data['parameter'];value=c['defs'][key].validate(data['value'])
+                if isinstance(c['driver'],Panasonic) and not c['driver'].metadata(key)['writable']:raise ValueError('Control unavailable in this camera profile')
                 if isinstance(c['driver'],Sony) and data.get('snap') is True:value=c['defs'][key].validate(c['driver'].snap(key,value))
                 self.check_mode(c,key)
                 c['pending'][key]=(value,c['generation'],owner)
@@ -135,6 +137,9 @@ class Engine:
                 if isinstance(c['driver'],Sony) and (data.get('pan',0) or data.get('tilt',0)):raise ValueError('PXW-Z200 has no pan/tilt motors')
                 if data.get('generation')!=c['generation']:raise ValueError('Stale motion generation; claim again')
                 axes={k:data.get(k,0) for k in ('pan','tilt','zoom','focus')}
+                if isinstance(c['driver'],Panasonic):
+                    for keys,cap in [(('pan','tilt'),'pan_tilt'),(('zoom',),'zoom_jog'),(('focus',),'focus_jog')]:
+                        if any(axes[k] for k in keys) and not c['driver'].capabilities[cap]:raise ValueError('Camera does not support '+cap)
                 from .protocol import movement
                 movement(**axes)
                 if axes['focus']:self.check_mode(c,'focus')

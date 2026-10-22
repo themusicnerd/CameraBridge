@@ -52,6 +52,10 @@ def main():
                 expect(page.locator('#status')).to_contain_text('Authenticated')
                 expect(page.locator('#draftstatus')).to_contain_text('Setup ready')
                 expect(page.locator('#addcamera')).to_be_enabled()
+                expect(page.locator('#roster details[open]')).to_have_count(0)
+                for logo in page.locator('#roster summary img').all():
+                    expect(logo).to_be_visible()
+                    assert logo.evaluate('(img)=>img.complete && img.naturalWidth>0')
                 expect(page.locator('#applycameras')).to_be_disabled()
                 expect(page.locator('#sessionstatus')).to_have_text('Signed in · admin')
                 if args.screenshots:
@@ -93,9 +97,11 @@ def main():
                 page.get_by_role('button',name='Save camera to setup',exact=True).click();expect(page.locator('#roster')).to_contain_text('Camera 7')
                 page.locator('#addcamera').click();page.locator('#camnumber').fill('7');page.locator('#camname').fill('Real Panasonic');page.locator('#camhost').fill('192.0.2.30');page.get_by_role('button',name='Save camera to setup',exact=True).click()
                 expect(page.locator('#status')).to_contain_text('already assigned')
-                page.locator('#camnumber').fill('8');page.locator('#campivot').check();page.get_by_role('button',name='Save camera to setup',exact=True).click()
+                page.locator('#camnumber').fill('8');page.locator('#camprofile').select_option('panasonic:AW-HE40');page.locator('#campivot').check();page.get_by_role('button',name='Save camera to setup',exact=True).click()
+                page.locator('#roster article').filter(has_text='Camera 1 ·').locator('summary').click()
                 page.locator('#roster article').filter(has_text='Camera 1 ·').get_by_role('button',name='Edit',exact=True).click();page.locator('#camnumber').fill('4');page.get_by_role('button',name='Save camera to setup',exact=True).click()
                 page.on('dialog',lambda dialog:dialog.accept())
+                page.locator('#roster article').filter(has_text='Camera 2 ·').locator('summary').click()
                 page.locator('#roster article').filter(has_text='Camera 2 ·').get_by_role('button',name='Remove',exact=True).click()
                 page.locator('#networksetup summary').click()
                 page.locator('#pivotenabled').check();page.locator('#pivotbind').fill('127.0.0.1');page.locator('#pivotcontroller').fill('127.0.0.1')
@@ -107,6 +113,8 @@ def main():
                 assert {c['number'] for c in saved['cameras']}=={3,4,7,8}
                 assert next(c for c in saved['cameras'] if c['number']==4)['id']=='pana1'
                 assert saved['pivotcam']['base_port']==19010
+                assert next(c for c in saved['cameras'] if c['number']==8)['model']=='AW-HE40'
+                assert next(c for c in saved['cameras'] if c['number']==8)['driver']=='panasonic'
                 assert next(c for c in saved['cameras'] if c['number']==7)['enabled']
                 assert not next(c for c in saved['cameras'] if c['number']==7)['tally_enabled']
                 assert next(c for c in saved['cameras'] if c['number']==4)['tally_enabled']

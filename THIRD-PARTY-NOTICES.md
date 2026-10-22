@@ -36,3 +36,11 @@ CameraBridge does not grant rights beyond the applicable Sony license.
 The bundled open source notices cover libssh2, libusb and OpenSSL.
 Sony's original SDK download includes the corresponding open source archives.
 See [Sony's SDK license and downloads](https://support.d-imaging.sony.co.jp/app/sdk/licenseagreement_d/en-US.html).
+
+## Bitfocus Panasonic catalog
+
+The Panasonic model names and family grouping derive from the Bitfocus Panasonic camera module.
+The module uses the MIT license, copyright 2018 Bitfocus AS.
+Read the [included license](docs/third-party/bitfocus-panasonic-MIT.txt).
+CameraBridge implements its own Python transport and control logic.
+The reference project is [companion-module-panasonic-ptz](https://github.com/bitfocus/companion-module-panasonic-ptz).

@@ -25,6 +25,8 @@ var cbHandover = false;
 var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
+var cbRanges = {};
+var cbCapabilities = {};
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -109,10 +111,12 @@ function changed(key) {
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
+    if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
+    if(cbCapabilities.preset_max!==undefined &amp;&amp; number&gt;cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
     send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
@@ -137,7 +141,9 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        cbCapabilities=c.capabilities||{};
         if(CB_MANUFACTURER=='Panasonic') {
+            ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
@@ -147,12 +153,12 @@ function poll() {
         if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
-                var p=c.parameters[key];
-                if(CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported &amp;&amp; p.low&lt;=p.high) {
+                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
+                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='detail'||key=='wb_mode')) &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
-                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -217,6 +223,8 @@ var cbHandover = false;
 var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
+var cbRanges = {};
+var cbCapabilities = {};
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -301,10 +309,12 @@ function changed(key) {
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
+    if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
+    if(cbCapabilities.preset_max!==undefined &amp;&amp; number&gt;cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
     send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
@@ -329,7 +339,9 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        cbCapabilities=c.capabilities||{};
         if(CB_MANUFACTURER=='Panasonic') {
+            ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
@@ -339,12 +351,12 @@ function poll() {
         if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
-                var p=c.parameters[key];
-                if(CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported &amp;&amp; p.low&lt;=p.high) {
+                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
+                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='detail'||key=='wb_mode')) &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
-                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -409,6 +421,8 @@ var cbHandover = false;
 var cbTouchEnabled = false;
 var cbNoticeUntil = 0;
 var cbConstraints = {};
+var cbRanges = {};
+var cbCapabilities = {};
 function status(text) {
     if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
     ogscript.rename('status', text);
@@ -493,10 +507,12 @@ function changed(key) {
 }
 function adjust(key,delta,low,high) {
     if(!cbToken){status('Sign in before adjustment');return;}
+    if(cbRanges[key]){low=cbRanges[key][0];high=cbRanges[key][1];}
     var value=Number(params.getValue(key,0));
     params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
 }
 function preset(number) {
+    if(cbCapabilities.preset_max!==undefined &amp;&amp; number&gt;cbCapabilities.preset_max){status('Shot unavailable for this camera model');return;}
     var store=Number(params.getValue('store',0))==1;
     if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
     send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
@@ -521,7 +537,9 @@ function poll() {
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        cbCapabilities=c.capabilities||{};
         if(CB_MANUFACTURER=='Panasonic') {
+            ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
             ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
@@ -531,12 +549,12 @@ function poll() {
         if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
-                var p=c.parameters[key];
-                if(CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported &amp;&amp; p.low&lt;=p.high) {
+                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
+                if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='detail'||key=='wb_mode')) &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
                 }
-                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
@@ -579,7 +597,7 @@ function tick() {
 var U_PANELS={Panasonic:CB_Panasonic,Marshall:CB_Marshall,Sony:CB_Sony};
 // Shared native camera setup. Passwords are cleared before each HTTP request.
 var U={token:'',role:'',config:null,revision:'',index:0,editing:'',maker:'',switching:false};
-var U_PROFILES=['panasonic','panasonic-sim','sony-sdk','marshall-CV226','marshall-CV228','marshall-lab'];
+var U_PROFILES=['panasonic','panasonic-sim','sony-sdk','marshall-CV226','marshall-CV228','marshall-lab'].concat(["panasonic:AW-HE35", "panasonic:AW-HE38", "panasonic:AW-HE40", "panasonic:AW-HE48", "panasonic:AW-HE58", "panasonic:AW-HE65", "panasonic:AW-HE70", "panasonic:AW-HN38", "panasonic:AW-HN40", "panasonic:AW-HN65", "panasonic:AW-HN70", "panasonic:AW-SFU01", "panasonic:AW-HE42", "panasonic:AW-HE68", "panasonic:AW-HE75", "panasonic:AW-UE63", "panasonic:AW-UE65", "panasonic:AW-UE70", "panasonic:AW-UN70", "panasonic:AW-HE145", "panasonic:AW-UE100", "panasonic:AW-UE150", "panasonic:AW-UE155", "panasonic:AW-UN145", "panasonic:AW-HE50", "panasonic:AW-HEF5", "panasonic:AW-HE60", "panasonic:AW-HE120", "panasonic:AW-HR140", "panasonic:AW-HE2", "panasonic:AW-UE4", "panasonic:AK-UB300", "panasonic:AG-CX350", "panasonic:AG-CX200", "panasonic:AJ-UPX360", "panasonic:AJ-CX4000", "panasonic:AJ-UPX900", "panasonic:Other"]);
 function uValue(key){return params.getValue('setup_'+key,0);}
 function uSet(key,value){params.setValue('setup_'+key,0,value);}
 function uStatus(text){ogscript.rename('unified_status',String(text));}
@@ -624,7 +642,7 @@ function uPick(slot){if(!U.config)return;var index=Math.floor(U.index/8)*8+slot;
 function uListPage(delta){if(!U.config||!U.config.cameras.length)return;U.index=(Math.floor(U.index/8)*8+delta*8+Math.ceil(U.config.cameras.length/8)*8)%(Math.ceil(U.config.cameras.length/8)*8);uRoster();}
 function uProfile(){
     var p=U_PROFILES[Number(uValue('profile'))];
-    ogscript.rename('setup_profile_help',p=='sony-sdk'?'Sony: save the camera, then set access on the Camera access page.':p.indexOf('marshall-CV')==0?'Marshall hardware control is pending. Save this profile disabled.':p=='marshall-lab'?'Marshall simulator only. No serial packets are sent.':'Panasonic AW-HE130 CGI. Camera HTTP authentication is not implemented in this driver.');
+    ogscript.rename('setup_profile_help',p=='sony-sdk'?'Sony: save the camera, then set access on the Camera access page.':p.indexOf('marshall-CV')==0?'Marshall hardware control is pending. Save this profile disabled.':p=='marshall-lab'?'Marshall simulator only. No serial packets are sent.':'Panasonic CGI compatibility profile. HE2: digital PTZ, shots 1–9, no focus. Unsupported controls stay read-only. HTTP authentication is not implemented.');
 }
 function uNew(){
     U.editing='';var used={},number=1;
@@ -635,7 +653,7 @@ function uNew(){
 }
 function uEdit(){
     if(!U.config||!U.config.cameras[U.index])return;var c=U.config.cameras[U.index];U.editing=c.id;
-    var p=c.driver=='panasonic'?(c.simulator?'panasonic-sim':'panasonic'):c.driver=='marshall-pending'?'marshall-'+c.model:c.driver;
+    var p=c.driver=='panasonic'?(c.simulator?'panasonic-sim':c.model=='AW-HE130'?'panasonic':'panasonic:'+c.model):c.driver=='marshall-pending'?'marshall-'+c.model:c.driver;
     var values={name:c.name,profile:Math.max(0,U_PROFILES.indexOf(p)),host:c.host||'',port:c.port||80,number:c.number,input:c.carbonite_input,enabled:c.enabled===false?0:1,pivot:c.pivotcam?1:0,store:c.allow_store?1:0,tally:c.tally_enabled===false?0:1,address:c.tally_address===undefined?Math.min(c.carbonite_input,126):c.tally_address,remove:'',access_user:'',access_password:'',fingerprint:'',terms:0};
     for(var key in values)uSet(key,values[key]);uProfile();uStatus('Editing '+c.name+'. Access passwords are not read back.');
 }
@@ -647,9 +665,9 @@ function uSave(){
     c.number=Number(uValue('number'));c.id=U.editing||'camera_'+c.number;
     c.name=String(uValue('name')).replace(/^\s+|\s+$/g,'');
     if(!c.name){uStatus('Enter a camera name.');return;}
-    c.driver=p=='panasonic-sim'?'panasonic':p.indexOf('marshall-CV')==0?'marshall-pending':p;
+    c.driver=p.indexOf('panasonic')==0?'panasonic':p.indexOf('marshall-CV')==0?'marshall-pending':p;
     c.manufacturer=p=='sony-sdk'?'Sony':p.indexOf('marshall')==0?'Marshall':'Panasonic';
-    c.model=p=='sony-sdk'?'PXW-Z200':p=='marshall-CV226'?'CV226':c.manufacturer=='Marshall'?'CV228':'AW-HE130';
+    c.model=p=='sony-sdk'?'PXW-Z200':p=='marshall-CV226'?'CV226':c.manufacturer=='Marshall'?'CV228':p.indexOf('panasonic:')==0?p.substring(10):'AW-HE130';
     c.host=String(uValue('host')).replace(/^\s+|\s+$/g,'');c.port=Number(uValue('port'));c.carbonite_input=Number(uValue('input'));
     c.simulator=p=='panasonic-sim'||p=='marshall-lab';c.enabled=Number(uValue('enabled'))==1;c.pivotcam=Number(uValue('pivot'))==1;
     c.allow_store=Number(uValue('store'))==1;c.tally_enabled=Number(uValue('tally'))==1;c.tally_address=Number(uValue('address'));
@@ -710,6 +728,44 @@ function uBridgeSave(){
         <constraint key="3">Marshall CV226 / pending</constraint>
         <constraint key="4">Marshall CV228 / pending</constraint>
         <constraint key="5">Marshall simulator</constraint>
+        <constraint key="6">Panasonic AW-HE35</constraint>
+        <constraint key="7">Panasonic AW-HE38</constraint>
+        <constraint key="8">Panasonic AW-HE40</constraint>
+        <constraint key="9">Panasonic AW-HE48</constraint>
+        <constraint key="10">Panasonic AW-HE58</constraint>
+        <constraint key="11">Panasonic AW-HE65</constraint>
+        <constraint key="12">Panasonic AW-HE70</constraint>
+        <constraint key="13">Panasonic AW-HN38</constraint>
+        <constraint key="14">Panasonic AW-HN40</constraint>
+        <constraint key="15">Panasonic AW-HN65</constraint>
+        <constraint key="16">Panasonic AW-HN70</constraint>
+        <constraint key="17">Panasonic AW-HE40 with AW-SFU01 upgrade</constraint>
+        <constraint key="18">Panasonic AW-HE42</constraint>
+        <constraint key="19">Panasonic AW-HE68</constraint>
+        <constraint key="20">Panasonic AW-HE75</constraint>
+        <constraint key="21">Panasonic AW-UE63</constraint>
+        <constraint key="22">Panasonic AW-UE65</constraint>
+        <constraint key="23">Panasonic AW-UE70</constraint>
+        <constraint key="24">Panasonic AW-UN70</constraint>
+        <constraint key="25">Panasonic AW-HE145</constraint>
+        <constraint key="26">Panasonic AW-UE100</constraint>
+        <constraint key="27">Panasonic AW-UE150</constraint>
+        <constraint key="28">Panasonic AW-UE155</constraint>
+        <constraint key="29">Panasonic AW-UN145</constraint>
+        <constraint key="30">Panasonic AW-HE50</constraint>
+        <constraint key="31">Panasonic AW-HE50 with AW-HEF5 upgrade</constraint>
+        <constraint key="32">Panasonic AW-HE60</constraint>
+        <constraint key="33">Panasonic AW-HE120</constraint>
+        <constraint key="34">Panasonic AW-HR140</constraint>
+        <constraint key="35">Panasonic AW-HE2 — digital PTZ</constraint>
+        <constraint key="36">Panasonic AW-UE4 — digital PTZ</constraint>
+        <constraint key="37">Panasonic AK-UB300</constraint>
+        <constraint key="38">Panasonic AG-CX350</constraint>
+        <constraint key="39">Panasonic AG-CX200</constraint>
+        <constraint key="40">Panasonic AJ-UPX360</constraint>
+        <constraint key="41">Panasonic AJ-CX4000</constraint>
+        <constraint key="42">Panasonic AJ-UPX900</constraint>
+        <constraint key="43">Panasonic — other CGI camera (verify controls)</constraint>
       </param>
       <param oid="setup_host" name="Camera IP / host" access="1" type="STRING" value="" widget="3" maxlength="1024" />
       <param oid="setup_port" name="Camera port (Sony SDK uses its own transport)" access="1" type="INT32" value="80" constrainttype="INT_RANGE" constraint="1;65535;" widget="5" />
@@ -779,14 +835,7 @@ function uBridgeSave(){
       <param oid="panasonic_focus" name="FOCUS POSITION" type="INT32" value="1365" access="0" constrainttype="INT_RANGE" constraint="1365;4095;" />
       <param oid="panasonic_red_gain" name="RED GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
       <param oid="panasonic_blue_gain" name="BLUE GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
-      <param oid="panasonic_wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_CHOICE">
-        <constraint key="0">ATW</constraint>
-        <constraint key="2">AWB A</constraint>
-        <constraint key="3">AWB B</constraint>
-        <constraint key="4">3200K</constraint>
-        <constraint key="5">5600K</constraint>
-        <constraint key="9">VAR</constraint>
-      </param>
+      <param oid="panasonic_wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;9;" />
       <param oid="panasonic_detail" name="DETAIL" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
       <param oid="marshall_bridge" name="Backend URL" type="STRING" value="http://127.0.0.1:8088" widget="3" access="1" maxlength="256" />
       <param oid="marshall_username" name="Username" type="STRING" value="" widget="3" access="1" maxlength="256" />
@@ -1278,7 +1327,7 @@ function uBridgeSave(){
           </abs>
           <abs left="700" top="12" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
             <label name="WHITE BALANCE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
-            <param oid="panasonic_wb_mode" left="16" top="50" width="442" height="56" showlabel="false" widget="7" style="size:18;" />
+            <param oid="panasonic_wb_mode" left="16" top="50" width="442" height="56" showlabel="false" widget="6" style="size:18;" />
             <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_wb_mode" />
           </abs>
           <abs left="700" top="176" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
@@ -1301,7 +1350,7 @@ function uBridgeSave(){
             </button>
             <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_focus_auto" />
           </abs>
-          <label name="R/B gain: −150..+150 · enable a manual white-balance memory to adjust." left="12" top="528" width="1162" height="30" style="fg#a9bbc8;size:13;txt-align:west;" />
+          <label name="White balance values depend on the selected model." left="12" top="528" width="1162" height="30" style="fg#a9bbc8;size:13;txt-align:west;" id="panasonic_paint_help" />
         </abs>
         <abs id="panasonic_page_td1c" name="TD1C" width="1186" height="564" style="bg#25282e;">
           <label name="TOUCHDRIVE / CARBONITE CAMERA BRIDGE" left="16" top="12" width="1154" height="32" style="fg#e2e4e9;size:19;txt-align:west;" />
@@ -1850,7 +1899,7 @@ function uBridgeSave(){
       <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#e2e4e9;size:14;txt-align:west;" id="sony_status" />
     </abs>
   </tab>
-  <ogscript handles="onchange" oid="setup_profile" element="0">uProfile(); if(Number(uValue('profile'))&gt;=3){uSet('pivot',0);if(Number(uValue('profile'))&lt;5)uSet('enabled',0);}</ogscript>
+  <ogscript handles="onchange" oid="setup_profile" element="0">uProfile(); if(Number(uValue('profile'))&gt;=3 &amp;&amp; Number(uValue('profile'))&lt;=5){uSet('pivot',0);if(Number(uValue('profile'))&lt;5)uSet('enabled',0);}</ogscript>
   <ogscript handles="onload">uNew();uStatus('Set the bridge URL and sign in.');</ogscript>
   <ogscript handles="onclose">uClose();</ogscript>
 </abs>

@@ -63,7 +63,7 @@ def build(manufacturer,defs):
         node(params,'param',oid=oid,name=name,type='INT32',value=value,access=1,constrainttype='INT_RANGE',constraint=f'{low};{high};')
     for key,p in defs.items():
         n=node(params,'param',oid=key,name=SHORT.get(key,p.label),type='INT32',value=p.low,access=0)
-        if p.allowed:
+        if p.allowed and not (pana and key=='wb_mode'):
             n.set('constrainttype','INT_CHOICE')
             choices={0:'ATW',2:'AWB A',3:'AWB B',4:'3200K',5:'5600K',9:'VAR'} if key=='wb_mode' and pana else {}
             for v in p.allowed:node(n,'constraint',key=v).text=choices.get(v,str(v))
@@ -128,12 +128,12 @@ def build(manufacturer,defs):
         for i,key in enumerate(['red_gain','blue_gain','detail']):vertical(paint,key,defs[key],12+i*224,12,208,500)
         for i,key in enumerate(['wb_mode','iris_auto','focus_auto']):
             box=card(paint,700,12+i*164,474,148);label(box,SHORT[key],16,10,442,28,size=17)
-            if key=='wb_mode':entry(box,key,16,50,442,56,7)
+            if key=='wb_mode':entry(box,key,16,50,442,56,6)
             else:
                 button(box,'Manual',16,50,214,f"send('write',{{parameter:'{key}',value:0}},null);",56)
                 button(box,'Auto',244,50,214,f"send('write',{{parameter:'{key}',value:1}},null);",56)
             feedback(box,key,16,114,442)
-        label(paint,'R/B gain: −150..+150 · enable a manual white-balance memory to adjust.',12,528,1162,30,colour='a9bbc8',size=13)
+        label(paint,'White balance values depend on the selected model.',12,528,1162,30,'paint_help',colour='a9bbc8',size=13)
         td=content['TD1C'];label(td,'TOUCHDRIVE / CARBONITE CAMERA BRIDGE',16,12,1154,32,size=19)
         label(td,'Connection not verified',16,60,1154,52,'ross_state')
         for i,text in enumerate(['Physical positioner and native shot commands reach the development simulator.',

@@ -17,7 +17,7 @@
 
 Administrator sign-in opens camera setup and loads the camera list automatically.
 Wait for the setup-ready message before selecting **Add camera**.
-The camera form appears before the camera cards.
+The camera form appears before the camera rows.
 Saving a camera to the draft does not connect it immediately.
 Select **Save and restart** to apply the draft.
 Sign in again after the service restarts.
@@ -27,7 +27,9 @@ Operator accounts cannot change camera setup.
 Sign-out clears the local draft and hides its editor.
 Open **Switcher and tally network settings** to change the receiver settings.
 
-The real Panasonic profile supports AW-HE130 CGI.
+The Panasonic catalog includes AW-HE2 and the models listed by the Bitfocus module.
+See the [model and control limits](panasonic-models.md).
+Select the row arrow to show the camera assignments and Edit and Remove buttons.
 The camera port is normally 80 for that profile.
 The camera connection port is separate from the PIVOTCam listening port.
 Sony setup uses the SDK adapter and a separate local camera access form.
