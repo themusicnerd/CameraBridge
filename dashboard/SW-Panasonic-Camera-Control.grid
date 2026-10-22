@@ -212,7 +212,7 @@ function tick() {
     <reveal id="nav_ptz" name="PTZ" targetid="page_ptz" left="350" top="12" width="104" height="56" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" />
     <reveal id="nav_presets" name="Presets" targetid="page_presets" left="462" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
     <reveal id="nav_paint" name="Paint" targetid="page_paint" left="574" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
-    <reveal id="nav_td1c" name="TD1C" targetid="page_td1c" left="686" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+    <reveal id="nav_td1c" name="TouchDrive" targetid="page_td1c" left="686" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
     <reveal id="nav_config" name="Config" targetid="page_config" left="798" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
     <abs id="bridge_launcher" left="920" top="12" width="180" height="56">
       <help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;">&lt;html&gt;Set the backend URL on Config. Select Open CameraBridge again after feedback loads.&lt;/html&gt;</help>

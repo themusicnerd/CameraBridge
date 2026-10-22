@@ -79,7 +79,7 @@ def build(manufacturer,defs):
     label(header,'CameraBridge / '+manufacturer,16,10,325,28,size=21)
     label(header,'AW-HE130 · PTZ & paint' if pana else 'CV226 / CV228 · paint & setup',16,45,325,24,colour='abb1bd',size=14)
     pages=['PTZ','Presets','Paint','TD1C','Config'] if pana else ['Paint','Image','Exposure','OSD','Config']
-    for i,name in enumerate(pages):node(header,'reveal',id='nav_'+name.lower(),name=name,targetid='page_'+name.lower(),left=350+i*112,top=12,width=104,height=56,style=f'bg#{PURPLE if i==0 else BUTTON};fg#ffffff;bdr:none;size:16;')
+    for i,name in enumerate(pages):node(header,'reveal',id='nav_'+name.lower(),name='TouchDrive' if name=='TD1C' else name,targetid='page_'+name.lower(),left=350+i*112,top=12,width=104,height=56,style=f'bg#{PURPLE if i==0 else BUTTON};fg#ffffff;bdr:none;size:16;')
     launcher=node(header,'abs',id='bridge_launcher',left=920,top=12,width=180,height=56)
     help_button=node(launcher,'help',id='open_bridge',left=0,top=0,width=180,height=56,name='Open setup',title='CameraBridge setup',popupwidth=600,popupheight=180,style=f'bg#{BLUE};fg#ffffff;size:16;')
     help_button.text='<html>Set the backend URL on Config. Select Open CameraBridge again after feedback loads.</html>' 
