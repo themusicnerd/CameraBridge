@@ -1,5 +1,10 @@
 # Change record
 
+## 0.3.0rc13
+
+- Use the native global range-constraint API supported by TouchDrive DashBoard.
+- Keep all feedback fields updating and handle empty replies.
+
 ## 0.3.0rc12
 
 - Parse HE40 OGR and OGB gain query replies, as confirmed on the camera.

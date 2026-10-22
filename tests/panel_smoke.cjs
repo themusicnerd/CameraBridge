@@ -16,7 +16,7 @@ const decode = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g
     const labels={},inflight=[],access={},opened=[];
     const context=vm.createContext({
       console,JSON,Date,Math,String,Number,encodeURIComponent,
-      params:{getValue:(k)=>values[k],setValue:(k,i,v)=>{assert.equal(access[k],1,`feedback must unlock local parameter ${k} before setValue`);values[k]=v;},setAccess:(k,v)=>{access[k]=v;},getParam:k=>({replaceConstraint:r=>{assert.ok(xml.includes('oid="'+k+'"'));assert.match(r,/^-?\d+;-?\d+;$/);}})},
+      params:{replaceConstraint:(oid,id)=>{assert.ok(xml.includes('id="'+id+'"'));},getValue:(k)=>values[k],setValue:(k,i,v)=>{assert.equal(access[k],1,`feedback must unlock local parameter ${k} before setValue`);values[k]=v;},setAccess:(k,v)=>{access[k]=v;},getParam:k=>({replaceConstraint:r=>{assert.ok(xml.includes('oid="'+k+'"'));assert.match(r,/^-?\d+;-?\d+;$/);}})},
       ogscript:{
         setXML:(id,xml)=>{assert.equal(id,'bridge_launcher');const link=xml.match(/href="([^"]+)"/);if(link)opened.push(link[1]);},
         setStyle:(id,style)=>{assert.ok(elements.has(id),`missing style target ${id}`);},

@@ -57,6 +57,9 @@ def build(manufacturer,defs):
         'keepalive':'false','style':f'bg#{BG};fg#e2e4e9;size:16;'})
     node(root,'api').text=f"var CB_MANUFACTURER = '{manufacturer}';\n"+COMMON
     meta=node(root,'meta');params=node(meta,'params')
+    if pana:
+        for high in (1,2):node(meta,'constraint',id='detail_range_'+str(high),constrainttype='INT_RANGE',constraint=f'0;{high};')
+        for step in (1,5):node(meta,'constraint',id='gain_range_'+str(step),constrainttype='INT_RANGE',constraint=f'0;300;{-150//step};{150//step};')
     for oid,name,value,widget,access in [('bridge','Backend URL','http://127.0.0.1:8088',3,1),('username','Username','',3,1),('password','Password','',4,1),('camera','Camera ID','pana1' if pana else 'marshall1',3,0),('confirmation','Type OVERWRITE','',3,1),('shot_name','Shot name','',3,1)]:
         node(params,'param',oid=oid,name=name,type='STRING',value=value,widget=widget,access=access,maxlength=256)
     for oid,name,low,high,value in [('speed','Jog speed',1,49,12),('store','Store armed',0,1,0),('shot_number','Shot number',1,100,1),('recall_speed','Recall Speed',1,30,15),('use_saved_speed','Use Saved Speed',0,1,1)]:

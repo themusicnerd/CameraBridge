@@ -118,7 +118,8 @@ var CB_MAKER=(function(nativeParams,nativeScript){
     var prefix=PREFIX,active=false;
     var params={getValue:function(k,i){return nativeParams.getValue(k=='bridge'?'bridge':prefix+k,i);},
       setValue:function(k,i,v){nativeParams.setValue(prefix+k,i,v);},setAccess:function(k,v){nativeParams.setAccess(prefix+k,v);},
-      getParam:function(k,i){return nativeParams.getParam(prefix+k,i);}};
+      getParam:function(k,i){return nativeParams.getParam(prefix+k,i);},
+      replaceConstraint:function(k,id){nativeParams.replaceConstraint(prefix+k,prefix+id);}};
     var ogscript={rename:function(k,v){nativeScript.rename(prefix+k,v);},setStyle:function(k,v){nativeScript.setStyle(prefix+k,v);},
       asyncPost:function(u,d,c){nativeScript.asyncPost(u,d,c);},
       setXML:function(k,xml){nativeScript.setXML(prefix+k,String(xml).replace(/\bid="([^"]+)"/g,'id="'+prefix+'$1"'));}};
@@ -144,6 +145,8 @@ var CB_MAKER=(function(nativeParams,nativeScript){
         wrappers.append(wrapper)
         for p in source.findall('./meta/params/param'):
             p=copy.deepcopy(p);p.set('oid',prefix+p.get('oid'));parameters.append(p)
+        for constraint in source.findall('./meta/constraint'):
+            constraint=copy.deepcopy(constraint);constraint.set('id',prefix+constraint.get('id'));meta.append(constraint)
         child=node(tabs,'abs',id='unified_'+maker,name=maker,width=1366,height=800)
         for element in list(source):
             if element.tag in ('api','meta'):continue

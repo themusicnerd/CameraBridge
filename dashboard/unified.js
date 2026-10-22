@@ -9,6 +9,7 @@ function uRequest(path,data,callback){
     ogscript.asyncPost(String(params.getValue('bridge',0)).replace(/\/+$/,'')+'/api/'+path,'request='+encodeURIComponent(JSON.stringify(data)),function(raw){
         var r;try{r=JSON.parse(String(raw));}
         catch(e){uStatus('Cannot read CameraBridge response. Check the connection.');if(callback)callback(null);return;}
+        if(!r){if(path!='state')uStatus('No reply received. Check the connection.');if(callback)callback(null);return;}
         if(r.error){uStatus(r.error);if(callback)callback(null);return;}
         if(callback)try{callback(r);}catch(e){uStatus('Panel update failed: '+String(e).slice(0,160));}
     });

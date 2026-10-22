@@ -35,6 +35,7 @@ function request(path, data, callback) {
     ogscript.asyncPost(base + '/api/' + path, 'request=' + encodeURIComponent(JSON.stringify(data)), function(raw) {
         try {
             var result = JSON.parse(String(raw));
+            if(!result){if(path!='state')status('No Command Reply; Check Feedback');if(callback)callback(null);return;}
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
         } catch (e) { cbNoticeUntil=new Date().getTime()+10000;status('Panel Error: '+String(e)); if (callback) callback(null); }
@@ -192,9 +193,10 @@ function poll() {
             for(var key in c.parameters) {
                 var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
                 try {
+                if(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain') &amp;&amp; cbConstraints[key]!='gain_'+cbGainStep){params.replaceConstraint(key,'gain_range_'+cbGainStep);cbConstraints[key]='gain_'+cbGainStep;}
                 if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='detail') &amp;&amp; p.low&lt;=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
-                    if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
+                    if(cbConstraints[key]!=range){params.setAccess(key,1);if(CB_MANUFACTURER=='Panasonic')params.replaceConstraint(key,'detail_range_'+p.high);else params.getParam(key,0).replaceConstraint(String(range));cbConstraints[key]=range;}
                 }
                 var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
                 if(CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='wb_mode'){var wbNames=cbCapabilities.pan_tilt_type=='digital'?{0:'Auto ATW',1:'Manual A',2:'Manual B',3:'Auto ATW',4:'3200K',5:'5600K'}:{0:'Auto ATW',2:'Manual A',3:'Manual B',4:'3200K',5:'5600K',9:'Variable'};value=wbNames[p.value]||value;}
@@ -250,6 +252,10 @@ function tick() {
       <param oid="wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;9;" />
       <param oid="detail" name="DETAIL" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
     </params>
+    <constraint id="detail_range_1" constrainttype="INT_RANGE" constraint="0;1;" />
+    <constraint id="detail_range_2" constrainttype="INT_RANGE" constraint="0;2;" />
+    <constraint id="gain_range_1" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
+    <constraint id="gain_range_5" constrainttype="INT_RANGE" constraint="0;300;-30;30;" />
     <timer id="bridge_tick" rate="200" autostart="true" />
     <timertask timerid="bridge_tick" tasktype="ogscript">tick();</timertask>
   </meta>
