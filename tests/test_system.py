@@ -64,13 +64,13 @@ class ProtocolTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):m.write('red_gain',1)
         with self.assertRaises(ValueError):Marshall(m.bus,'unknown',255)
     def test_config_validation(self):
-        c=json.loads((ROOT/'config.example.json').read_text());c['cameras'].append(c['cameras'][0])
+        c=json.loads((ROOT/'tests/fixtures/cameras-lab.json').read_text());c['cameras'].append(c['cameras'][0])
         with self.assertRaises(ValueError):validate_config(c)
     def test_secret_config_rejected(self):
-        c=json.loads((ROOT/'config.example.json').read_text());c['cameras'][0]['password']='do-not-store'
+        c=json.loads((ROOT/'tests/fixtures/cameras-lab.json').read_text());c['cameras'][0]['password']='do-not-store'
         with self.assertRaises(ValueError):validate_config(c)
     def test_camera_numbers_and_pending_profiles(self):
-        config=json.loads((ROOT/'config.example.json').read_text(encoding='utf-8'))
+        config=json.loads((ROOT/'tests/fixtures/cameras-lab.json').read_text(encoding='utf-8'))
         validate_config(config);self.assertEqual([c['number'] for c in config['cameras']],[1,2,3])
         config['cameras'][1]['number']=1
         with self.assertRaises(ValueError):validate_config(config)

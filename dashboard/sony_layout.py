@@ -23,7 +23,7 @@ def build(defs):
     node(header,'image',src=(HERE/'assets/sony.png').as_uri(),left=1150,top=22,width=150,height=29)
     label(root,'Camera identification pending',164,100,1180,28,'identity',size=18);label(root,'Awaiting feedback',164,133,1180,24,'connection',size=14)
     rail=card(root,8,104,140,624);label(rail,'CAMERAS',10,10,120)
-    for i in range(6):button(rail,'—',8,42+64*i,124,f'cameraAt({i});',54,id='camera_pick_'+str(i))
+    for i in range(6):button(rail,'-',8,42+64*i,124,f'cameraAt({i});',54,id='camera_pick_'+str(i))
     button(rail,'Next',8,438,124,'nextCamera();');button(rail,'Refresh',8,500,124,'poll();');button(rail,'STOP',8,564,124,'stop();',52,'a23d4c')
     tabs=node(root,'tab',left=164,top=164,width=1186,height=564,tabposition='none',onchange='highlightPage(String(this.getTitleAt(this.getSelectedIndex())));')
     pages={name:node(tabs,'abs',id='page_'+name.lower(),name=name,width=1186,height=564,style=f'bg#{BG};') for name in ['Lens','Paint','Tally','Config']}

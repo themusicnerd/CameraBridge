@@ -41,7 +41,7 @@ const decode = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g
     vm.runInContext('poll();',context);
     await Promise.all(inflight);
     assert.match(labels.identity,/emulator|LAB/);
-    assert.match(labels.connection,/SIMULATOR/);
+    assert.match(labels.connection,/simulated/);
     assert.match(labels.status,/read-only/);
     assert.ok(labels.actual_red_gain.includes('confirmed'));
     assert.equal(values.red_gain,manufacturer==='Panasonic'?150:128);

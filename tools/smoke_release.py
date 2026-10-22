@@ -15,7 +15,7 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('executable');a=p.parse_args();exe=str(pathlib.Path(a.executable).resolve())
     subprocess.run([exe,'--version'],check=True)
     with tempfile.TemporaryDirectory() as tmp:
-        root=pathlib.Path(tmp);config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'config.example.json').read_text(encoding='utf-8'))
+        root=pathlib.Path(tmp);config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'tests/fixtures/cameras-lab.json').read_text(encoding='utf-8'))
         ports=set()
         for c in config['cameras']:
             if c['driver']=='panasonic':

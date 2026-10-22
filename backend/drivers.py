@@ -122,6 +122,11 @@ class Panasonic:
         if answer not in ('dA0','dA1'):raise ValueError('Invalid tally readback')
         return {'program':answer=='dA1','preview':False}
 
+    def tally_state(self):
+        answer=self.send('#DA')
+        if answer not in ('dA0','dA1'):raise ValueError('Invalid tally readback')
+        return {'program':answer=='dA1','preview':False}
+
 class SerialBus:
     """One instance per TCP endpoint. No retry of ambiguous writes; no fake ACK."""
     def __init__(self, host, port, delay=0.1, timeout=0.5):

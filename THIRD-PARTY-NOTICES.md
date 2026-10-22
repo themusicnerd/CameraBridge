@@ -11,6 +11,7 @@ The project does not change the rights of those software owners.
 | OpenSSL, when included by Python | [OpenSSL license](https://openssl-library.org/source/license/) |
 | SQLite, when included by Python | [SQLite copyright](https://sqlite.org/copyright.html) |
 | Panasonic image | Manufacturer identification image; Panasonic owns the applicable rights |
+| Ross identification image | Ross Video owns the applicable rights |
 | Marshall image | Manufacturer identification image; Marshall owns the applicable rights |
 
 The package includes dynamically loaded Qt and Shiboken libraries under their applicable licenses.

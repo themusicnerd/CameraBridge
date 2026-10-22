@@ -37,7 +37,7 @@ def main():
                 return json.load(r)['mode']=='LAB'
         except OSError:return False
     with tempfile.TemporaryDirectory() as directory:
-        storage=pathlib.Path(directory);config=json.loads((ROOT/'config.example.json').read_text(encoding='utf-8'))
+        storage=pathlib.Path(directory);config=json.loads((ROOT/'tests/fixtures/cameras-lab.json').read_text(encoding='utf-8'))
         used=set()
         def port():
             value=free_port()
@@ -47,7 +47,7 @@ def main():
             if camera['driver']=='panasonic':camera['port']=port()
         source=storage/'camera.json';source.write_text(json.dumps(config),encoding='utf-8')
         first,second=port(),port()
-        settings=DesktopSettings(port=first,config_path=str(source),auto_start=False)
+        settings=DesktopSettings(port=first,config_path=str(source),auto_start=False,lab=True)
         settings.prepare(storage);Auth(storage/'credentials.sqlite').add('desktop-test','test','admin')
         panel=ControlPanel(storage,auto_start=False,create_tray=False);panel.show();app.processEvents()
         try:

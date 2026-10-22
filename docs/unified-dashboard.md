@@ -39,7 +39,7 @@ See [security](security.md) before use on another network.
 10. Select **Apply saved setup**.
 
 The desktop service applies the saved configuration through its existing restart procedure.
-Wait for the restart, then sign in again.
+Wait for the restart. The open panel keeps its session token.
 A console service cannot restart itself through this panel.
 Restart that service with `config.pending.json` to apply its saved setup.
 Saving alone does not change the running cameras.

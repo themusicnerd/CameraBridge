@@ -10,17 +10,17 @@ They are not command-line arguments or configuration fields.
 1. Update the camera firmware as specified by Sony.
 2. Enable the camera's wired LAN or wireless LAN remote function.
 3. Open CameraBridge setup and sign in as an administrator.
-4. Select **Camera setup**, then **Add camera**.
-5. Select the Sony PXW-Z200 profile.
+4. Select **Add Camera**.
+5. Select **Sony** under Manufacturer and **PXW-Z200** under Model.
 6. Set the camera number, name, IPv4 address and Carbonite input.
 7. Set the camera tally option as required.
-8. Save and apply the setup.
-9. Enter the camera ID and IPv4 address under **Sony camera access**.
+8. Wait for **All Changes Saved**.
+9. Select the camera under **Sony Camera Access**.
 10. Select **Read SSH fingerprint**.
 11. Verify the fingerprint through your trusted camera setup.
 12. Enter the camera's remote username and password.
 13. Read and acknowledge the Sony SDK terms.
-14. Select **Save camera access locally**.
+14. Wait for **Camera Access Saved**.
 15. Open the Sony dashboard and sign in with your CameraBridge account.
 16. Confirm fresh camera feedback before control.
 

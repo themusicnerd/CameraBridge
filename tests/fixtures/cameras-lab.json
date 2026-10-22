@@ -1,0 +1,67 @@
+{
+  "bind": "127.0.0.1",
+  "port": 8088,
+  "poll_seconds": 4,
+  "trusted_hosts": [
+    "127.0.0.1/32",
+    "::1/128"
+  ],
+  "ross": {
+    "carbonite": "192.168.96.123",
+    "touchdrive": "192.168.96.122",
+    "bridge_enabled": false
+  },
+  "cameras": [
+    {
+      "id": "pana1",
+      "name": "Panasonic 1 — CGI emulator",
+      "manufacturer": "Panasonic",
+      "model": "AW-HE130",
+      "driver": "panasonic",
+      "host": "127.0.0.1",
+      "port": 18080,
+      "carbonite_input": 1,
+      "simulator": true,
+      "enabled": true,
+      "number": 1,
+      "pivotcam": false,
+      "allow_store": false
+    },
+    {
+      "id": "pana2",
+      "name": "Panasonic 2 — CGI emulator",
+      "manufacturer": "Panasonic",
+      "model": "AW-HE130",
+      "driver": "panasonic",
+      "host": "127.0.0.1",
+      "port": 18081,
+      "carbonite_input": 2,
+      "simulator": true,
+      "enabled": true,
+      "number": 2,
+      "pivotcam": false,
+      "allow_store": false
+    },
+    {
+      "id": "marshall1",
+      "name": "Marshall 1 — LAB model",
+      "manufacturer": "Marshall",
+      "model": "CV228",
+      "driver": "marshall-lab",
+      "address": 1,
+      "gateway": "LAB ONLY — no serial frames",
+      "carbonite_input": 3,
+      "simulator": true,
+      "enabled": true,
+      "number": 3,
+      "pivotcam": false,
+      "allow_store": false
+    }
+  ],
+  "pivotcam": {
+    "enabled": false,
+    "bind": "127.0.0.1",
+    "controller": "192.168.96.123",
+    "base_port": 19010
+  }
+}

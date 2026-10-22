@@ -1,6 +1,7 @@
 """Native desktop control panel and system tray lifecycle."""
 import argparse
 import hashlib
+import json
 import pathlib
 import sqlite3
 import sys
@@ -30,24 +31,24 @@ class ControlPanel(QWidget):
         self.service.readyReadStandardOutput.connect(self.read_log);self.service.finished.connect(self.service_finished)
         self.stop_timer=QTimer(self);self.stop_timer.setSingleShot(True);self.stop_timer.setInterval(20000);self.stop_timer.timeout.connect(self.force_stop)
         self.service.errorOccurred.connect(lambda error:self.message.setText('Service error: '+self.service.errorString()))
-        self.setWindowTitle('CameraBridge control panel');self.setWindowIcon(camera_icon());self.resize(620,690)
+        self.setWindowTitle('CameraBridge Control Panel');self.setWindowIcon(camera_icon());self.resize(620,690)
         layout=QVBoxLayout(self);title=QLabel('CameraBridge');title.setStyleSheet('font-size:24px;font-weight:bold');layout.addWidget(title)
         self.message=QLabel('Stopped. Close this window to keep CameraBridge in the tray.');self.message.setWordWrap(True);layout.addWidget(self.message)
-        form=QFormLayout();self.address=QLineEdit(self.settings.bind);form.addRow('Listen address',self.address)
-        self.port=QSpinBox();self.port.setRange(1024,65535);self.port.setValue(self.settings.port);form.addRow('HTTP port',self.port)
-        self.networks=QLineEdit(self.settings.trusted_hosts);form.addRow('Allowed client networks',self.networks)
+        form=QFormLayout();self.address=QLineEdit(self.settings.bind);form.addRow('Listen Address',self.address)
+        self.port=QSpinBox();self.port.setRange(1024,65535);self.port.setValue(self.settings.port);form.addRow('HTTP Port',self.port)
+        self.networks=QLineEdit(self.settings.trusted_hosts);form.addRow('Allowed Client Networks',self.networks)
         self.config=QLineEdit(self.settings.config_path or str(ROOT/'config.example.json'))
-        config_row=QHBoxLayout();config_row.addWidget(self.config);browse=QPushButton('Browse');browse.clicked.connect(self.choose_config);config_row.addWidget(browse);form.addRow('Camera configuration',config_row)
+        config_row=QHBoxLayout();config_row.addWidget(self.config);browse=QPushButton('Browse');browse.clicked.connect(self.choose_config);config_row.addWidget(browse);form.addRow('Camera Configuration',config_row)
         layout.addLayout(form)
-        self.lab=QCheckBox('Use camera simulators');self.lab.setChecked(self.settings.lab);layout.addWidget(self.lab)
-        self.visca=QCheckBox('Enable local VISCA lab');self.visca.setChecked(self.settings.visca);layout.addWidget(self.visca)
-        self.store=QCheckBox('Allow remote simulator shot stores');self.store.setChecked(self.settings.allow_store);layout.addWidget(self.store)
+        self.lab=QCheckBox('Use camera simulators');self.lab.setChecked(self.settings.lab);self.lab.hide()
+        self.visca=QCheckBox('Enable local VISCA lab');self.visca.setChecked(self.settings.visca);self.visca.hide()
+        self.store=QCheckBox('Allow remote simulator shot stores');self.store.setChecked(self.settings.allow_store);self.store.hide()
         self.auto=QCheckBox('Start the service when CameraBridge opens');self.auto.setChecked(self.settings.auto_start);layout.addWidget(self.auto)
         actions=QHBoxLayout()
-        for text,callback in [('Save and restart',self.apply),('Start',self.start_service),('Stop',self.stop_service),('Open setup page',self.open_web)]:
+        for text,callback in [('Save and Restart',self.apply),('Start',self.start_service),('Stop',self.stop_service),('Open Setup Page',self.open_web)]:
             b=QPushButton(text);b.setMinimumHeight(36);b.clicked.connect(callback);actions.addWidget(b)
         layout.addLayout(actions)
-        pending_button=QPushButton('Apply saved camera setup');pending_button.clicked.connect(self.apply_pending);layout.addWidget(pending_button)
+        pending_button=QPushButton('Apply Saved Camera Setup');pending_button.clicked.connect(self.apply_pending);layout.addWidget(pending_button)
         account=QFormLayout();self.username=QLineEdit('admin');account.addRow('Local account',self.username)
         self.password=QLineEdit();self.password.setEchoMode(QLineEdit.EchoMode.Password);account.addRow('New password',self.password)
         self.repeat=QLineEdit();self.repeat.setEchoMode(QLineEdit.EchoMode.Password);account.addRow('Repeat password',self.repeat)
@@ -56,9 +57,9 @@ class ControlPanel(QWidget):
         self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setMaximumBlockCount(200);layout.addWidget(self.log,1)
         quit_button=QPushButton('Quit CameraBridge');quit_button.clicked.connect(self.quit_app);layout.addWidget(quit_button)
         if create_tray:
-            self.tray=QSystemTrayIcon(camera_icon(),self);self.tray.setToolTip('CameraBridge — stopped')
+            self.tray=QSystemTrayIcon(camera_icon(),self);self.tray.setToolTip('CameraBridge - stopped')
             menu=QMenu(self)
-            for text,callback in [('Control panel',self.show_panel),('Open setup page',self.open_web),('Start service',self.start_service),('Stop service',self.stop_service)]:
+            for text,callback in [('Control Panel',self.show_panel),('Open Setup Page',self.open_web),('Start Service',self.start_service),('Stop Service',self.stop_service)]:
                 action=QAction(text,self);action.triggered.connect(callback);menu.addAction(action)
             menu.addSeparator();action=QAction('Quit',self);action.triggered.connect(self.quit_app);menu.addAction(action)
             self.tray.setContextMenu(menu)
@@ -83,7 +84,18 @@ class ControlPanel(QWidget):
             self.apply()
         except (ValueError,OSError) as error:self.message.setText('Cannot apply saved setup: '+str(error))
 
-    def show_panel(self):self.showNormal();self.raise_();self.activateWindow()
+    def show_panel(self):
+        # Reset Qt visibility when Windows initially launched the tray hidden.
+        self.hide()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        screen=QApplication.screenAt(self.frameGeometry().center()) or QApplication.primaryScreen()
+        if screen is not None:
+            available=screen.availableGeometry()
+            if not available.intersects(self.frameGeometry()) or not self.isVisible():
+                self.move(available.center()-self.rect().center())
+        self.show();self.showNormal();self.raise_();self.activateWindow()
+        if self.windowHandle() is not None:self.windowHandle().requestActivate()
+        QTimer.singleShot(100,self.raise_)
 
     def closeEvent(self,event):
         if self.tray and QSystemTrayIcon.isSystemTrayAvailable() and not self.quitting:self.hide();event.ignore()
@@ -115,7 +127,7 @@ class ControlPanel(QWidget):
         if self.service.state()!=QProcess.ProcessState.NotRunning:return
         try:
             self.save_settings()
-            if not self.has_account():self.message.setText('Create a local administrator account before starting the service.');self.show_panel();return
+            if json.loads(pathlib.Path(self.settings.config_path).read_text(encoding='utf-8')).get('authentication_enabled',True) and not self.has_account():self.message.setText('Create a local administrator account before starting the service.');self.show_panel();return
         except (ValueError,OSError,sqlite3.Error) as error:self.message.setText(str(error));return
         if getattr(sys,'frozen',False):
             executable=pathlib.Path(sys.executable).with_name('CameraBridge-cli.exe' if sys.platform=='win32' else 'CameraBridge-cli')
@@ -130,7 +142,7 @@ class ControlPanel(QWidget):
         if text:self.log.appendPlainText(text)
         if 'CameraBridge: http' in text:
             self.message.setText('Running at '+self.running_settings.web_url()+'. Close this panel to keep the service running.')
-            if self.tray:self.tray.setToolTip('CameraBridge — '+self.running_settings.web_url())
+            if self.tray:self.tray.setToolTip('CameraBridge - '+self.running_settings.web_url())
 
     def stop_service(self):
         if self.service.state()==QProcess.ProcessState.NotRunning:return
@@ -145,7 +157,7 @@ class ControlPanel(QWidget):
     def service_finished(self,*args):
         self.stop_timer.stop()
         self.read_log();self.message.setText('Stopped.')
-        if self.tray:self.tray.setToolTip('CameraBridge — stopped')
+        if self.tray:self.tray.setToolTip('CameraBridge - stopped')
         self.running_settings=None
         if self.quitting:
             if self.tray:self.tray.hide()

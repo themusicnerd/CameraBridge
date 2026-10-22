@@ -1,7 +1,9 @@
 # HTTP API reference
 
 The default service URL is `http://127.0.0.1:8088`.
-All write requests require a login token, except the login request itself.
+Write requests require a login token when authentication is enabled.
+Authentication defaults to enabled.
+Set `authentication_enabled` to false to allow trusted hosts to use the service without sign-in.
 Trusted host checks apply before API processing.
 
 ## Authentication
@@ -24,7 +26,9 @@ Native panels can send URL-encoded `request=JSON` through ogScript.
 | Method | Path | Access and result |
 |---|---|---|
 | GET | `/` | Web interface |
-| GET | `/health` | Service name and LAB or hardware mode |
+| GET | `/health` | Service mode, authentication option, and reconfiguration state |
+| GET | `/api/session` | Current role and authentication option |
+| GET | `/help` | Setup procedures |
 | POST | `/api/login` | Create a session |
 | POST | `/api/logout` | End the supplied session |
 | GET or POST | `/api/state` | Camera state and events; loopback LAB reads can omit login |
@@ -52,6 +56,7 @@ An older revision returns HTTP 400 without changing the saved setup.
 
 | Operation | Required fields |
 |---|---|
+| `autosave` | Complete `configuration`; save and apply while retaining HTTP sessions |
 | `save` | Complete `camera` object; `previous` is its existing ID, or empty for a new camera |
 | `remove` | `camera` ID and `confirmation: "REMOVE"` |
 | `bridge` | Complete `pivotcam` and `tally` objects |
@@ -116,3 +121,17 @@ Bodies have a 65536-byte limit.
 The backend permits 24 HTTP request threads.
 The TouchDrive host permits eight request threads and bounded upstream responses.
 See [security](security.md) for session and network limits.
+
+## Persistent Browser Sessions
+
+The login response contains a random session token.
+The browser stores it locally for this CameraBridge origin.
+The server stores its hash in the credentials database.
+Sign-out or a password change revokes the session.
+Open-access tokens issued while authentication is disabled are revoked when authentication is enabled again.
+
+## TSL State
+
+The state response includes `tsl` with enabled, listening, source, bind, port, packet counts, and last-packet age.
+Its `state` is disabled, not listening, waiting, receiving, or stale.
+Each camera tally object separates `received`, `requested`, `actual`, and readback status.

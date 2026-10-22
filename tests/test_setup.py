@@ -15,7 +15,7 @@ from camerabridge import export_panels
 class SetupTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.storage = pathlib.Path(self.temp.name)
-        self.config = validate_config(json.loads((ROOT/'config.example.json').read_text()))
+        self.config = validate_config(json.loads((ROOT/'tests/fixtures/cameras-lab.json').read_text()))
         self.auth = Auth(self.storage/'auth.sqlite')
         self.auth.add('admin','test','admin'); self.auth.add('operator','test','operator')
         self.admin = self.auth.login('admin','test','127.0.0.1')[0]

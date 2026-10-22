@@ -47,7 +47,8 @@ class Engine:
         self.events=collections.deque(maxlen=500)
         self.revision=0
         self.threads=[]
-        self.ross_status={'state':'unverified','preset_follow':'not connected'}
+        self.ross_status={'state':'Not Connected','preset_follow':'not connected'}
+        self.tsl={'enabled':False,'listening':False,'last_packet':None,'packets':0,'messages':0,'invalid_packets':0,'rejected_sources':0,'source':None}
         names_path=self.storage/'preset-names.json'
         self.preset_names=json.loads(names_path.read_text()) if names_path.exists() else {}
         for c in configuration['cameras']:
@@ -90,7 +91,10 @@ class Engine:
                 result.append(dict(c['config'],parameters=parameters,preset_names=dict(self.preset_names.get(cid,{})),health=c['health'],error=c['error'],locked=c['locked'],
                     owner=c['owner'] if c['lease_until']>time.monotonic() else None,generation=c['generation'],moving=c['moving'],active_preset=c['active_preset'],tally=dict(c['tally'])))
                 if isinstance(c['driver'],Panasonic):result[-1]['capabilities']=dict(c['driver'].capabilities)
-            return {'revision':self.revision,'time':now,'cameras':result,'ross':dict(self.ross_status),'events':list(self.events)}
+            tsl=dict(self.tsl)
+            tsl['age_seconds']=None if tsl['last_packet'] is None else max(0,now-tsl['last_packet'])
+            tsl['state']='disabled' if not tsl['enabled'] else 'not listening' if not tsl['listening'] else 'waiting' if tsl['last_packet'] is None else 'receiving' if tsl['age_seconds']<=10 else 'stale'
+            return {'revision':self.revision,'time':now,'cameras':result,'ross':dict(self.ross_status),'tsl':tsl,'events':list(self.events)}
 
     def claim(self,c,owner):
         if not isinstance(owner,str) or not 1<=len(owner)<=100:raise ValueError('Invalid owner')
@@ -177,6 +181,7 @@ class Engine:
         if type(program) is not bool or type(preview) is not bool:raise ValueError('Tally values must be true or false')
         c=self.cameras[cid]
         with self.lock:
+            if source=='TSL 3.1':c['tally'].update(received={'program':program,'preview':preview},received_time=time.time())
             if not c['config'].get('tally_enabled',True):return {'status':'disabled for this camera'}
             desired={'program':program,'preview':preview}
             t=c['tally']
@@ -247,6 +252,12 @@ class Engine:
                             self.closed.wait(.03);continue
                         try:key=next(poll_keys)
                         except StopIteration:
+                            if hasattr(driver,'tally_state'):
+                                try:
+                                    actual_tally=driver.tally_state()
+                                    with self.lock:c['tally'].update(actual=actual_tally,readback_status='confirmed',readback_time=time.time())
+                                except Exception as exc:
+                                    with self.lock:c['tally'].update(readback_status='unavailable',readback_error=str(exc)[:100])
                             poll_keys=iter(c['defs']);key=next(poll_keys)
                             next_poll=time.monotonic()+self.config.get('poll_seconds',4)
                         actual=driver.query(key)

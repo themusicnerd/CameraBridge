@@ -1,127 +1,81 @@
-"""Browser acceptance test for camera setup. Requires the optional Playwright package."""
-import argparse
-import json
-import pathlib
-import socket
-import subprocess
-import sys
-import tempfile
-import time
-import urllib.request
-ROOT=pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT))
+"""Browser acceptance for inline setup, persistent sign-in, autosave and TSL."""
+import argparse,json,pathlib,socket,subprocess,sys,tempfile,time,urllib.request
+ROOT=pathlib.Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from backend.server import Auth
 from playwright.sync_api import sync_playwright,expect
 
-def free_port():
-    with socket.socket() as s:s.bind(('127.0.0.1',0));return s.getsockname()[1]
+def free_port(kind=socket.SOCK_STREAM):
+    with socket.socket(socket.AF_INET,kind) as s:s.bind(('127.0.0.1',0));return s.getsockname()[1]
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--screenshots',type=pathlib.Path);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--screenshots',type=pathlib.Path);parser.add_argument('--executable');args=parser.parse_args()
     with tempfile.TemporaryDirectory() as directory:
-        storage=pathlib.Path(directory);config=json.loads((ROOT/'config.example.json').read_text(encoding='utf-8'))
-        ports=set()
-        def port():
-            p=free_port()
-            while p in ports:p=free_port()
-            ports.add(p);return p
-        config['port']=port()
-        for c in config['cameras']:
-            if c['driver']=='panasonic':c['port']=port()
-        path=storage/'config.json';path.write_text(json.dumps(config),encoding='utf-8')
-        Auth(storage/'credentials.sqlite').add('test','browser-test','admin')
-        Auth(storage/'credentials.sqlite').add('operator','browser-test','operator')
-        process=subprocess.Popen([sys.executable,str(ROOT/'camerabridge.py'),'--serve','--config',str(path),'--storage',str(storage),'--lab','--desktop-control'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
-        try:
-            url=f'http://127.0.0.1:{config["port"]}'
+        data=pathlib.Path(directory);port=free_port();camera_port=free_port();tsl_port=free_port(socket.SOCK_DGRAM)
+        config={'bind':'127.0.0.1','port':port,'poll_seconds':1,'trusted_hosts':['127.0.0.1/32'],'cameras':[{'id':'p1','number':1,'name':'Camera 1','manufacturer':'Panasonic','model':'AW-HE130','driver':'panasonic','host':'127.0.0.1','port':camera_port,'simulator':True,'enabled':True,'carbonite_input':1,'tally_address':1,'tally_enabled':True,'pivotcam':False,'allow_store':False}], 'tally':{'enabled':True,'bind':'127.0.0.1','port':tsl_port,'source':'127.0.0.1','program_tally':2}}
+        path=data/'cameras.json';path.write_text(json.dumps(config));Auth(data/'credentials.sqlite').add('test','test','admin')
+        command=([args.executable] if args.executable else [sys.executable,str(ROOT/'camerabridge.py')])+['--serve','--config',str(path),'--storage',str(data),'--desktop-control']
+        def start():return subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,text=True)
+        process=start();url=f'http://127.0.0.1:{port}'
+        def api(route,payload=None,token=''):
+            req=urllib.request.Request(url+'/'+route,data=json.dumps(payload).encode() if payload is not None else None,headers={'Content-Type':'application/json','Authorization':'Bearer '+token})
+            with urllib.request.urlopen(req,timeout=20) as response:return json.load(response)
+        def ready():
             for _ in range(100):
-                try:
-                    with urllib.request.urlopen(url+'/health',timeout=.2):break
+                try:api('health');return
                 except OSError:time.sleep(.1)
-            else:raise AssertionError('Test service did not start')
-            with sync_playwright() as playwright:
-                browser=playwright.chromium.launch(headless=True);page=browser.new_page(viewport={'width':1366,'height':800})
-                errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
-                page.goto(url)
-                # Regression: the user opened setup before signing in. Login must
-                # load it automatically, without another navigation/reload click.
-                page.get_by_role('button',name='Camera setup',exact=True).click()
-                expect(page.locator('#addcamera')).to_be_disabled()
-                expect(page.locator('#draftstatus')).to_contain_text('Sign in as an administrator')
-                page.locator('#user').fill('test');page.locator('#password').fill('browser-test');page.locator('#password').press('Enter')
-                expect(page.locator('#status')).to_contain_text('Authenticated')
-                expect(page.locator('#draftstatus')).to_contain_text('Setup ready')
-                expect(page.locator('#addcamera')).to_be_enabled()
-                expect(page.locator('#roster details[open]')).to_have_count(0)
-                for logo in page.locator('#roster summary img').all():
-                    expect(logo).to_be_visible()
-                    assert logo.evaluate('(img)=>img.complete && img.naturalWidth>0')
-                expect(page.locator('#applycameras')).to_be_disabled()
-                expect(page.locator('#sessionstatus')).to_have_text('Signed in · admin')
+            raise AssertionError('Service did not start')
+        def send_tsl(control):
+            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as s:s.sendto(bytes([0x81,control])+b'CAMERA 1        ',('127.0.0.1',tsl_port))
+        try:
+            ready()
+            with sync_playwright() as pw:
+                browser=pw.chromium.launch(headless=True);page=browser.new_page(viewport={'width':1366,'height':872});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+                page.goto(url);page.locator('#user').fill('test');page.locator('#password').fill('test');page.locator('#password').press('Enter');expect(page.locator('#savestatus')).to_have_text('All Changes Saved')
+                assert page.get_by_text('Advanced JSON',exact=True).count()==0
+                assert 'verify camera feedback before control' not in page.locator('body').inner_text().lower()
+                assert page.locator('.app-logo').evaluate('(img)=>img.complete&&img.naturalWidth>0')
+                row=page.locator('#camera-p1');row.locator('summary').click();expect(row.locator('[data-field=manufacturer]')).to_have_value('Panasonic');assert row.locator('[data-field=model] option').filter(has_text='AW-HE2').count()==1
+                assert len(set(round(row.locator('[data-field="'+k+'"]').bounding_box()['y']) for k in ['number','name','manufacturer','model']))==1
+                row.locator('[data-field=name]').fill('Studio Camera');row.locator('[data-field=name]').press('Tab');expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                token=page.evaluate('localStorage.getItem("camerabridge-device-session")')
+                assert api('api/config',token=token)['cameras'][0]['name']=='Studio Camera'
+                expect(row.locator('[data-field=name]')).to_have_value('Studio Camera');assert row.get_attribute('open') is not None
+                expect(row.locator('[data-field=host]').locator('..').locator('a')).to_have_attribute('href',f'http://127.0.0.1:{camera_port}/')
+                send_tsl(2);expect(row).to_have_attribute('data-tally','program',timeout=10000);expect(row.locator('.tally-feedback')).to_contain_text('Camera Tally Lamp: On',timeout=10000);expect(page.locator('#tslbadge')).to_have_text('TSL Receiving')
+                send_tsl(1);expect(row).to_have_attribute('data-tally','preview',timeout=10000);expect(row.locator('.tally-feedback')).to_contain_text('Camera Tally Lamp: Off',timeout=10000)
+                # Disabling lamp control must not hide received Preview/Program feedback.
+                row.locator('[data-field=tally_enabled]').uncheck();expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000);send_tsl(2);expect(row).to_have_attribute('data-tally','program',timeout=10000)
                 if args.screenshots:
-                    args.screenshots.mkdir(parents=True,exist_ok=True)
-                    page.screenshot(path=str(args.screenshots/'CameraBridge-setup-ready.png'))
-                page.locator('#addcamera').click();expect(page.locator('#cameraform')).to_be_visible()
-                expect(page.locator('#camhost')).to_have_value('')
-                assert page.locator('#camname').bounding_box()['y']>=0
-                assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
-                if args.screenshots:page.screenshot(path=str(args.screenshots/'CameraBridge-add-camera.png'))
-                # Sign-out must clear the previous administrator's draft/form.
-                page.locator('#signout').click();expect(page.locator('#cameraform')).to_be_hidden()
-                expect(page.locator('#addcamera')).to_be_disabled()
-                page.locator('#user').fill('operator');page.locator('#password').fill('browser-test');page.locator('#signin').click()
-                expect(page.locator('#sessionstatus')).to_have_text('Signed in · operator')
-                expect(page.locator('#addcamera')).to_be_disabled()
-                expect(page.locator('#draftstatus')).to_contain_text('administrator account')
-                page.locator('#signout').click()
-                # A load error must offer a usable retry, not claim setup is ready.
-                page.route('**/api/setup',lambda r:r.fulfill(status=503,content_type='application/json',body='{"error":"Setup test failure"}'))
-                page.locator('#user').fill('test');page.locator('#password').fill('browser-test');page.locator('#signin').click()
-                expect(page.locator('#draftstatus')).to_contain_text('could not load')
-                expect(page.locator('#addcamera')).to_be_disabled()
-                expect(page.locator('#loadcameras')).to_be_enabled()
-                page.unroute('**/api/setup');page.locator('#loadcameras').click()
-                expect(page.locator('#draftstatus')).to_contain_text('Setup ready')
-                page.route('**/api/setup',lambda r:r.fulfill(status=403,content_type='application/json',body='{"error":"Authentication required"}'))
-                page.locator('#loadcameras').click()
-                expect(page.locator('#sessionstatus')).to_have_text('Signed out')
-                expect(page.locator('#draftstatus')).to_contain_text('Sign in again')
-                expect(page.locator('#addcamera')).to_be_disabled()
-                page.unroute('**/api/setup')
-                page.locator('#password').fill('browser-test');page.locator('#signin').click()
-                expect(page.locator('#draftstatus')).to_contain_text('Setup ready')
-                page.locator('#addcamera').click();page.locator('#camnumber').fill('7');page.locator('#camname').fill('Sony Z200');page.locator('#camprofile').select_option('sony-sdk');page.locator('#camhost').fill('192.0.2.20')
-                expect(page.locator('#camenabled')).to_be_enabled();expect(page.locator('#camenabled')).to_be_checked()
-                expect(page.locator('#camtally')).to_be_checked()
-                page.locator('#camtally').uncheck()
-                page.get_by_role('button',name='Save camera to setup',exact=True).click();expect(page.locator('#roster')).to_contain_text('Camera 7')
-                page.locator('#addcamera').click();page.locator('#camnumber').fill('7');page.locator('#camname').fill('Real Panasonic');page.locator('#camhost').fill('192.0.2.30');page.get_by_role('button',name='Save camera to setup',exact=True).click()
-                expect(page.locator('#status')).to_contain_text('already assigned')
-                page.locator('#camnumber').fill('8');page.locator('#camprofile').select_option('panasonic:AW-HE40');page.locator('#campivot').check();page.get_by_role('button',name='Save camera to setup',exact=True).click()
-                page.locator('#roster article').filter(has_text='Camera 1 ·').locator('summary').click()
-                page.locator('#roster article').filter(has_text='Camera 1 ·').get_by_role('button',name='Edit',exact=True).click();page.locator('#camnumber').fill('4');page.get_by_role('button',name='Save camera to setup',exact=True).click()
-                page.on('dialog',lambda dialog:dialog.accept())
-                page.locator('#roster article').filter(has_text='Camera 2 ·').locator('summary').click()
-                page.locator('#roster article').filter(has_text='Camera 2 ·').get_by_role('button',name='Remove',exact=True).click()
-                page.locator('#networksetup summary').click()
-                page.locator('#pivotenabled').check();page.locator('#pivotbind').fill('127.0.0.1');page.locator('#pivotcontroller').fill('127.0.0.1')
-                with page.expect_download() as result:page.locator('#mappingexport').click()
-                download=result.value;mapping=json.loads(pathlib.Path(download.path()).read_text(encoding='utf-8'))
-                assert next(c for c in mapping if c['number']==8)['tcp_port']==19018
-                page.locator('#applycameras').click();expect(page.locator('#draftstatus')).to_contain_text('restart requested')
-                saved=json.loads((storage/'config.pending.json').read_text(encoding='utf-8'))
-                assert {c['number'] for c in saved['cameras']}=={3,4,7,8}
-                assert next(c for c in saved['cameras'] if c['number']==4)['id']=='pana1'
-                assert saved['pivotcam']['base_port']==19010
-                assert next(c for c in saved['cameras'] if c['number']==8)['model']=='AW-HE40'
-                assert next(c for c in saved['cameras'] if c['number']==8)['driver']=='panasonic'
-                assert next(c for c in saved['cameras'] if c['number']==7)['enabled']
-                assert not next(c for c in saved['cameras'] if c['number']==7)['tally_enabled']
-                assert next(c for c in saved['cameras'] if c['number']==4)['tally_enabled']
+                    args.screenshots.mkdir(parents=True,exist_ok=True);page.screenshot(path=str(args.screenshots/'CameraBridge-inline-setup.png'),full_page=True)
+                page.reload();expect(page.locator('#login')).to_be_hidden();expect(page.locator('#savestatus')).to_have_text('All Changes Saved')
+                # Restart the actual service while preserving browser storage and accounts.
+                process.communicate('quit\n',timeout=20);assert process.returncode==0;process=start();ready();page.reload();expect(page.locator('#login')).to_be_hidden();expect(page.locator('#savestatus')).to_have_text('All Changes Saved')
+                page.locator('#addcamera').click();new=page.locator('#roster details').last;new.locator('[data-field=enabled]').uncheck();new.locator('[data-field=manufacturer]').select_option('Sony');expect(new.locator('[data-field=model]')).to_have_value('PXW-Z200');new.locator('[data-field=manufacturer]').select_option('Panasonic');new.locator('[data-field=model]').select_option('AW-HE2');new.locator('[data-field=host]').fill('192.0.2.42');new.locator('[data-field=host]').press('Tab');expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                assert api('api/config',token=token)['cameras'][1]['model']=='AW-HE2'
+                page.locator('#accesssettings summary').click();page.locator('#authentication').uncheck();expect(page.locator('#sessionstatus')).to_have_text('Authentication Off',timeout=20000);assert api('api/config')['authentication_enabled'] is False
+                # A new browser gets open access only while the setting is disabled.
+                guest=browser.new_context().new_page();guest.goto(url);expect(guest.locator('#login')).to_be_hidden();expect(guest.locator('#savestatus')).to_have_text('All Changes Saved')
+                page.locator('#authentication').check();expect(page.locator('#sessionstatus')).to_have_text('Signed In: Administrator',timeout=20000)
+                guest.reload();expect(guest.locator('#login')).to_be_visible(timeout=10000);guest.close()
+                # A busy receive port must roll back the live setup and retain sign-in.
+                loaded=api('api/setup',{'operation':'load'},token)
+                blocked=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);blocked.bind(('127.0.0.1',0))
+                candidate=json.loads(json.dumps(loaded['configuration']));candidate['tally']['port']=blocked.getsockname()[1]
+                try:
+                    try:api('api/setup',{'operation':'autosave','revision':loaded['revision'],'configuration':candidate},token)
+                    except urllib.error.HTTPError as error:
+                        assert error.code==400
+                        assert 'Previous setup restored' in json.load(error)['error']
+                    else:raise AssertionError('A busy tally port must fail')
+                finally:blocked.close()
+                assert api('api/config',token=token)['tally']['port']==tsl_port
+                assert api('api/session',token=token)['role']=='admin'
+                page.locator('#signout').click();page.reload();expect(page.locator('#login')).to_be_visible()
                 assert not errors,errors
-                browser.close();print('PASS: setup-before-login, Enter sign-in, automatic roster load, form access, sign-out isolation, operator restrictions, load retry, add/edit/remove cameras, duplicate number rejection, Sony profile, default tally, map export and save/restart request')
+                page.goto(url+'/help');expect(page.locator('h1')).to_have_text('CameraBridge Help');assert page.get_by_text('PIVOTCam_1.1',exact=True).count()>0
+                browser.close()
+            print('PASS: inline four-column setup, switches, manufacturer/model choices, autosave without session loss, persistent browser sign-in after restart, TSL Preview/Program and lamp readback, disabled-lamp feedback, auth toggle, sign-out revocation, IP links and Help')
         finally:
             if process.poll() is None:process.communicate('quit\n',timeout=20)
-            assert process.returncode==0
 
 if __name__=='__main__':main()

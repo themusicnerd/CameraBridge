@@ -41,7 +41,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
     });
 }
 function login() {
@@ -86,7 +86,7 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
 function jog(pan,tilt,zoom,focus) {
     if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
     var camera=selected(),epoch=cbEpoch;
@@ -132,10 +132,10 @@ function poll() {
         if(!c && cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
         if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
-        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        ogscript.rename('connection',''+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
         for(var n=0;n<6;n++) {
-            var caption=n<cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
-            ogscript.rename('camera_pick_'+n,n<cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            var caption=n<cbCameras.length?String(cbCameras[n].name).split(' - ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n<cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'-');
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
@@ -144,7 +144,7 @@ function poll() {
             ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n<=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
-            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
         cbUpdating=true;
         var tally=c.tally||{};
@@ -168,14 +168,14 @@ function poll() {
                 params.setAccess(key,enabled?1:0);
             }
         } finally {cbUpdating=false;}
-        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
     });
 }
 function tick() {
     cbTick++;
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
-    if(cbLastFeedback && new Date().getTime()-cbLastFeedback>4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+    if(cbLastFeedback && new Date().getTime()-cbLastFeedback>4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
 '''
 

@@ -1,6 +1,6 @@
 // Shared native camera setup. Passwords are cleared before each HTTP request.
 var U={token:'',role:'',config:null,revision:'',index:0,editing:'',maker:'',switching:false};
-var U_PROFILES=['panasonic','panasonic-sim','sony-sdk','marshall-CV226','marshall-CV228','marshall-lab'].concat(__PANASONIC_PROFILES__);
+var U_PROFILES=['panasonic','sony-sdk','marshall-CV226','marshall-CV228'].concat(__PANASONIC_PROFILES__);
 function uValue(key){return params.getValue('setup_'+key,0);}
 function uSet(key,value){params.setValue('setup_'+key,0,value);}
 function uStatus(text){ogscript.rename('unified_status',String(text));}
@@ -36,7 +36,7 @@ function uRoster(){
     var cameras=U.config?U.config.cameras:[];
     for(var n=0;n<8;n++){
         var i=Math.floor(U.index/8)*8+n,c=cameras[i];
-        ogscript.rename('roster_'+n,c?'CAM '+c.number+'  '+c.name+'\n'+c.manufacturer+' '+c.model+(c.enabled===false?' / disabled':''):'—');
+        ogscript.rename('roster_'+n,c?'CAM '+c.number+'  '+c.name+'\n'+c.manufacturer+' '+c.model+(c.enabled===false?' / disabled':''):'-');
         ogscript.setStyle('roster_'+n,'bg#'+(i==U.index?'7433bd':'494f5b')+';fg#ffffff;size:16;');
     }
     var c=cameras[U.index];ogscript.rename('setup_selected',c?'Selected: CAM '+c.number+' / '+c.name:'No configured cameras');
@@ -45,6 +45,7 @@ function uPick(slot){if(!U.config)return;var index=Math.floor(U.index/8)*8+slot;
 function uListPage(delta){if(!U.config||!U.config.cameras.length)return;U.index=(Math.floor(U.index/8)*8+delta*8+Math.ceil(U.config.cameras.length/8)*8)%(Math.ceil(U.config.cameras.length/8)*8);uRoster();}
 function uProfile(){
     var p=U_PROFILES[Number(uValue('profile'))];
+    if(p.indexOf('marshall-CV')==0){uSet('pivot',0);uSet('enabled',0);}
     ogscript.rename('setup_profile_help',p=='sony-sdk'?'Sony: save the camera, then set access on the Camera access page.':p.indexOf('marshall-CV')==0?'Marshall hardware control is pending. Save this profile disabled.':p=='marshall-lab'?'Marshall simulator only. No serial packets are sent.':'Panasonic CGI compatibility profile. HE2: digital PTZ, shots 1–9, no focus. Unsupported controls stay read-only. HTTP authentication is not implemented.');
 }
 function uNew(){

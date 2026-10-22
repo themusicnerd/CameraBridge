@@ -34,7 +34,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
     });
 }
 function login() {
@@ -79,7 +79,7 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
 function jog(pan,tilt,zoom,focus) {
     if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
     var camera=selected(),epoch=cbEpoch;
@@ -125,10 +125,10 @@ function poll() {
         if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
         if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
-        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        ogscript.rename('connection',''+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
         for(var n=0;n&lt;6;n++) {
-            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
-            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' - ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'-');
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
@@ -137,7 +137,7 @@ function poll() {
             ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
-            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
         cbUpdating=true;
         var tally=c.tally||{};
@@ -161,14 +161,14 @@ function poll() {
                 params.setAccess(key,enabled?1:0);
             }
         } finally {cbUpdating=false;}
-        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
     });
 }
 function tick() {
     cbTick++;
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
-    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
 </api>
   <meta>
@@ -208,7 +208,7 @@ function tick() {
   <ogscript handles="onclose">if(cbToken)request('command',{camera:selected(),action:'stop',data:{}},null);</ogscript>
   <abs left="8" top="8" width="1350" height="80" style="bg#2c3037;bdr:line;bdr#383d45;">
     <label name="CameraBridge / Panasonic" left="16" top="10" width="325" height="28" style="fg#e2e4e9;size:21;txt-align:west;" />
-    <label name="AW-HE130 · PTZ &amp; paint" left="16" top="45" width="325" height="24" style="fg#abb1bd;size:14;txt-align:west;" />
+    <label name="PTZ and Camera Control" left="16" top="45" width="325" height="24" style="fg#abb1bd;size:14;txt-align:west;" />
     <reveal id="nav_ptz" name="PTZ" targetid="page_ptz" left="350" top="12" width="104" height="56" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" />
     <reveal id="nav_presets" name="Presets" targetid="page_presets" left="462" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
     <reveal id="nav_paint" name="Paint" targetid="page_paint" left="574" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
@@ -220,25 +220,25 @@ function tick() {
     <image src="file:///C:/Users/rackpc01/Documents/Codex/2026-10-21/files-pasted-by-the-user-camerabridge/outputs/camerabridge/dashboard/assets/panasonic.png" left="1164" top="15" width="164" height="48" />
   </abs>
   <label name="Camera identification pending" left="164" top="100" width="1178" height="26" style="fg#e2e4e9;size:18;txt-align:west;" id="identity" />
-  <label name="SIMULATOR / awaiting feedback" left="164" top="130" width="1178" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="connection" />
+  <label name="Connecting" left="164" top="130" width="1178" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="connection" />
   <abs left="8" top="104" width="140" height="624" style="bg#2c3037;bdr:line;bdr#383d45;">
     <label name="CAMERAS" left="10" top="10" width="120" height="26" style="fg#e2e4e9;size:14;txt-align:west;" />
-    <button name="—" left="8" top="42" width="124" height="54" buttontype="push" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" id="camera_pick_0">
+    <button name="-" left="8" top="42" width="124" height="54" buttontype="push" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" id="camera_pick_0">
       <task tasktype="ogscript">cameraAt(0);</task>
     </button>
-    <button name="—" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_1">
+    <button name="-" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_1">
       <task tasktype="ogscript">cameraAt(1);</task>
     </button>
-    <button name="—" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_2">
+    <button name="-" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_2">
       <task tasktype="ogscript">cameraAt(2);</task>
     </button>
-    <button name="—" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_3">
+    <button name="-" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_3">
       <task tasktype="ogscript">cameraAt(3);</task>
     </button>
-    <button name="—" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_4">
+    <button name="-" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_4">
       <task tasktype="ogscript">cameraAt(4);</task>
     </button>
-    <button name="—" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_5">
+    <button name="-" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="camera_pick_5">
       <task tasktype="ogscript">cameraAt(5);</task>
     </button>
     <button name="Next" left="8" top="432" width="124" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
@@ -554,7 +554,7 @@ function tick() {
       </button>
       <label name="Tally feedback pending" left="700" top="360" width="450" height="88" style="fg#e2e4e9;size:14;txt-align:west;" id="tally_state" />
       <label name="Tally enable / disable, configuration and diagnostics: open CameraBridge setup." left="20" top="454" width="1140" height="36" style="fg#a9bbc8;size:14;txt-align:west;" />
-      <label name="SIMULATOR feedback confirms simulator state. Verify hardware separately." left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
+      <label name="CameraBridge Connection Settings" left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
     </abs>
   </tab>
   <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#b9c5cf;size:14;txt-align:west;" id="status" />

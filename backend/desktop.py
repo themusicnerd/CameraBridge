@@ -10,7 +10,7 @@ class DesktopSettings:
     port:int=8088
     bind:str='127.0.0.1'
     trusted_hosts:str='127.0.0.1/32,::1/128'
-    lab:bool=True
+    lab:bool=False
     visca:bool=False
     allow_store:bool=False
     auto_start:bool=True

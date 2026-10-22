@@ -78,11 +78,17 @@ class PanelHandler(BaseHTTPRequestHandler):
         assets={'/assets/panasonic.png':'panasonic.png','/assets/marshall.png':'marshall.png','/assets/sony.png':'sony.png'}
         if self.path in assets:
             self.reply((ROOT/'dashboard/assets'/assets[self.path]).read_bytes(),mime='image/png'); return
+        if self.path in ('/assets/camerabridge.svg','/assets/ross.png'):
+            self.reply((ROOT/'dashboard/assets'/self.path.rsplit('/',1)[-1]).read_bytes(),mime='image/svg+xml' if self.path.endswith('.svg') else 'image/png');return
+        if self.path in ('/setup.js','/setup.css'):
+            self.reply((ROOT/'web'/self.path[1:]).read_bytes(),mime='application/javascript; charset=utf-8' if self.path.endswith('.js') else 'text/css; charset=utf-8');return
         if self.path=='/':
             self.reply((ROOT/'web/admin.html').read_bytes(),mime='text/html; charset=utf-8'); return
         if self.path=='/sony':
             self.reply((ROOT/'web/sony.html').read_bytes(),mime='text/html; charset=utf-8');return
-        if self.path in ('/health','/api/state','/api/config','/api/snapshots'):
+        if self.path=='/help':
+            self.reply((ROOT/'web/help.html').read_bytes(),mime='text/html; charset=utf-8');return
+        if self.path in ('/health','/api/state','/api/session','/api/config','/api/snapshots'):
             self.proxy('GET'); return
         self.reply(b'{"error":"Not found"}',404)
     def do_POST(self):
@@ -105,7 +111,7 @@ class PanelHandler(BaseHTTPRequestHandler):
         self.proxy('POST',body)
 
     def proxy(self,method,body=None):
-        upstream=http.client.HTTPConnection('127.0.0.1',self.server.backend_port,timeout=5)
+        upstream=http.client.HTTPConnection('127.0.0.1',self.server.backend_port,timeout=20)
         try:
             headers={'Content-Type':self.headers.get('Content-Type','application/json')}
             if self.headers.get('Authorization'):headers['Authorization']=self.headers['Authorization']

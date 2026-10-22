@@ -30,12 +30,17 @@ class Auth:
     def __init__(self,path):
         self.path=path
         with closing(sqlite3.connect(path)) as db, db:db.execute('CREATE TABLE IF NOT EXISTS users (name TEXT PRIMARY KEY,salt BLOB,hash BLOB,role TEXT)')
+        with closing(sqlite3.connect(path)) as db, db:db.execute('CREATE TABLE IF NOT EXISTS device_sessions (token_hash TEXT PRIMARY KEY,name TEXT NOT NULL)')
         self.sessions={};self.failures={};self.lock=threading.Lock()
     def add(self,name,password,role):
         if not isinstance(password,str) or not password:raise ValueError('Password cannot be empty')
         if role not in ('operator','admin'):raise ValueError('Invalid role')
         salt=secrets.token_bytes(16);digest=hashlib.pbkdf2_hmac('sha256',password.encode(),salt,250000)
         with closing(sqlite3.connect(self.path)) as db, db:db.execute('INSERT OR REPLACE INTO users VALUES(?,?,?,?)',(name,salt,digest,role))
+        with closing(sqlite3.connect(self.path)) as db, db:db.execute('DELETE FROM device_sessions WHERE name=?',(name,))
+        with self.lock:
+            for token,entry in list(self.sessions.items()):
+                if entry[2]==name:self.sessions.pop(token,None)
     def login(self,name,password,client):
         now=time.monotonic()
         with self.lock:
@@ -46,11 +51,25 @@ class Auth:
         digest=hashlib.pbkdf2_hmac('sha256',password.encode(),row[0] if row else bytes(16),250000)
         if not row or not hmac.compare_digest(digest,row[1]):raise PermissionError('Invalid login')
         token=secrets.token_urlsafe(32)
-        with self.lock:self.sessions[token]=(row[2],now+8*3600,name)
+        with closing(sqlite3.connect(self.path)) as db, db:db.execute('INSERT INTO device_sessions VALUES(?,?)',(hashlib.sha256(token.encode()).hexdigest(),name))
+        with self.lock:self.sessions[token]=(row[2],float('inf'),name)
         return token,row[2]
     def role(self,token):
         with self.lock:entry=self.sessions.get(token)
-        return entry[0] if entry and entry[1]>time.monotonic() else None
+        if entry and entry[1]<=time.monotonic():return None
+        if entry and entry[2]=='open-access':return entry[0]
+        if not token:return None
+        with closing(sqlite3.connect(self.path)) as db:
+            row=db.execute('SELECT users.role,users.name FROM device_sessions JOIN users USING(name) WHERE token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
+        if row:
+            with self.lock:self.sessions[token]=(row[0],float('inf'),row[1])
+            return row[0]
+        with self.lock:self.sessions.pop(token,None)
+        return None
+
+    def logout(self,token):
+        with self.lock:self.sessions.pop(token,None)
+        with closing(sqlite3.connect(self.path)) as db, db:db.execute('DELETE FROM device_sessions WHERE token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),))
 
 def provision_user(auth,name,role):
     """Interactive provisioning: show validation failures without exposing input."""
@@ -85,6 +104,7 @@ def validate_config(c):
         elif isinstance(value,list):
             for item in value:reject_secrets(item)
     reject_secrets(c)
+    if type(c.get('authentication_enabled',True)) is not bool:raise ValueError('Invalid authentication option')
     ipaddress.ip_address(c.get('bind','127.0.0.1'))
     if not 1024<=c.get('port',8088)<=65535:raise ValueError('Invalid port')
     if not 1<=c.get('poll_seconds',4)<=60:raise ValueError('Poll interval must be 1..60 seconds')
@@ -145,6 +165,8 @@ class Server(ThreadingHTTPServer):
         self.engine,self.auth,self.lab=engine,auth,lab
         self.desktop_control=desktop_control
         self.setup_lock=threading.RLock()
+        self.reconfiguring=False
+        self.apply_configuration=None
         self.slots=threading.BoundedSemaphore(24)
         super().__init__(address,Handler)
     def process_request(self,request,client_address):
@@ -168,18 +190,26 @@ class Handler(BaseHTTPRequestHandler):
     def trusted(self):
         address=ipaddress.ip_address(self.client_address[0])
         return any(address in ipaddress.ip_network(n) for n in self.server.engine.config.get('trusted_hosts',['127.0.0.1/32']))
+    def access_role(self,token):
+        return self.server.auth.role(token) if self.server.engine.config.get('authentication_enabled',True) else 'admin'
     def do_GET(self):
         if not self.trusted():self.send({'error':'Management host denied'},403);return
         path=urlsplit(self.path).path
         if path=='/':self.send((ROOT/'web/admin.html').read_bytes(),mime='text/html; charset=utf-8');return
         if path=='/sony':self.send((ROOT/'web/sony.html').read_bytes(),mime='text/html; charset=utf-8');return
+        if path=='/help':self.send((ROOT/'web/help.html').read_bytes(),mime='text/html; charset=utf-8');return
+        if path in ('/setup.js','/setup.css'):
+            self.send((ROOT/'web'/path[1:]).read_bytes(),mime='application/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8');return
+        if path in ('/assets/camerabridge.svg','/assets/ross.png'):
+            self.send((ROOT/'dashboard/assets'/path.rsplit('/',1)[-1]).read_bytes(),mime='image/svg+xml' if path.endswith('.svg') else 'image/png');return
         if path in ('/assets/sony.png','/assets/panasonic.png','/assets/marshall.png'):
             self.send((ROOT/'dashboard/assets'/path.rsplit('/',1)[-1]).read_bytes(),mime='image/png');return
-        if path=='/health':self.send({'service':'CameraBridge','mode':'LAB' if self.server.lab else 'hardware'});return
+        if path=='/health':self.send({'service':'CameraBridge','mode':'LAB' if self.server.lab else 'hardware','authentication_enabled':self.server.engine.config.get('authentication_enabled',True),'reconfiguring':self.server.reconfiguring});return
         token=self.headers.get('Authorization','').removeprefix('Bearer ')
-        role=self.server.auth.role(token)
+        role=self.access_role(token)
         if not role and not (self.server.lab and ipaddress.ip_address(self.client_address[0]).is_loopback):self.send({'error':'Authentication required'},401);return
         if path=='/api/state':self.send(self.server.engine.snapshot())
+        elif path=='/api/session':self.send({'role':role,'authentication_enabled':self.server.engine.config.get('authentication_enabled',True)})
         elif path=='/api/config' and role=='admin':self.send(self.server.engine.config)
         elif path=='/api/snapshots':
             p=self.server.engine.storage/'snapshots.json';self.send(json.loads(p.read_text()) if p.exists() else {})
@@ -201,10 +231,14 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/state' and self.server.lab and ipaddress.ip_address(self.client_address[0]).is_loopback:
                 self.send(self.server.engine.snapshot());return
             if path=='/api/login':
-                token,role=self.server.auth.login(data['username'],data['password'],self.client_address[0])
+                if self.server.engine.config.get('authentication_enabled',True):
+                    token,role=self.server.auth.login(data['username'],data['password'],self.client_address[0])
+                else:
+                    token=secrets.token_urlsafe(32);role='admin'
+                    with self.server.auth.lock:self.server.auth.sessions[token]=(role,time.monotonic()+8*3600,'open-access')
                 self.send({'token':token,'role':role});return
             token=self.headers.get('Authorization','').removeprefix('Bearer ') or data.pop('token','')
-            role=self.server.auth.role(token)
+            role=self.access_role(token)
             if not role:raise PermissionError('Authentication required')
             if path=='/api/state':self.send(self.server.engine.snapshot());return
             if path=='/api/setup':
@@ -228,9 +262,10 @@ class Handler(BaseHTTPRequestHandler):
                     with c['io']:c['driver'].close()
                 self.send({'status':'Sony camera access saved locally; password is not exported'});return
             if path=='/api/command':
+                if self.server.reconfiguring:raise ValueError('Camera setup is updating. Try again shortly.')
                 if data['action']=='lock' and role!='admin':raise PermissionError('Administrator required for lockout')
                 # Ownership is bound to the authenticated session, never a client supplied owner.
-                self.send(self.server.engine.command(data['camera'],data['action'],data.get('data',{}),token[:24]));return
+                self.send(self.server.engine.command(data['camera'],data['action'],data.get('data',{}),token[:24] or 'open-'+self.client_address[0]));return
             if path=='/api/lab/ross/bus':
                 if not self.server.lab or role!='admin' or not hasattr(self.server.engine,'ross_follower'):
                     raise PermissionError('Enabled VISCA lab and administrator required')
@@ -240,7 +275,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send({'status':'lab service stopping'})
                 threading.Thread(target=self.server.shutdown,daemon=True).start();return
             if path=='/api/logout':
-                with self.server.auth.lock:self.server.auth.sessions.pop(token,None)
+                self.server.auth.logout(token)
                 self.send({'status':'logged out'});return
             if path=='/api/snapshot':self.send(self.server.engine.capture(data['camera'],data['name'],data.get('notes','')));return
             if path=='/api/config' and role=='admin':
@@ -276,41 +311,53 @@ def main():
     config=validate_config(json.loads(pathlib.Path(a.config).read_text(encoding='utf-8')))
     if a.lab and (not ipaddress.ip_address(config['bind']).is_loopback or any(not c.get('simulator') for c in config['cameras'] if c.get('enabled',True))):
         raise SystemExit('LAB requires loopback binding and simulator cameras only')
-    simulators=[]
-    if any(c.get('simulator') and c.get('enabled',True) and c['driver']=='panasonic' for c in config['cameras']):
-        from .simulator import server
-        for c in config['cameras']:
-            if c['driver']=='panasonic' and c.get('enabled',True) and c.get('simulator'):
-                sim=server(port=c['port']);threading.Thread(target=sim.serve_forever,daemon=True).start();simulators.append(sim)
-    engine=Engine(config,storage);service=None;gateways=[]
+    from .runtime import Runtime
+    runtime=Runtime(config,storage,a.visca_lab,a.visca_allow_store)
+    service=None
     try:
-        service=Server((config.get('bind','127.0.0.1'),config.get('port',8088)),engine,auth,a.lab,a.desktop_control)
-        engine.start()
-        tally=config.get('tally',{})
-        if tally.get('enabled'):
-            from .tally import TallyServer
-            receiver=TallyServer((tally.get('bind','127.0.0.1'),tally.get('port',5727)),engine,tally['source'],tally.get('address_offset',0),tally.get('program_tally',2))
-            threading.Thread(target=receiver.serve_forever,daemon=True).start();gateways.append(receiver)
-        if a.visca_lab:
-            if config.get('pivotcam',{}).get('enabled'):raise SystemExit('Use configured PIVOTCam endpoints or the legacy VISCA lab, not both')
-            from .ross import PresetFollower,LabViscaServer
-            engine.ross_follower=PresetFollower(engine)
-            for i,c in enumerate(c for c in config['cameras'] if c.get('enabled',True) and c['manufacturer']=='Panasonic'):
-                gateway=LabViscaServer(('127.0.0.1',19010+c['number']),engine,c['id'],engine.ross_follower,a.visca_allow_store)
-                threading.Thread(target=gateway.serve_forever,daemon=True).start();gateways.append(gateway)
-                print(f'LAB serial VISCA/TCP: {gateway.server_address[0]}:{gateway.server_address[1]} -> {c["id"]}',flush=True)
-        pivot=config.get('pivotcam',{})
-        if pivot.get('enabled'):
-            from .ross import FixedCameraController,PivotCamServer
-            for c in config['cameras']:
-                if not c.get('enabled',True) or not c.get('pivotcam'):continue
-                follower=FixedCameraController(engine,c['id'])
-                gateway=PivotCamServer((pivot.get('bind','127.0.0.1'),pivot.get('base_port',19010)+c['number']),engine,c['id'],follower,pivot['controller'],c.get('allow_store',False))
-                threading.Thread(target=gateway.serve_forever,daemon=True).start();gateways.append(gateway)
-                print(f'PIVOTCam camera {c["number"]}: {gateway.server_address} -> {c["id"]}',flush=True)
+        runtime.start()
+        service=Server((config.get('bind','127.0.0.1'),config.get('port',8088)),runtime.engine,auth,a.lab,a.desktop_control)
+        def apply_live(configuration):
+            nonlocal runtime
+            if any(configuration.get(k,default)!=runtime.config.get(k,default) for k,default in [('bind','127.0.0.1'),('port',8088)]):
+                raise ValueError('Change the service address or port in the desktop control panel')
+            if a.lab and any(not c.get('simulator') for c in configuration['cameras'] if c.get('enabled',True)):
+                raise ValueError('Start the desktop service in hardware mode before adding a real camera')
+            old=runtime.config
+            service.reconfiguring=True
+            candidate=None
+            try:
+                if runtime.transport_settings(configuration)==runtime.transport_settings(runtime.config):
+                    candidate=runtime
+                else:
+                    runtime.close()
+                    candidate=Runtime(configuration,storage,a.visca_lab,a.visca_allow_store)
+                    candidate.start()
+                paths={pathlib.Path(a.config),storage/'desktop-config.json',storage/'config.pending.json'}
+                originals={path:path.read_bytes() if path.exists() else None for path in paths}
+                try:
+                    for path in paths:
+                        temporary=path.with_suffix('.new')
+                        temporary.write_text(json.dumps(configuration,indent=2),encoding='utf-8');temporary.replace(path)
+                except Exception:
+                    for path,content in originals.items():
+                        if content is None:path.unlink(missing_ok=True)
+                        else:path.write_bytes(content)
+                    raise
+                if candidate is runtime:runtime.update_metadata(configuration)
+                runtime=candidate;service.engine=runtime.engine
+                if not old.get('authentication_enabled',True) and configuration.get('authentication_enabled',True):
+                    with auth.lock:
+                        for token,entry in list(auth.sessions.items()):
+                            if entry[2]=='open-access':auth.sessions.pop(token,None)
+            except Exception as error:
+                if candidate is not None:candidate.close()
+                runtime=Runtime(old,storage,a.visca_lab,a.visca_allow_store);runtime.start();service.engine=runtime.engine
+                raise ValueError('Setup could not apply. Previous setup restored: '+str(error)[:120]) from error
+            finally:service.reconfiguring=False
+        service.apply_configuration=apply_live
         if a.desktop_control:
             def parent_control():
-                # This private stdin pipe belongs to the desktop parent, not HTTP clients.
                 for line in sys.stdin:
                     if line.strip()=='quit':break
                 service.shutdown()
@@ -319,9 +366,7 @@ def main():
         service.serve_forever(poll_interval=.2)
     except KeyboardInterrupt:pass
     finally:
-        for gateway in gateways:gateway.shutdown();gateway.server_close()
-        engine.close()
+        runtime.close()
         if service is not None:service.server_close()
-        for sim in simulators:sim.shutdown();sim.server_close()
 
 if __name__=='__main__':main()

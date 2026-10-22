@@ -43,7 +43,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
     });
 }
 function login() {
@@ -88,7 +88,7 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
 function jog(pan,tilt,zoom,focus) {
     if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
     var camera=selected(),epoch=cbEpoch;
@@ -134,10 +134,10 @@ function poll() {
         if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
         if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
-        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        ogscript.rename('connection',''+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
         for(var n=0;n&lt;6;n++) {
-            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
-            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' - ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'-');
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
@@ -146,7 +146,7 @@ function poll() {
             ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
-            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
         cbUpdating=true;
         var tally=c.tally||{};
@@ -170,14 +170,14 @@ function poll() {
                 params.setAccess(key,enabled?1:0);
             }
         } finally {cbUpdating=false;}
-        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
     });
 }
 function tick() {
     cbTick++;
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
-    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
 
     var originalPoll=poll;
@@ -189,7 +189,7 @@ function tick() {
     var originalCameraAt=cameraAt;
     cameraAt=function(index){cbTouchEnabled=false;if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');originalCameraAt(index);};
     var originalSend=send;
-    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / setup.');return;}originalSend(action,data,callback);};
+    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / Setup.');return;}originalSend(action,data,callback);};
     return {run:function(code,source){return function(){return eval(code);}.call(source);},
       enter:function(token,cid){cbToken=token;cbTouchEnabled=false;cbEpoch++;cbPending={};cbEdit={};cbConstraints={};active=true;
         params.setAccess('camera',1);params.setValue('camera',0,cid);params.setAccess('camera',0);
@@ -241,7 +241,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
     });
 }
 function login() {
@@ -286,7 +286,7 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
 function jog(pan,tilt,zoom,focus) {
     if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
     var camera=selected(),epoch=cbEpoch;
@@ -332,10 +332,10 @@ function poll() {
         if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
         if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
-        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        ogscript.rename('connection',''+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
         for(var n=0;n&lt;6;n++) {
-            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
-            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' - ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'-');
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
@@ -344,7 +344,7 @@ function poll() {
             ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
-            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
         cbUpdating=true;
         var tally=c.tally||{};
@@ -368,14 +368,14 @@ function poll() {
                 params.setAccess(key,enabled?1:0);
             }
         } finally {cbUpdating=false;}
-        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
     });
 }
 function tick() {
     cbTick++;
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
-    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
 
     var originalPoll=poll;
@@ -387,7 +387,7 @@ function tick() {
     var originalCameraAt=cameraAt;
     cameraAt=function(index){cbTouchEnabled=false;if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');originalCameraAt(index);};
     var originalSend=send;
-    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / setup.');return;}originalSend(action,data,callback);};
+    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / Setup.');return;}originalSend(action,data,callback);};
     return {run:function(code,source){return function(){return eval(code);}.call(source);},
       enter:function(token,cid){cbToken=token;cbTouchEnabled=false;cbEpoch++;cbPending={};cbEdit={};cbConstraints={};active=true;
         params.setAccess('camera',1);params.setValue('camera',0,cid);params.setAccess('camera',0);
@@ -439,7 +439,7 @@ function request(path, data, callback) {
             var result = JSON.parse(String(raw));
             if (result.error) { status(result.error); if (callback) callback(null); return; }
             if (callback) callback(result);
-        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+        } catch (e) { status('BRIDGE ERROR - feedback may be stale'); if (callback) callback(null); }
     });
 }
 function login() {
@@ -484,7 +484,7 @@ function touchEnable() {
     ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
     if(!cbTouchEnabled)stop();
 }
-function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('Stop Sent');}); }
 function jog(pan,tilt,zoom,focus) {
     if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
     var camera=selected(),epoch=cbEpoch;
@@ -530,10 +530,10 @@ function poll() {
         if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
         if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
-        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        ogscript.rename('connection',''+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
         for(var n=0;n&lt;6;n++) {
-            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
-            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' - ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'-');
             ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
         }
         ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
@@ -542,7 +542,7 @@ function poll() {
             ogscript.rename('paint_help',c.parameters.wb_mode.label);
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
             var ross=r.ross||{};
-            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
         cbUpdating=true;
         var tally=c.tally||{};
@@ -566,14 +566,14 @@ function poll() {
                 params.setAccess(key,enabled?1:0);
             }
         } finally {cbUpdating=false;}
-        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
     });
 }
 function tick() {
     cbTick++;
     if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
     if(cbTick%5==0)poll();
-    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
 
     var originalPoll=poll;
@@ -585,7 +585,7 @@ function tick() {
     var originalCameraAt=cameraAt;
     cameraAt=function(index){cbTouchEnabled=false;if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');originalCameraAt(index);};
     var originalSend=send;
-    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / setup.');return;}originalSend(action,data,callback);};
+    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / Setup.');return;}originalSend(action,data,callback);};
     return {run:function(code,source){return function(){return eval(code);}.call(source);},
       enter:function(token,cid){cbToken=token;cbTouchEnabled=false;cbEpoch++;cbPending={};cbEdit={};cbConstraints={};active=true;
         params.setAccess('camera',1);params.setValue('camera',0,cid);params.setAccess('camera',0);
@@ -597,7 +597,7 @@ function tick() {
 var U_PANELS={Panasonic:CB_Panasonic,Marshall:CB_Marshall,Sony:CB_Sony};
 // Shared native camera setup. Passwords are cleared before each HTTP request.
 var U={token:'',role:'',config:null,revision:'',index:0,editing:'',maker:'',switching:false};
-var U_PROFILES=['panasonic','panasonic-sim','sony-sdk','marshall-CV226','marshall-CV228','marshall-lab'].concat(["panasonic:AW-HE35", "panasonic:AW-HE38", "panasonic:AW-HE40", "panasonic:AW-HE48", "panasonic:AW-HE58", "panasonic:AW-HE65", "panasonic:AW-HE70", "panasonic:AW-HN38", "panasonic:AW-HN40", "panasonic:AW-HN65", "panasonic:AW-HN70", "panasonic:AW-SFU01", "panasonic:AW-HE42", "panasonic:AW-HE68", "panasonic:AW-HE75", "panasonic:AW-UE63", "panasonic:AW-UE65", "panasonic:AW-UE70", "panasonic:AW-UN70", "panasonic:AW-HE145", "panasonic:AW-UE100", "panasonic:AW-UE150", "panasonic:AW-UE155", "panasonic:AW-UN145", "panasonic:AW-HE50", "panasonic:AW-HEF5", "panasonic:AW-HE60", "panasonic:AW-HE120", "panasonic:AW-HR140", "panasonic:AW-HE2", "panasonic:AW-UE4", "panasonic:AK-UB300", "panasonic:AG-CX350", "panasonic:AG-CX200", "panasonic:AJ-UPX360", "panasonic:AJ-CX4000", "panasonic:AJ-UPX900", "panasonic:Other"]);
+var U_PROFILES=['panasonic','sony-sdk','marshall-CV226','marshall-CV228'].concat(["panasonic:AW-HE35", "panasonic:AW-HE38", "panasonic:AW-HE40", "panasonic:AW-HE48", "panasonic:AW-HE58", "panasonic:AW-HE65", "panasonic:AW-HE70", "panasonic:AW-HN38", "panasonic:AW-HN40", "panasonic:AW-HN65", "panasonic:AW-HN70", "panasonic:AW-SFU01", "panasonic:AW-HE42", "panasonic:AW-HE68", "panasonic:AW-HE75", "panasonic:AW-UE63", "panasonic:AW-UE65", "panasonic:AW-UE70", "panasonic:AW-UN70", "panasonic:AW-HE145", "panasonic:AW-UE100", "panasonic:AW-UE150", "panasonic:AW-UE155", "panasonic:AW-UN145", "panasonic:AW-HE50", "panasonic:AW-HEF5", "panasonic:AW-HE60", "panasonic:AW-HE120", "panasonic:AW-HR140", "panasonic:AW-HE2", "panasonic:AW-UE4", "panasonic:AK-UB300", "panasonic:AG-CX350", "panasonic:AG-CX200", "panasonic:AJ-UPX360", "panasonic:AJ-CX4000", "panasonic:AJ-UPX900", "panasonic:Other"]);
 function uValue(key){return params.getValue('setup_'+key,0);}
 function uSet(key,value){params.setValue('setup_'+key,0,value);}
 function uStatus(text){ogscript.rename('unified_status',String(text));}
@@ -633,7 +633,7 @@ function uRoster(){
     var cameras=U.config?U.config.cameras:[];
     for(var n=0;n&lt;8;n++){
         var i=Math.floor(U.index/8)*8+n,c=cameras[i];
-        ogscript.rename('roster_'+n,c?'CAM '+c.number+'  '+c.name+'\n'+c.manufacturer+' '+c.model+(c.enabled===false?' / disabled':''):'—');
+        ogscript.rename('roster_'+n,c?'CAM '+c.number+'  '+c.name+'\n'+c.manufacturer+' '+c.model+(c.enabled===false?' / disabled':''):'-');
         ogscript.setStyle('roster_'+n,'bg#'+(i==U.index?'7433bd':'494f5b')+';fg#ffffff;size:16;');
     }
     var c=cameras[U.index];ogscript.rename('setup_selected',c?'Selected: CAM '+c.number+' / '+c.name:'No configured cameras');
@@ -642,6 +642,7 @@ function uPick(slot){if(!U.config)return;var index=Math.floor(U.index/8)*8+slot;
 function uListPage(delta){if(!U.config||!U.config.cameras.length)return;U.index=(Math.floor(U.index/8)*8+delta*8+Math.ceil(U.config.cameras.length/8)*8)%(Math.ceil(U.config.cameras.length/8)*8);uRoster();}
 function uProfile(){
     var p=U_PROFILES[Number(uValue('profile'))];
+    if(p.indexOf('marshall-CV')==0){uSet('pivot',0);uSet('enabled',0);}
     ogscript.rename('setup_profile_help',p=='sony-sdk'?'Sony: save the camera, then set access on the Camera access page.':p.indexOf('marshall-CV')==0?'Marshall hardware control is pending. Save this profile disabled.':p=='marshall-lab'?'Marshall simulator only. No serial packets are sent.':'Panasonic CGI compatibility profile. HE2: digital PTZ, shots 1–9, no focus. Unsupported controls stay read-only. HTTP authentication is not implemented.');
 }
 function uNew(){
@@ -723,49 +724,47 @@ function uBridgeSave(){
       <param oid="setup_name" name="Camera name" access="1" type="STRING" value="New camera" widget="3" maxlength="1024" />
       <param oid="setup_profile" name="Manufacturer / model" access="1" type="INT32" value="0" constrainttype="INT_CHOICE" widget="7">
         <constraint key="0">Panasonic AW-HE130</constraint>
-        <constraint key="1">Panasonic simulator</constraint>
-        <constraint key="2">Sony PXW-Z200 / SDK</constraint>
-        <constraint key="3">Marshall CV226 / pending</constraint>
-        <constraint key="4">Marshall CV228 / pending</constraint>
-        <constraint key="5">Marshall simulator</constraint>
-        <constraint key="6">Panasonic AW-HE35</constraint>
-        <constraint key="7">Panasonic AW-HE38</constraint>
-        <constraint key="8">Panasonic AW-HE40</constraint>
-        <constraint key="9">Panasonic AW-HE48</constraint>
-        <constraint key="10">Panasonic AW-HE58</constraint>
-        <constraint key="11">Panasonic AW-HE65</constraint>
-        <constraint key="12">Panasonic AW-HE70</constraint>
-        <constraint key="13">Panasonic AW-HN38</constraint>
-        <constraint key="14">Panasonic AW-HN40</constraint>
-        <constraint key="15">Panasonic AW-HN65</constraint>
-        <constraint key="16">Panasonic AW-HN70</constraint>
-        <constraint key="17">Panasonic AW-HE40 with AW-SFU01 upgrade</constraint>
-        <constraint key="18">Panasonic AW-HE42</constraint>
-        <constraint key="19">Panasonic AW-HE68</constraint>
-        <constraint key="20">Panasonic AW-HE75</constraint>
-        <constraint key="21">Panasonic AW-UE63</constraint>
-        <constraint key="22">Panasonic AW-UE65</constraint>
-        <constraint key="23">Panasonic AW-UE70</constraint>
-        <constraint key="24">Panasonic AW-UN70</constraint>
-        <constraint key="25">Panasonic AW-HE145</constraint>
-        <constraint key="26">Panasonic AW-UE100</constraint>
-        <constraint key="27">Panasonic AW-UE150</constraint>
-        <constraint key="28">Panasonic AW-UE155</constraint>
-        <constraint key="29">Panasonic AW-UN145</constraint>
-        <constraint key="30">Panasonic AW-HE50</constraint>
-        <constraint key="31">Panasonic AW-HE50 with AW-HEF5 upgrade</constraint>
-        <constraint key="32">Panasonic AW-HE60</constraint>
-        <constraint key="33">Panasonic AW-HE120</constraint>
-        <constraint key="34">Panasonic AW-HR140</constraint>
-        <constraint key="35">Panasonic AW-HE2 — digital PTZ</constraint>
-        <constraint key="36">Panasonic AW-UE4 — digital PTZ</constraint>
-        <constraint key="37">Panasonic AK-UB300</constraint>
-        <constraint key="38">Panasonic AG-CX350</constraint>
-        <constraint key="39">Panasonic AG-CX200</constraint>
-        <constraint key="40">Panasonic AJ-UPX360</constraint>
-        <constraint key="41">Panasonic AJ-CX4000</constraint>
-        <constraint key="42">Panasonic AJ-UPX900</constraint>
-        <constraint key="43">Panasonic — other CGI camera (verify controls)</constraint>
+        <constraint key="1">Sony PXW-Z200 / SDK</constraint>
+        <constraint key="2">Marshall CV226</constraint>
+        <constraint key="3">Marshall CV228</constraint>
+        <constraint key="4">Panasonic AW-HE35</constraint>
+        <constraint key="5">Panasonic AW-HE38</constraint>
+        <constraint key="6">Panasonic AW-HE40</constraint>
+        <constraint key="7">Panasonic AW-HE48</constraint>
+        <constraint key="8">Panasonic AW-HE58</constraint>
+        <constraint key="9">Panasonic AW-HE65</constraint>
+        <constraint key="10">Panasonic AW-HE70</constraint>
+        <constraint key="11">Panasonic AW-HN38</constraint>
+        <constraint key="12">Panasonic AW-HN40</constraint>
+        <constraint key="13">Panasonic AW-HN65</constraint>
+        <constraint key="14">Panasonic AW-HN70</constraint>
+        <constraint key="15">Panasonic AW-HE40 with AW-SFU01 upgrade</constraint>
+        <constraint key="16">Panasonic AW-HE42</constraint>
+        <constraint key="17">Panasonic AW-HE68</constraint>
+        <constraint key="18">Panasonic AW-HE75</constraint>
+        <constraint key="19">Panasonic AW-UE63</constraint>
+        <constraint key="20">Panasonic AW-UE65</constraint>
+        <constraint key="21">Panasonic AW-UE70</constraint>
+        <constraint key="22">Panasonic AW-UN70</constraint>
+        <constraint key="23">Panasonic AW-HE145</constraint>
+        <constraint key="24">Panasonic AW-UE100</constraint>
+        <constraint key="25">Panasonic AW-UE150</constraint>
+        <constraint key="26">Panasonic AW-UE155</constraint>
+        <constraint key="27">Panasonic AW-UN145</constraint>
+        <constraint key="28">Panasonic AW-HE50</constraint>
+        <constraint key="29">Panasonic AW-HE50 with AW-HEF5 upgrade</constraint>
+        <constraint key="30">Panasonic AW-HE60</constraint>
+        <constraint key="31">Panasonic AW-HE120</constraint>
+        <constraint key="32">Panasonic AW-HR140</constraint>
+        <constraint key="33">Panasonic AW-HE2 — digital PTZ</constraint>
+        <constraint key="34">Panasonic AW-UE4 — digital PTZ</constraint>
+        <constraint key="35">Panasonic AK-UB300</constraint>
+        <constraint key="36">Panasonic AG-CX350</constraint>
+        <constraint key="37">Panasonic AG-CX200</constraint>
+        <constraint key="38">Panasonic AJ-UPX360</constraint>
+        <constraint key="39">Panasonic AJ-CX4000</constraint>
+        <constraint key="40">Panasonic AJ-UPX900</constraint>
+        <constraint key="41">Panasonic — other CGI camera (verify controls)</constraint>
       </param>
       <param oid="setup_host" name="Camera IP / host" access="1" type="STRING" value="" widget="3" maxlength="1024" />
       <param oid="setup_port" name="Camera port (Sony SDK uses its own transport)" access="1" type="INT32" value="80" constrainttype="INT_RANGE" constraint="1;65535;" widget="5" />
@@ -882,10 +881,10 @@ function uBridgeSave(){
     <timertask timerid="unified_tick" tasktype="ogscript">uTick();</timertask>
   </meta>
   <label name="CameraBridge" left="16" top="12" width="260" height="44" style="fg#e2e4e9;size:26;txt-align:west;" />
-  <button name="Cameras / setup" left="300" top="10" width="240" height="52" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+  <button name="Cameras / Setup" left="300" top="10" width="240" height="52" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
     <task tasktype="ogscript">uSetup();</task>
   </button>
-  <button name="Control selected camera" left="560" top="10" width="320" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+  <button name="Control Selected Camera" left="560" top="10" width="320" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
     <task tasktype="ogscript">uControl();</task>
   </button>
   <label name="Starting…" left="900" top="10" width="450" height="52" style="fg#e2e4e9;size:14;txt-align:west;" id="unified_status" />
@@ -1050,7 +1049,7 @@ function uBridgeSave(){
       <ogscript handles="onchange" oid="panasonic_detail" element="0">CB_Panasonic.run("changed('detail');",this);</ogscript>
       <abs left="8" top="8" width="1350" height="80" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="CameraBridge / Panasonic" left="16" top="10" width="325" height="28" style="fg#e2e4e9;size:21;txt-align:west;" />
-        <label name="AW-HE130 · PTZ &amp; paint" left="16" top="45" width="325" height="24" style="fg#abb1bd;size:14;txt-align:west;" />
+        <label name="PTZ and Camera Control" left="16" top="45" width="325" height="24" style="fg#abb1bd;size:14;txt-align:west;" />
         <reveal id="panasonic_nav_ptz" name="PTZ" targetid="panasonic_page_ptz" left="350" top="12" width="104" height="56" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" />
         <reveal id="panasonic_nav_presets" name="Presets" targetid="panasonic_page_presets" left="462" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
         <reveal id="panasonic_nav_paint" name="Paint" targetid="panasonic_page_paint" left="574" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
@@ -1062,25 +1061,25 @@ function uBridgeSave(){
         <image src="file:///C:/Users/rackpc01/Documents/Codex/2026-10-21/files-pasted-by-the-user-camerabridge/outputs/camerabridge/dashboard/assets/panasonic.png" left="1164" top="15" width="164" height="48" />
       </abs>
       <label name="Camera identification pending" left="164" top="100" width="1178" height="26" style="fg#e2e4e9;size:18;txt-align:west;" id="panasonic_identity" />
-      <label name="SIMULATOR / awaiting feedback" left="164" top="130" width="1178" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="panasonic_connection" />
+      <label name="Connecting" left="164" top="130" width="1178" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="panasonic_connection" />
       <abs left="8" top="104" width="140" height="624" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="CAMERAS" left="10" top="10" width="120" height="26" style="fg#e2e4e9;size:14;txt-align:west;" />
-        <button name="—" left="8" top="42" width="124" height="54" buttontype="push" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_0">
+        <button name="-" left="8" top="42" width="124" height="54" buttontype="push" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_0">
           <task tasktype="ogscript">CB_Panasonic.run("cameraAt(0);",this);</task>
         </button>
-        <button name="—" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_1">
+        <button name="-" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_1">
           <task tasktype="ogscript">CB_Panasonic.run("cameraAt(1);",this);</task>
         </button>
-        <button name="—" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_2">
+        <button name="-" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_2">
           <task tasktype="ogscript">CB_Panasonic.run("cameraAt(2);",this);</task>
         </button>
-        <button name="—" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_3">
+        <button name="-" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_3">
           <task tasktype="ogscript">CB_Panasonic.run("cameraAt(3);",this);</task>
         </button>
-        <button name="—" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_4">
+        <button name="-" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_4">
           <task tasktype="ogscript">CB_Panasonic.run("cameraAt(4);",this);</task>
         </button>
-        <button name="—" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_5">
+        <button name="-" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_5">
           <task tasktype="ogscript">CB_Panasonic.run("cameraAt(5);",this);</task>
         </button>
         <button name="Next" left="8" top="432" width="124" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
@@ -1383,8 +1382,8 @@ function uBridgeSave(){
           </button>
           <label name="Tally feedback pending" left="700" top="360" width="450" height="88" style="fg#e2e4e9;size:14;txt-align:west;" id="panasonic_tally_state" />
           <label name="Tally enable / disable, configuration and diagnostics: open CameraBridge setup." left="20" top="454" width="1140" height="36" style="fg#a9bbc8;size:14;txt-align:west;" />
-          <label name="SIMULATOR feedback confirms simulator state. Verify hardware separately." left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
-          <label name="Use Cameras / setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
+          <label name="CameraBridge Connection Settings" left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
+          <label name="Use Cameras / Setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
         </abs>
       </tab>
       <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#b9c5cf;size:14;txt-align:west;" id="panasonic_status" />
@@ -1420,25 +1419,25 @@ function uBridgeSave(){
         <image src="file:///C:/Users/rackpc01/Documents/Codex/2026-10-21/files-pasted-by-the-user-camerabridge/outputs/camerabridge/dashboard/assets/marshall.png" left="1151" top="15" width="177" height="48" />
       </abs>
       <label name="Camera identification pending" left="164" top="100" width="1178" height="26" style="fg#e2e4e9;size:18;txt-align:west;" id="marshall_identity" />
-      <label name="SIMULATOR / awaiting feedback" left="164" top="130" width="1178" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="marshall_connection" />
+      <label name="Connecting" left="164" top="130" width="1178" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="marshall_connection" />
       <abs left="8" top="104" width="140" height="624" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="CAMERAS" left="10" top="10" width="120" height="26" style="fg#e2e4e9;size:14;txt-align:west;" />
-        <button name="—" left="8" top="42" width="124" height="54" buttontype="push" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_0">
+        <button name="-" left="8" top="42" width="124" height="54" buttontype="push" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_0">
           <task tasktype="ogscript">CB_Marshall.run("cameraAt(0);",this);</task>
         </button>
-        <button name="—" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_1">
+        <button name="-" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_1">
           <task tasktype="ogscript">CB_Marshall.run("cameraAt(1);",this);</task>
         </button>
-        <button name="—" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_2">
+        <button name="-" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_2">
           <task tasktype="ogscript">CB_Marshall.run("cameraAt(2);",this);</task>
         </button>
-        <button name="—" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_3">
+        <button name="-" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_3">
           <task tasktype="ogscript">CB_Marshall.run("cameraAt(3);",this);</task>
         </button>
-        <button name="—" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_4">
+        <button name="-" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_4">
           <task tasktype="ogscript">CB_Marshall.run("cameraAt(4);",this);</task>
         </button>
-        <button name="—" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_5">
+        <button name="-" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_5">
           <task tasktype="ogscript">CB_Marshall.run("cameraAt(5);",this);</task>
         </button>
         <button name="Next" left="8" top="432" width="124" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
@@ -1679,8 +1678,8 @@ function uBridgeSave(){
             <task tasktype="ogscript">CB_Marshall.run("send('lock',{value:false},null);",this);</task>
           </button>
           <label name="Tally enable / disable, configuration and diagnostics: open CameraBridge setup." left="20" top="454" width="1140" height="36" style="fg#a9bbc8;size:14;txt-align:west;" />
-          <label name="SIMULATOR feedback confirms simulator state. Verify hardware separately." left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
-          <label name="Use Cameras / setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
+          <label name="CameraBridge Connection Settings" left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
+          <label name="Use Cameras / Setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
         </abs>
       </tab>
       <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#b9c5cf;size:14;txt-align:west;" id="marshall_status" />
@@ -1712,22 +1711,22 @@ function uBridgeSave(){
       <label name="Awaiting feedback" left="164" top="133" width="1180" height="24" style="fg#e2e4e9;size:14;txt-align:west;" id="sony_connection" />
       <abs left="8" top="104" width="140" height="624" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="CAMERAS" left="10" top="10" width="120" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
-        <button name="—" left="8" top="42" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_0">
+        <button name="-" left="8" top="42" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_0">
           <task tasktype="ogscript">CB_Sony.run("cameraAt(0);",this);</task>
         </button>
-        <button name="—" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_1">
+        <button name="-" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_1">
           <task tasktype="ogscript">CB_Sony.run("cameraAt(1);",this);</task>
         </button>
-        <button name="—" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_2">
+        <button name="-" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_2">
           <task tasktype="ogscript">CB_Sony.run("cameraAt(2);",this);</task>
         </button>
-        <button name="—" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_3">
+        <button name="-" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_3">
           <task tasktype="ogscript">CB_Sony.run("cameraAt(3);",this);</task>
         </button>
-        <button name="—" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_4">
+        <button name="-" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_4">
           <task tasktype="ogscript">CB_Sony.run("cameraAt(4);",this);</task>
         </button>
-        <button name="—" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_5">
+        <button name="-" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_5">
           <task tasktype="ogscript">CB_Sony.run("cameraAt(5);",this);</task>
         </button>
         <button name="Next" left="8" top="438" width="124" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
@@ -1893,13 +1892,13 @@ function uBridgeSave(){
         <abs id="sony_page_config" name="Config" width="1186" height="564" style="bg#25282e;">
           <label name="Set the camera network access and verified SSH fingerprint in CameraBridge setup." left="20" top="386" width="1140" height="60" style="fg#e2e4e9;size:17;txt-align:west;" />
           <label name="Values use Sony native units. Only available camera controls are writable." left="20" top="470" width="1140" height="48" style="fg#a9bbc8;size:15;txt-align:west;" />
-          <label name="Use Cameras / setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
+          <label name="Use Cameras / Setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
         </abs>
       </tab>
       <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#e2e4e9;size:14;txt-align:west;" id="sony_status" />
     </abs>
   </tab>
-  <ogscript handles="onchange" oid="setup_profile" element="0">uProfile(); if(Number(uValue('profile'))&gt;=3 &amp;&amp; Number(uValue('profile'))&lt;=5){uSet('pivot',0);if(Number(uValue('profile'))&lt;5)uSet('enabled',0);}</ogscript>
+  <ogscript handles="onchange" oid="setup_profile" element="0">uProfile();</ogscript>
   <ogscript handles="onload">uNew();uStatus('Set the bridge URL and sign in.');</ogscript>
   <ogscript handles="onclose">uClose();</ogscript>
 </abs>

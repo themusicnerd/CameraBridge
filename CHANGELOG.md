@@ -1,5 +1,15 @@
 # Change record
 
+## 0.3.0rc9
+
+- Add inline camera setup, automatic save and application, switches, and separate manufacturer/model lists.
+- Add persistent device sign-in and an authentication option.
+- Add TSL packet status, tally colours, and separate lamp readback.
+- Restore the tray control panel reliably after a hidden launch.
+- Remove simulator startup from new installations and simplify setup.
+- Add IP links, identification artwork, and setup Help.
+
+
 ## 0.3.0rc8
 
 - Add expandable camera rows and manufacturer identification images.

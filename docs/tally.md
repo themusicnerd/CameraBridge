@@ -37,12 +37,12 @@ Manual test requests can be replaced by the next TSL input.
 
 ## TSL UMD 3.1 receiver
 
-1. Open **Camera setup**.
+1. Open **Switcher and Tally Network Settings**.
 2. Enable the TSL receiver.
 3. Set the listen IP and UDP port.
 4. Set the allowed switcher source IP.
 5. Set each camera's TSL address.
-6. Save and apply the setup.
+6. Wait for **All Changes Saved**.
 7. Configure the switcher to send TSL UMD 3.1 messages to CameraBridge.
 8. Test each program transition and lamp readback.
 
@@ -84,3 +84,15 @@ It does not claim or move the camera.
 - [TSL UMD protocol specification](https://assets.ctfassets.net/vd4y94r5n5vv/2rcLXZWfZ6eOQ2MgEYa2QE/6b086201c7f1ed01f8ad926f0ef2c4d8/TSL_protocol_spec.pdf)
 - [Ross TSL device setup and input IDs](https://help.rossvideo.com/carbonite-device-db/Topics/Devices/UMD/TSL.html)
 - [Riedel's Carbonite tally mapping](https://manuals.riedel.net/en/hi/v3.0/ross-video-carbonite-series-integration-configuration)
+
+## Receiver Feedback
+
+The setup page shows receiver state, last valid packet age, message counts, and rejected packet counts.
+Only valid messages from the configured source set the receiver state to Receiving.
+After 10 seconds without a valid packet, the state changes to Stale.
+TSL uses UDP and does not establish a persistent connection.
+Senders can remain idle between tally changes.
+The camera row shows Program in red and Preview in green.
+Program has priority.
+Incoming TSL indicators remain visible if lamp control is disabled for that camera.
+Panasonic lamp state is polled separately from incoming TSL state.

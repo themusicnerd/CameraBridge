@@ -9,7 +9,13 @@ It stores a salted PBKDF2-SHA256 password hash in SQLite.
 The hash uses 250000 iterations.
 Passwords must be non-empty. This release has no minimum password length.
 
-Sessions expire after eight hours.
+Browser sessions persist across service restarts.
+Sign-out revokes the saved session.
+Changing an account password revokes its saved sessions.
+Only a hash of each persistent session token is stored in the local database.
+Authentication is enabled by default.
+Administrators can disable it in Access Settings.
+Trusted-host checks remain active when authentication is disabled.
 They exist only in service memory.
 Restart ends all sessions.
 Changing an account does not end existing session tokens immediately.

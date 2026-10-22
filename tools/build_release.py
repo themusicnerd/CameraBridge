@@ -16,7 +16,7 @@ import zipfile
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--target',required=True,choices=['windows-x64','linux-x64','macos-x64','macos-arm64']);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--target',required=True,choices=['windows-x64','linux-x64','macos-x64','macos-arm64']);p.add_argument('--package-root',default='build/package');a=p.parse_args()
     expected={'Windows':'windows','Linux':'linux','Darwin':'macos'}[platform.system()]
     arch='arm64' if platform.machine().lower() in ('arm64','aarch64') else 'x64'
     if a.target!=expected+'-'+arch:raise SystemExit('Build on the requested operating system and architecture.')
@@ -40,7 +40,8 @@ collection = COLLECT(gui, cli, a.binaries, a.datas, strip=False, upx=False, name
     if expected=='macos':body+="app = BUNDLE(collection, name='CameraBridge.app', bundle_identifier='com.camerabridge.desktop', info_plist={'LSUIElement': True})\n"
     spec.write_text(body,encoding='utf-8')
     subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--clean',str(spec)],cwd=ROOT,check=True)
-    bundle=ROOT/'build/package/CameraBridge'
+    bundle=(ROOT/a.package_root/'CameraBridge').resolve()
+    if not bundle.is_relative_to(ROOT.resolve()):raise SystemExit('Package output must stay inside the repository')
     if bundle.exists():shutil.rmtree(bundle)
     bundle.mkdir(parents=True)
     if expected=='macos':

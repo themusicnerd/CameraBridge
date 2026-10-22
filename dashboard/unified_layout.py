@@ -16,8 +16,8 @@ def build():
     for oid, value, widget in [('bridge', 'http://127.0.0.1:8088', 3), ('username', '', 3), ('password', '', 4)]:
         node(parameters, 'param', oid=oid, name=oid, type='STRING', value=value, access=1, widget=widget, maxlength=256)
     label(root, 'CameraBridge', 16, 12, 260, 44, size=26)
-    button(root, 'Cameras / setup', 300, 10, 240, 'uSetup();', 52, BLUE)
-    button(root, 'Control selected camera', 560, 10, 320, 'uControl();', 52)
+    button(root, 'Cameras / Setup', 300, 10, 240, 'uSetup();', 52, BLUE)
+    button(root, 'Control Selected Camera', 560, 10, 320, 'uControl();', 52)
     label(root, 'Starting…', 900, 10, 450, 52, 'unified_status', size=14)
     tabs = node(root, 'tab', left=0, top=72, width=1366, height=800, tabposition='none')
     setup = node(tabs, 'abs', id='unified_setup', name='Cameras', width=1366, height=800)
@@ -60,8 +60,8 @@ def build():
         entry(parent, 'setup_'+key, x, y+28, width, 48, None)
 
     value('name','Camera name',0,0,default='New camera')
-    value('profile','Manufacturer / model',438,0,default=0,choices=['Panasonic AW-HE130','Panasonic simulator','Sony PXW-Z200 / SDK','Marshall CV226 / pending','Marshall CV228 / pending','Marshall simulator']+[model_label(m) for m in MODELS if m!='AW-HE130'])
-    listener=script(root, "uProfile(); if(Number(uValue('profile'))>=3 && Number(uValue('profile'))<=5){uSet('pivot',0);if(Number(uValue('profile'))<5)uSet('enabled',0);}", 'onchange');listener.set('oid','setup_profile');listener.set('element','0')
+    value('profile','Manufacturer / model',438,0,default=0,choices=['Panasonic AW-HE130','Sony PXW-Z200 / SDK','Marshall CV226','Marshall CV228']+[model_label(m) for m in MODELS if m!='AW-HE130'])
+    listener=script(root, "uProfile();", 'onchange');listener.set('oid','setup_profile');listener.set('element','0')
     value('host','Camera IP / host',0,84)
     value('port','Camera port (Sony SDK uses its own transport)',438,84,default=80,low=1,high=65535)
     value('number','Camera number / PIVOTCam port = base + number',0,168,default=1,low=1,high=255)
@@ -109,7 +109,7 @@ def build():
                 config.remove(e)
             elif e.tag=='label' and e.get('name') in ('Bridge URL','Backend','Username','Password','CONNECTION / OPERATOR LOGIN'):
                 config.remove(e)
-        label(config,'Use Cameras / setup for connection, camera setup, and shared sign-in.',20,20,1140,80,size=20)
+        label(config,'Use Cameras / Setup for connection, camera setup, and shared sign-in.',20,20,1140,80,size=20)
         prefix=maker.lower()+'_'
         # A JavaScript facade namespaces parameter and element references, including
         # computed parameter names. Each existing control script retains its scope.
@@ -132,7 +132,7 @@ var CB_MAKER=(function(nativeParams,nativeScript){
     var originalCameraAt=cameraAt;
     cameraAt=function(index){cbTouchEnabled=false;if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');originalCameraAt(index);};
     var originalSend=send;
-    send=function(action,data,callback){if(!active&&action!='stop'){status('Select this camera from Cameras / setup.');return;}originalSend(action,data,callback);};
+    send=function(action,data,callback){if(!active&&action!='stop'){status('Select this camera from Cameras / Setup.');return;}originalSend(action,data,callback);};
     return {run:function(code,source){return function(){return eval(code);}.call(source);},
       enter:function(token,cid){cbToken=token;cbTouchEnabled=false;cbEpoch++;cbPending={};cbEdit={};cbConstraints={};active=true;
         params.setAccess('camera',1);params.setValue('camera',0,cid);params.setAccess('camera',0);

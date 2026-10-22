@@ -17,6 +17,11 @@ def roster(server, data):
             return {'configuration': configuration, 'revision': revision, 'pending': pending}
         if data.get('revision') != revision:
             raise ValueError('Camera setup changed. Reload the list before saving.')
+        if operation == 'autosave':
+            configuration=validate_config(data['configuration'])
+            if server.apply_configuration is None:raise ValueError('Live setup is unavailable in this service')
+            server.apply_configuration(configuration)
+            return {'configuration':configuration,'revision':hashlib.sha256(json.dumps(configuration,sort_keys=True).encode()).hexdigest(),'pending':False,'status':'Saved'}
         if operation == 'save':
             camera = data['camera']
             previous = data.get('previous', '')

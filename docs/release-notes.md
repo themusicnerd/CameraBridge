@@ -1,45 +1,36 @@
-# CameraBridge 0.3.0rc8
+# CameraBridge 0.3.0rc9
 
-This development prerelease supports Windows x64 and Linux x64.
-Production acceptance is incomplete.
+Windows x64 and Linux x64 packages are available.
 
-## Changes
+## Setup Interface
 
-- Show one expandable row per camera, with a manufacturer image.
-- Keep camera setup available after administrator sign-in.
-- Add the Panasonic camera catalog used by the Bitfocus module.
-- Add model capabilities and control limits to backend feedback.
-- Add HE2 digital PTZ, iris, white balance, and shots 1 through 9.
-- Prevent HE2 focus commands and unsupported model controls.
-- Add the HE40 detail range and gain display scaling.
-- Treat mode-restricted replies separately from transport failures.
-- Confirm autofocus before accepting a rejected neutral focus command.
+- Edit camera settings inside each expandable row.
+- Use Manufacturer and Model lists.
+- Use four field columns on wide screens and fewer columns on small screens.
+- Save and apply valid changes automatically.
+- Keep fields open and browser sessions active during updates.
+- Restore the previous setup if a network change fails.
+- Open device web interfaces from IP links.
+- Add the CameraBridge, Sony, and Ross identification artwork.
+- Remove Advanced JSON, simulator choices, and hardware-confirmation notices from setup.
+- Start new installations with an empty camera list.
+- Add Help for camera setup, Carbonite, TouchDrive, panel installation, and tally.
 
-HE40 hardware checks confirmed zoom feedback, white-balance memory control, gain feedback, and red tally feedback.
-The checks restored the starting zoom, white balance, tally state, and tally input setting.
-Zoom readback differed from the requested position by one native unit.
-The service reports actual feedback without inventing an exact match.
+## Sessions and Tray
 
-## Installation
+- Keep browser sign-in across page refreshes and service restarts.
+- Revoke sessions on sign-out or an account password change.
+- Store a hash of each persistent session token.
+- Add an Authentication Required switch, enabled by default.
+- Retain trusted-host and origin checks when sign-in is disabled.
+- Restore and centre the desktop control panel when selected from the tray.
 
-Extract the complete platform archive.
-Keep the Sony helper and its libraries with the application.
-Check the supplied SHA-256 file before use.
-The packages are not signed by a publisher.
-See [installation](installation.md), [camera setup](camera-setup.md), and [Panasonic models](panasonic-models.md).
+## Tally Feedback
 
-## Limits
+- Show TSL listener status, valid packet age, and packet counts.
+- Show Program in red and Preview in green.
+- Keep incoming indicators separate from camera lamp readback.
+- Keep incoming tally visible when lamp control is disabled.
+- Poll Panasonic lamp state without changing it.
 
-A catalog entry does not mean every camera function is available.
-HE40 is the only Panasonic model tested on physical hardware for this release.
-Other models require hardware acceptance.
-Basic CGI controls depend on the model and camera mode.
-Advanced paint controls are restricted to verified command profiles.
-HE2 has digital PTZ and no focus control.
-HE2 absolute zoom position control is not available.
-Sony PXW-Z200 remains the implemented Sony SDK profile.
-FR7 and other Sony PTZ profiles are not included in this prerelease.
-Marshall hardware control and actual Preset-bus following remain incomplete.
-TSL 4 and TSL 5 are not supported.
-Physical Carbonite tally acceptance remains required.
-The documentation checks do not establish full ASD-STE100 compliance.
+See the [quick-start guide](quick-start.md) and [API reference](api.md).

@@ -77,7 +77,7 @@ def build(manufacturer,defs):
     script(root,"if(cbToken)request('command',{camera:selected(),action:'stop',data:{}},null);",'onclose')
     header=card(root,8,8,1350,80)
     label(header,'CameraBridge / '+manufacturer,16,10,325,28,size=21)
-    label(header,'AW-HE130 · PTZ & paint' if pana else 'CV226 / CV228 · paint & setup',16,45,325,24,colour='abb1bd',size=14)
+    label(header,'PTZ and Camera Control' if pana else 'CV226 / CV228 · paint & setup',16,45,325,24,colour='abb1bd',size=14)
     pages=['PTZ','Presets','Paint','TD1C','Config'] if pana else ['Paint','Image','Exposure','OSD','Config']
     for i,name in enumerate(pages):node(header,'reveal',id='nav_'+name.lower(),name='TouchDrive' if name=='TD1C' else name,targetid='page_'+name.lower(),left=350+i*112,top=12,width=104,height=56,style=f'bg#{PURPLE if i==0 else BUTTON};fg#ffffff;bdr:none;size:16;')
     launcher=node(header,'abs',id='bridge_launcher',left=920,top=12,width=180,height=56)
@@ -86,9 +86,9 @@ def build(manufacturer,defs):
     logo_width=164 if pana else 177
     node(header,'image',src=(HERE/'assets'/('panasonic.png' if pana else 'marshall.png')).as_uri(),left=1328-logo_width,top=15,width=logo_width,height=48)
     label(root,'Camera identification pending',164,100,1178,26,'identity',size=18)
-    label(root,'SIMULATOR / awaiting feedback',164,130,1178,24,'connection','a9bbc8',14)
+    label(root,'Connecting',164,130,1178,24,'connection','a9bbc8',14)
     rail=card(root,8,104,140,624);label(rail,'CAMERAS',10,10,120,26,size=14)
-    for i in range(6):button(rail,'—',8,42+i*64,124,f'cameraAt({i});',54,PURPLE if i==0 else BUTTON,'camera_pick_'+str(i))
+    for i in range(6):button(rail,'-',8,42+i*64,124,f'cameraAt({i});',54,PURPLE if i==0 else BUTTON,'camera_pick_'+str(i))
     button(rail,'Next',8,432,124,'nextCamera();',48);button(rail,'Refresh',8,492,124,'poll();',48)
     button(rail,'STOP',8,552,124,'stop();',64,'a23d4c')
     tabs=node(root,'tab',left=164,top=164,width=1186,height=564,tabposition='none',delay='false',onchange='highlightPage(String(this.getTitleAt(this.getSelectedIndex())));')
@@ -167,7 +167,7 @@ def build(manufacturer,defs):
         button(config,'Tally OFF',934,288,210,"send('tally',{program:false,preview:false},null);",56)
         label(config,'Tally feedback pending',700,360,450,88,'tally_state',size=14)
     label(config,'Tally enable / disable, configuration and diagnostics: open CameraBridge setup.',20,454,1140,36,colour='a9bbc8',size=14)
-    label(config,'SIMULATOR feedback confirms simulator state. Verify hardware separately.',20,506,1140,36,colour='d7bb8c',size=14)
+    label(config,'CameraBridge Connection Settings',20,506,1140,36,colour='d7bb8c',size=14)
     label(root,'Starting…',164,744,1186,44,'status','b9c5cf',14)
     path=HERE/f'SW-{manufacturer}-Camera-Control.grid'
     ET.indent(root);ET.ElementTree(root).write(path,encoding='utf-8',xml_declaration=True)
