@@ -1,9 +1,16 @@
-# CameraBridge 0.3.0rc5
+# CameraBridge 0.3.0rc6
 
 This is a development prerelease for Windows x64 and Linux x64.
 Physical camera acceptance is incomplete.
 
 ## Changes
+
+- Add one native CameraBridge panel with camera setup and manufacturer control pages.
+- Add camera creation, edits, removal, Sony access, and saved-setup application in DashBoard.
+- Add PIVOTCam and TSL receiver setup in DashBoard.
+- Check setup revisions to prevent accidental changes from older open panels.
+- Stop the previous camera before changing control pages.
+- Keep the existing manufacturer panels available.
 
 - Add a native Sony SDK 2.02.00 adapter and local camera access setup.
 - Add Sony PXW-Z200 lens and paint controls with capability feedback.

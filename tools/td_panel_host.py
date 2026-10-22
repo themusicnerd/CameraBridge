@@ -13,23 +13,25 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-POST_PATHS = frozenset(('/api/login', '/api/logout', '/api/state', '/api/command', '/api/snapshot', '/api/lab/ross/bus', '/api/config', '/api/sony/credentials', '/api/sony/fingerprint'))
+POST_PATHS = frozenset(('/api/login', '/api/logout', '/api/state', '/api/command', '/api/snapshot', '/api/lab/ross/bus', '/api/config', '/api/setup', '/api/sony/credentials', '/api/sony/fingerprint'))
 
 def panel_bytes(manufacturer, base):
-    source = ROOT / 'dashboard' / ('SW-' + manufacturer + '-Camera-Control.grid')
+    source = ROOT / 'dashboard' / ('CameraBridge.grid' if manufacturer=='CameraBridge' else 'SW-' + manufacturer + '-Camera-Control.grid')
     tree = ET.fromstring(source.read_bytes())
     for parameter in tree.iter('param'):
-        if parameter.get('oid') == 'bridge' and 'value' in parameter.attrib:
+        if (parameter.get('oid') == 'bridge' or parameter.get('oid','').endswith('_bridge')) and 'value' in parameter.attrib:
             parameter.set('value',base)
             for value in parameter.iter('value'):
                 value.text = base
     for image in tree.iter('image'):
-        image.set('src', base + '/assets/' + manufacturer.lower() + '.png')
+        image.set('src', base + '/assets/' + image.get('src').rsplit('/',1)[-1])
     return ET.tostring(tree, encoding='utf-8', xml_declaration=True)
 
 class PanelHost(ThreadingHTTPServer):
     daemon_threads = True
-    def __init__(self, address, touchdrive):
+    def __init__(self, address, touchdrive, backend_port=8088):
+        if type(backend_port) is not int or not 1024<=backend_port<=65535:raise ValueError('Invalid local backend port')
+        self.backend_port=backend_port
         self.allowed = {str(ipaddress.ip_address(touchdrive)), address[0]}
         self.base = 'http://%s:%s' % address
         self.slots = threading.BoundedSemaphore(8)
@@ -70,8 +72,9 @@ class PanelHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.trusted(): return
         self.count()
-        if self.path in ('/Panasonic.grid','/Marshall.grid','/Sony.grid'):
-            self.reply(panel_bytes(self.path[1:-5],self.server.base),mime='application/xml',attachment="CameraBridge-"+self.path[1:]); return
+        if self.path in ('/Panasonic.grid','/Marshall.grid','/Sony.grid','/CameraBridge.grid'):
+            filename='CameraBridge.grid' if self.path=='/CameraBridge.grid' else 'CameraBridge-'+self.path[1:]
+            self.reply(panel_bytes(self.path[1:-5],self.server.base),mime='application/xml',attachment=filename); return
         assets={'/assets/panasonic.png':'panasonic.png','/assets/marshall.png':'marshall.png','/assets/sony.png':'sony.png'}
         if self.path in assets:
             self.reply((ROOT/'dashboard/assets'/assets[self.path]).read_bytes(),mime='image/png'); return
@@ -102,7 +105,7 @@ class PanelHandler(BaseHTTPRequestHandler):
         self.proxy('POST',body)
 
     def proxy(self,method,body=None):
-        upstream=http.client.HTTPConnection('127.0.0.1',8088,timeout=5)
+        upstream=http.client.HTTPConnection('127.0.0.1',self.server.backend_port,timeout=5)
         try:
             headers={'Content-Type':self.headers.get('Content-Type','application/json')}
             if self.headers.get('Authorization'):headers['Authorization']=self.headers['Authorization']
@@ -114,11 +117,11 @@ class PanelHandler(BaseHTTPRequestHandler):
         finally:upstream.close()
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--bind',required=True);p.add_argument('--touchdrive',required=True);p.add_argument('--port',type=int,default=8089);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--bind',required=True);p.add_argument('--touchdrive',required=True);p.add_argument('--port',type=int,default=8089);p.add_argument('--backend-port',type=int,default=8088);a=p.parse_args()
     bind=ipaddress.ip_address(a.bind);td=ipaddress.ip_address(a.touchdrive)
     if bind.version!=4 or not bind.is_private or bind.is_unspecified or td.version!=4 or not td.is_private:
         p.error('Explicit private IPv4 development addresses required')
-    service=PanelHost((str(bind),a.port),str(td))
+    service=PanelHost((str(bind),a.port),str(td),a.backend_port)
     print('Development panel host: %s; TouchDrive %s only' % (service.base,td),flush=True)
     try:service.serve_forever(.2)
     except KeyboardInterrupt:pass

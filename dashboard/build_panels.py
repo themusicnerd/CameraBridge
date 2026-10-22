@@ -194,3 +194,5 @@ def build(manufacturer,defs):
 
 if __name__=='__main__':
     for manufacturer,defs in [('Panasonic',PANASONIC),('Marshall',MARSHALL_LAB),('Sony',SONY)]:print(build(manufacturer,defs))
+    from unified_layout import build as build_unified
+    print(build_unified())

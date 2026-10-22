@@ -1,8 +1,9 @@
 # Native DashBoard panels
 
-The project generates separate Panasonic and Marshall OGLML grid files.
+The project generates a unified CameraBridge OGLML grid file and separate manufacturer panels.
 They use native controls and ogScript.
 They do not embed the web interface.
+Use [the unified panel](unified-dashboard.md) for camera setup and camera controls in one file.
 Open CameraBridge asks the operating system to open the configured HTTP or HTTPS address.
 
 The panel keeps its token in memory.

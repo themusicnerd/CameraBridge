@@ -142,6 +142,7 @@ class Server(ThreadingHTTPServer):
     def __init__(self,address,engine,auth,lab=False,desktop_control=False):
         self.engine,self.auth,self.lab=engine,auth,lab
         self.desktop_control=desktop_control
+        self.setup_lock=threading.RLock()
         self.slots=threading.BoundedSemaphore(24)
         super().__init__(address,Handler)
     def process_request(self,request,client_address):
@@ -203,6 +204,10 @@ class Handler(BaseHTTPRequestHandler):
             role=self.server.auth.role(token)
             if not role:raise PermissionError('Authentication required')
             if path=='/api/state':self.send(self.server.engine.snapshot());return
+            if path=='/api/setup':
+                if role!='admin':raise PermissionError('Administrator required for camera setup')
+                from .setup import roster
+                self.send(roster(self.server,data));return
             if path in ('/api/sony/credentials','/api/sony/fingerprint'):
                 if role!='admin':raise PermissionError('Administrator required for Sony access setup')
                 from .sony import SonyCredentials,fingerprint
@@ -210,7 +215,10 @@ class Handler(BaseHTTPRequestHandler):
                     self.send({'fingerprint':fingerprint(data['host'])});return
                 cid=data['camera']
                 if data.get('acknowledge_terms') is not True:raise ValueError('Acknowledge the Sony SDK terms before saving camera access')
-                if not any(c['id']==cid and c['driver']=='sony-sdk' for c in self.server.engine.config['cameras']):raise ValueError('Save the Sony camera setup first')
+                pending=self.server.engine.storage/'config.pending.json'
+                with self.server.setup_lock:
+                    configuration=json.loads(pending.read_text(encoding='utf-8')) if pending.exists() else self.server.engine.config
+                    if not any(c['id']==cid and c['driver']=='sony-sdk' for c in configuration['cameras']):raise ValueError('Save the Sony camera setup first')
                 SonyCredentials(self.server.engine.storage).save(cid,data['username'],data['password'],data['fingerprint'])
                 if cid in self.server.engine.cameras:
                     c=self.server.engine.cameras[cid]
@@ -234,12 +242,13 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/snapshot':self.send(self.server.engine.capture(data['camera'],data['name'],data.get('notes','')));return
             if path=='/api/config' and role=='admin':
                 configuration=validate_config(data['configuration'])
-                target=self.server.engine.storage/'config.pending.json'
-                tmp=target.with_suffix('.tmp');tmp.write_text(json.dumps(configuration,indent=2));tmp.replace(target)
-                if data.get('apply') and self.server.desktop_control:
-                    restart=self.server.engine.storage/'desktop-restart.json';temporary=restart.with_suffix('.tmp')
-                    temporary.write_text(json.dumps({'apply':True}),encoding='utf-8');temporary.replace(restart)
-                    self.send({'status':'Camera setup saved. Desktop service restart requested.'});return
+                with self.server.setup_lock:
+                    target=self.server.engine.storage/'config.pending.json'
+                    tmp=target.with_suffix('.tmp');tmp.write_text(json.dumps(configuration,indent=2),encoding='utf-8');tmp.replace(target)
+                    if data.get('apply') and self.server.desktop_control:
+                        restart=self.server.engine.storage/'desktop-restart.json';temporary=restart.with_suffix('.tmp')
+                        temporary.write_text(json.dumps({'apply':True}),encoding='utf-8');temporary.replace(restart)
+                        self.send({'status':'Camera setup saved. Desktop service restart requested.'});return
                 self.send({'status':'Camera setup saved. Select Apply saved camera setup in the desktop control panel, or restart the console with config.pending.json.'});return
             self.send({'error':'Unsupported endpoint or role'},403)
         except PermissionError as exc:self.send({'error':str(exc)},403)

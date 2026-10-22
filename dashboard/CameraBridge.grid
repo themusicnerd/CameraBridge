@@ -1,0 +1,1856 @@
+<?xml version='1.0' encoding='utf-8'?>
+<abs contexttype="opengear" id="_top" name="CameraBridge" virtualwidth="1366" virtualheight="872" width="1366" height="872" gridaspect="false" style="bg#25282e;fg#e2e4e9;size:16;">
+  <api>
+var CB_Panasonic=(function(nativeParams,nativeScript){
+    var prefix="panasonic_",active=false;
+    var params={getValue:function(k,i){return nativeParams.getValue(k=='bridge'?'bridge':prefix+k,i);},
+      setValue:function(k,i,v){nativeParams.setValue(prefix+k,i,v);},setAccess:function(k,v){nativeParams.setAccess(prefix+k,v);},
+      getParam:function(k,i){return nativeParams.getParam(prefix+k,i);}};
+    var ogscript={rename:function(k,v){nativeScript.rename(prefix+k,v);},setStyle:function(k,v){nativeScript.setStyle(prefix+k,v);},
+      asyncPost:function(u,d,c){nativeScript.asyncPost(u,d,c);},
+      setXML:function(k,xml){nativeScript.setXML(prefix+k,String(xml).replace(/\bid="([^"]+)"/g,'id="'+prefix+'$1"'));}};
+    var CB_MANUFACTURER = 'Panasonic';
+
+var cbToken = '';
+var cbUpdating = false;
+var cbPending = {};
+var cbEdit = {};
+var cbCameras = [];
+var cbIndex = 0;
+var cbEpoch = 0;
+var cbBusy = false;
+var cbTick = 0;
+var cbLastFeedback = 0;
+var cbHandover = false;
+var cbTouchEnabled = false;
+var cbNoticeUntil = 0;
+var cbConstraints = {};
+function status(text) {
+    if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
+    ogscript.rename('status', text);
+}
+function highlightPage(name) {
+    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
+    for(var i=0;i&lt;pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
+}
+function request(path, data, callback) {
+    data.token = cbToken;
+    var base = String(params.getValue('bridge', 0));
+    ogscript.asyncPost(base + '/api/' + path, 'request=' + encodeURIComponent(JSON.stringify(data)), function(raw) {
+        try {
+            var result = JSON.parse(String(raw));
+            if (result.error) { status(result.error); if (callback) callback(null); return; }
+            if (callback) callback(result);
+        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+    });
+}
+function login() {
+    var data = {username:String(params.getValue('username',0)),password:String(params.getValue('password',0))};
+    params.setValue('password',0,'');
+    request('login', data, function(r) { if(r) {cbToken = r.token; status('Authenticated ' + r.role); poll();} });
+}
+var cbLinkUrl = '';
+function refreshBridgeLink() {
+    var url=String(params.getValue('bridge',0)).replace(/\/+$/,'')+'/';
+    if(url==cbLinkUrl)return;
+    var valid=/^https?:\/\/[A-Za-z0-9.\-:\[\]]+\/$/.test(url);
+    var html=valid?'&lt;html&gt;&lt;p&gt;Select this link to open setup:&lt;/p&gt;&lt;a href="'+url+'"&gt;&lt;font size="5" color="#80d9eb"&gt;'+url+'&lt;/font&gt;&lt;/a&gt;&lt;p&gt;Sign in in the browser to control cameras.&lt;/p&gt;&lt;/html&gt;':'&lt;html&gt;Set a valid HTTP or HTTPS backend URL on Config.&lt;/html&gt;';
+    ogscript.setXML('bridge_launcher','&lt;help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;"&gt;&lt;![CDATA['+html+']]&gt;&lt;/help&gt;');
+    cbLinkUrl=url;
+}
+function selected() { return String(params.getValue('camera',0)); }
+function send(action, data, callback) {
+    if (!cbToken) { status('Sign in to control cameras. Lab feedback is read-only.'); return; }
+    if (cbHandover &amp;&amp; action!='stop') { status('Camera handover: waiting for previous stop'); return; }
+    request('command',{camera:selected(),action:action,data:data || {}},callback);
+}
+function nextCamera() {
+    if(cbCameras.length)cameraAt((cbIndex+1)%cbCameras.length);
+}
+function cameraAt(index) {
+    if(index&gt;=cbCameras.length || cbHandover)return;
+    var old=selected(),target=cbCameras[index].id;
+    if(old==target)return;
+    cbEpoch++;cbPending={};cbEdit={};cbHandover=true;
+    var finish=function(r){
+        cbHandover=false;
+        if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
+        cbIndex=index;params.setAccess('camera',1);params.setValue('camera',0,target);params.setAccess('camera',0);poll();
+    };
+    if(cbToken)request('command',{camera:old,action:'stop',data:{}},finish);
+    else finish({readOnly:true});
+}
+function touchEnable() {
+    if(!cbToken){status('Sign in on the Config page first');return;}
+    cbTouchEnabled=!cbTouchEnabled;
+    ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
+    if(!cbTouchEnabled)stop();
+}
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function jog(pan,tilt,zoom,focus) {
+    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
+    var camera=selected(),epoch=cbEpoch;
+    send('claim',{},function(r) {
+        if(!r || epoch!=cbEpoch || camera!=selected())return;
+        var speed=Number(params.getValue('speed',0));
+        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+    });
+}
+function renamePreset() {
+    send('label_preset',{number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))},function(r){if(r)poll();});
+}
+function labBus(bus) {
+    request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
+}
+function changed(key) {
+    if(cbUpdating)return;
+    if(!cbToken){status('Sign in before adjustment');return;}
+    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+}
+function adjust(key,delta,low,high) {
+    if(!cbToken){status('Sign in before adjustment');return;}
+    var value=Number(params.getValue(key,0));
+    params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
+}
+function preset(number) {
+    var store=Number(params.getValue('store',0))==1;
+    if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
+    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    params.setValue('store',0,0);params.setValue('confirmation',0,'');
+}
+function poll() {
+    refreshBridgeLink();
+    if(cbBusy)return; cbBusy=true;
+    var camera=selected(),epoch=cbEpoch;
+    request('state',{},function(r){
+        cbBusy=false; if(!r || epoch!=cbEpoch || camera!=selected())return;
+        cbLastFeedback=new Date().getTime();cbCameras=[];
+        for(var i=0;i&lt;r.cameras.length;i++)if(r.cameras[i].manufacturer==CB_MANUFACTURER)cbCameras.push(r.cameras[i]);
+        var c=null;for(var i=0;i&lt;cbCameras.length;i++)if(cbCameras[i].id==camera){c=cbCameras[i];cbIndex=i;}
+        if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
+        if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
+        ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
+        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        for(var n=0;n&lt;6;n++) {
+            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
+        }
+        ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        if(CB_MANUFACTURER=='Panasonic') {
+            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
+            var ross=r.ross||{};
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+        }
+        cbUpdating=true;
+        var tally=c.tally||{};
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
+        try {
+            for(var key in c.parameters) {
+                var p=c.parameters[key];
+                if(CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported &amp;&amp; p.low&lt;=p.high) {
+                    var range=String(p.low)+';'+String(p.high)+';';
+                    if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
+                }
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
+                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
+                    // DashBoard blocks local setValue while the parameter is read-only.
+                    params.setAccess(key,1);params.setValue(key,0,CB_MANUFACTURER=='Sony' &amp;&amp; (key=='shutter'||key=='zoom')?String(p.value):p.value);
+                }
+                var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed' &amp;&amp; p.writable!==false;
+                if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
+                if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
+                params.setAccess(key,enabled?1:0);
+            }
+        } finally {cbUpdating=false;}
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+    });
+}
+function tick() {
+    cbTick++;
+    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
+    if(cbTick%5==0)poll();
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+}
+
+    var originalPoll=poll;
+    poll=function(){
+      if(active&amp;&amp;U.config){for(var i=0;i&lt;U.config.cameras.length;i++)if(U.config.cameras[i].id==selected()){
+        U.index=i;uRoster();var c=U.config.cameras[i];uStatus('Controlling CAM '+c.number+' / '+c.name);break;}}
+      originalPoll();
+    };
+    var originalCameraAt=cameraAt;
+    cameraAt=function(index){cbTouchEnabled=false;if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');originalCameraAt(index);};
+    var originalSend=send;
+    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / setup.');return;}originalSend(action,data,callback);};
+    return {run:function(code,source){return function(){return eval(code);}.call(source);},
+      enter:function(token,cid){cbToken=token;cbTouchEnabled=false;cbEpoch++;cbPending={};cbEdit={};cbConstraints={};active=true;
+        params.setAccess('camera',1);params.setValue('camera',0,cid);params.setAccess('camera',0);
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');poll();},
+      leave:function(callback){cbEpoch++;cbPending={};cbEdit={};cbTouchEnabled=false;active=false;
+        if(!cbToken){callback(true);return;}request('command',{camera:selected(),action:'stop',data:{}},function(r){if(r){cbToken='';callback(true);}else callback(false);});}};
+})(params,ogscript);
+
+
+var CB_Marshall=(function(nativeParams,nativeScript){
+    var prefix="marshall_",active=false;
+    var params={getValue:function(k,i){return nativeParams.getValue(k=='bridge'?'bridge':prefix+k,i);},
+      setValue:function(k,i,v){nativeParams.setValue(prefix+k,i,v);},setAccess:function(k,v){nativeParams.setAccess(prefix+k,v);},
+      getParam:function(k,i){return nativeParams.getParam(prefix+k,i);}};
+    var ogscript={rename:function(k,v){nativeScript.rename(prefix+k,v);},setStyle:function(k,v){nativeScript.setStyle(prefix+k,v);},
+      asyncPost:function(u,d,c){nativeScript.asyncPost(u,d,c);},
+      setXML:function(k,xml){nativeScript.setXML(prefix+k,String(xml).replace(/\bid="([^"]+)"/g,'id="'+prefix+'$1"'));}};
+    var CB_MANUFACTURER = 'Marshall';
+
+var cbToken = '';
+var cbUpdating = false;
+var cbPending = {};
+var cbEdit = {};
+var cbCameras = [];
+var cbIndex = 0;
+var cbEpoch = 0;
+var cbBusy = false;
+var cbTick = 0;
+var cbLastFeedback = 0;
+var cbHandover = false;
+var cbTouchEnabled = false;
+var cbNoticeUntil = 0;
+var cbConstraints = {};
+function status(text) {
+    if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
+    ogscript.rename('status', text);
+}
+function highlightPage(name) {
+    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
+    for(var i=0;i&lt;pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
+}
+function request(path, data, callback) {
+    data.token = cbToken;
+    var base = String(params.getValue('bridge', 0));
+    ogscript.asyncPost(base + '/api/' + path, 'request=' + encodeURIComponent(JSON.stringify(data)), function(raw) {
+        try {
+            var result = JSON.parse(String(raw));
+            if (result.error) { status(result.error); if (callback) callback(null); return; }
+            if (callback) callback(result);
+        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+    });
+}
+function login() {
+    var data = {username:String(params.getValue('username',0)),password:String(params.getValue('password',0))};
+    params.setValue('password',0,'');
+    request('login', data, function(r) { if(r) {cbToken = r.token; status('Authenticated ' + r.role); poll();} });
+}
+var cbLinkUrl = '';
+function refreshBridgeLink() {
+    var url=String(params.getValue('bridge',0)).replace(/\/+$/,'')+'/';
+    if(url==cbLinkUrl)return;
+    var valid=/^https?:\/\/[A-Za-z0-9.\-:\[\]]+\/$/.test(url);
+    var html=valid?'&lt;html&gt;&lt;p&gt;Select this link to open setup:&lt;/p&gt;&lt;a href="'+url+'"&gt;&lt;font size="5" color="#80d9eb"&gt;'+url+'&lt;/font&gt;&lt;/a&gt;&lt;p&gt;Sign in in the browser to control cameras.&lt;/p&gt;&lt;/html&gt;':'&lt;html&gt;Set a valid HTTP or HTTPS backend URL on Config.&lt;/html&gt;';
+    ogscript.setXML('bridge_launcher','&lt;help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;"&gt;&lt;![CDATA['+html+']]&gt;&lt;/help&gt;');
+    cbLinkUrl=url;
+}
+function selected() { return String(params.getValue('camera',0)); }
+function send(action, data, callback) {
+    if (!cbToken) { status('Sign in to control cameras. Lab feedback is read-only.'); return; }
+    if (cbHandover &amp;&amp; action!='stop') { status('Camera handover: waiting for previous stop'); return; }
+    request('command',{camera:selected(),action:action,data:data || {}},callback);
+}
+function nextCamera() {
+    if(cbCameras.length)cameraAt((cbIndex+1)%cbCameras.length);
+}
+function cameraAt(index) {
+    if(index&gt;=cbCameras.length || cbHandover)return;
+    var old=selected(),target=cbCameras[index].id;
+    if(old==target)return;
+    cbEpoch++;cbPending={};cbEdit={};cbHandover=true;
+    var finish=function(r){
+        cbHandover=false;
+        if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
+        cbIndex=index;params.setAccess('camera',1);params.setValue('camera',0,target);params.setAccess('camera',0);poll();
+    };
+    if(cbToken)request('command',{camera:old,action:'stop',data:{}},finish);
+    else finish({readOnly:true});
+}
+function touchEnable() {
+    if(!cbToken){status('Sign in on the Config page first');return;}
+    cbTouchEnabled=!cbTouchEnabled;
+    ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
+    if(!cbTouchEnabled)stop();
+}
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function jog(pan,tilt,zoom,focus) {
+    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
+    var camera=selected(),epoch=cbEpoch;
+    send('claim',{},function(r) {
+        if(!r || epoch!=cbEpoch || camera!=selected())return;
+        var speed=Number(params.getValue('speed',0));
+        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+    });
+}
+function renamePreset() {
+    send('label_preset',{number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))},function(r){if(r)poll();});
+}
+function labBus(bus) {
+    request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
+}
+function changed(key) {
+    if(cbUpdating)return;
+    if(!cbToken){status('Sign in before adjustment');return;}
+    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+}
+function adjust(key,delta,low,high) {
+    if(!cbToken){status('Sign in before adjustment');return;}
+    var value=Number(params.getValue(key,0));
+    params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
+}
+function preset(number) {
+    var store=Number(params.getValue('store',0))==1;
+    if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
+    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    params.setValue('store',0,0);params.setValue('confirmation',0,'');
+}
+function poll() {
+    refreshBridgeLink();
+    if(cbBusy)return; cbBusy=true;
+    var camera=selected(),epoch=cbEpoch;
+    request('state',{},function(r){
+        cbBusy=false; if(!r || epoch!=cbEpoch || camera!=selected())return;
+        cbLastFeedback=new Date().getTime();cbCameras=[];
+        for(var i=0;i&lt;r.cameras.length;i++)if(r.cameras[i].manufacturer==CB_MANUFACTURER)cbCameras.push(r.cameras[i]);
+        var c=null;for(var i=0;i&lt;cbCameras.length;i++)if(cbCameras[i].id==camera){c=cbCameras[i];cbIndex=i;}
+        if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
+        if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
+        ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
+        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        for(var n=0;n&lt;6;n++) {
+            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
+        }
+        ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        if(CB_MANUFACTURER=='Panasonic') {
+            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
+            var ross=r.ross||{};
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+        }
+        cbUpdating=true;
+        var tally=c.tally||{};
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
+        try {
+            for(var key in c.parameters) {
+                var p=c.parameters[key];
+                if(CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported &amp;&amp; p.low&lt;=p.high) {
+                    var range=String(p.low)+';'+String(p.high)+';';
+                    if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
+                }
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
+                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
+                    // DashBoard blocks local setValue while the parameter is read-only.
+                    params.setAccess(key,1);params.setValue(key,0,CB_MANUFACTURER=='Sony' &amp;&amp; (key=='shutter'||key=='zoom')?String(p.value):p.value);
+                }
+                var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed' &amp;&amp; p.writable!==false;
+                if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
+                if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
+                params.setAccess(key,enabled?1:0);
+            }
+        } finally {cbUpdating=false;}
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+    });
+}
+function tick() {
+    cbTick++;
+    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
+    if(cbTick%5==0)poll();
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+}
+
+    var originalPoll=poll;
+    poll=function(){
+      if(active&amp;&amp;U.config){for(var i=0;i&lt;U.config.cameras.length;i++)if(U.config.cameras[i].id==selected()){
+        U.index=i;uRoster();var c=U.config.cameras[i];uStatus('Controlling CAM '+c.number+' / '+c.name);break;}}
+      originalPoll();
+    };
+    var originalCameraAt=cameraAt;
+    cameraAt=function(index){cbTouchEnabled=false;if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');originalCameraAt(index);};
+    var originalSend=send;
+    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / setup.');return;}originalSend(action,data,callback);};
+    return {run:function(code,source){return function(){return eval(code);}.call(source);},
+      enter:function(token,cid){cbToken=token;cbTouchEnabled=false;cbEpoch++;cbPending={};cbEdit={};cbConstraints={};active=true;
+        params.setAccess('camera',1);params.setValue('camera',0,cid);params.setAccess('camera',0);
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');poll();},
+      leave:function(callback){cbEpoch++;cbPending={};cbEdit={};cbTouchEnabled=false;active=false;
+        if(!cbToken){callback(true);return;}request('command',{camera:selected(),action:'stop',data:{}},function(r){if(r){cbToken='';callback(true);}else callback(false);});}};
+})(params,ogscript);
+
+
+var CB_Sony=(function(nativeParams,nativeScript){
+    var prefix="sony_",active=false;
+    var params={getValue:function(k,i){return nativeParams.getValue(k=='bridge'?'bridge':prefix+k,i);},
+      setValue:function(k,i,v){nativeParams.setValue(prefix+k,i,v);},setAccess:function(k,v){nativeParams.setAccess(prefix+k,v);},
+      getParam:function(k,i){return nativeParams.getParam(prefix+k,i);}};
+    var ogscript={rename:function(k,v){nativeScript.rename(prefix+k,v);},setStyle:function(k,v){nativeScript.setStyle(prefix+k,v);},
+      asyncPost:function(u,d,c){nativeScript.asyncPost(u,d,c);},
+      setXML:function(k,xml){nativeScript.setXML(prefix+k,String(xml).replace(/\bid="([^"]+)"/g,'id="'+prefix+'$1"'));}};
+    var CB_MANUFACTURER='Sony';
+
+var cbToken = '';
+var cbUpdating = false;
+var cbPending = {};
+var cbEdit = {};
+var cbCameras = [];
+var cbIndex = 0;
+var cbEpoch = 0;
+var cbBusy = false;
+var cbTick = 0;
+var cbLastFeedback = 0;
+var cbHandover = false;
+var cbTouchEnabled = false;
+var cbNoticeUntil = 0;
+var cbConstraints = {};
+function status(text) {
+    if(String(text).indexOf('Feedback refreshed')==0 &amp;&amp; new Date().getTime()&lt;cbNoticeUntil)return;
+    ogscript.rename('status', text);
+}
+function highlightPage(name) {
+    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
+    for(var i=0;i&lt;pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
+}
+function request(path, data, callback) {
+    data.token = cbToken;
+    var base = String(params.getValue('bridge', 0));
+    ogscript.asyncPost(base + '/api/' + path, 'request=' + encodeURIComponent(JSON.stringify(data)), function(raw) {
+        try {
+            var result = JSON.parse(String(raw));
+            if (result.error) { status(result.error); if (callback) callback(null); return; }
+            if (callback) callback(result);
+        } catch (e) { status('BRIDGE ERROR — feedback may be stale'); if (callback) callback(null); }
+    });
+}
+function login() {
+    var data = {username:String(params.getValue('username',0)),password:String(params.getValue('password',0))};
+    params.setValue('password',0,'');
+    request('login', data, function(r) { if(r) {cbToken = r.token; status('Authenticated ' + r.role); poll();} });
+}
+var cbLinkUrl = '';
+function refreshBridgeLink() {
+    var url=String(params.getValue('bridge',0)).replace(/\/+$/,'')+'/';
+    if(url==cbLinkUrl)return;
+    var valid=/^https?:\/\/[A-Za-z0-9.\-:\[\]]+\/$/.test(url);
+    var html=valid?'&lt;html&gt;&lt;p&gt;Select this link to open setup:&lt;/p&gt;&lt;a href="'+url+'"&gt;&lt;font size="5" color="#80d9eb"&gt;'+url+'&lt;/font&gt;&lt;/a&gt;&lt;p&gt;Sign in in the browser to control cameras.&lt;/p&gt;&lt;/html&gt;':'&lt;html&gt;Set a valid HTTP or HTTPS backend URL on Config.&lt;/html&gt;';
+    ogscript.setXML('bridge_launcher','&lt;help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;"&gt;&lt;![CDATA['+html+']]&gt;&lt;/help&gt;');
+    cbLinkUrl=url;
+}
+function selected() { return String(params.getValue('camera',0)); }
+function send(action, data, callback) {
+    if (!cbToken) { status('Sign in to control cameras. Lab feedback is read-only.'); return; }
+    if (cbHandover &amp;&amp; action!='stop') { status('Camera handover: waiting for previous stop'); return; }
+    request('command',{camera:selected(),action:action,data:data || {}},callback);
+}
+function nextCamera() {
+    if(cbCameras.length)cameraAt((cbIndex+1)%cbCameras.length);
+}
+function cameraAt(index) {
+    if(index&gt;=cbCameras.length || cbHandover)return;
+    var old=selected(),target=cbCameras[index].id;
+    if(old==target)return;
+    cbEpoch++;cbPending={};cbEdit={};cbHandover=true;
+    var finish=function(r){
+        cbHandover=false;
+        if(!r){status('Handover stopped: previous camera stop not confirmed');return;}
+        cbIndex=index;params.setAccess('camera',1);params.setValue('camera',0,target);params.setAccess('camera',0);poll();
+    };
+    if(cbToken)request('command',{camera:old,action:'stop',data:{}},finish);
+    else finish({readOnly:true});
+}
+function touchEnable() {
+    if(!cbToken){status('Sign in on the Config page first');return;}
+    cbTouchEnabled=!cbTouchEnabled;
+    ogscript.rename('touch_enable',cbTouchEnabled?'Touch control ENABLED':'Touch control DISABLED');
+    if(!cbTouchEnabled)stop();
+}
+function stop() { cbEpoch++; cbPending={}; send('stop',{},function(r){if(r)status('STOP sent — verify physical motion');}); }
+function jog(pan,tilt,zoom,focus) {
+    if(!cbTouchEnabled){status('Enable touch control before jogging');return;}
+    var camera=selected(),epoch=cbEpoch;
+    send('claim',{},function(r) {
+        if(!r || epoch!=cbEpoch || camera!=selected())return;
+        var speed=Number(params.getValue('speed',0));
+        send('move',{pan:pan*speed,tilt:tilt*speed,zoom:zoom*speed,focus:focus*speed,generation:r.generation},null);
+    });
+}
+function renamePreset() {
+    send('label_preset',{number:Number(params.getValue('shot_number',0)),name:String(params.getValue('shot_name',0))},function(r){if(r)poll();});
+}
+function labBus(bus) {
+    request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
+}
+function changed(key) {
+    if(cbUpdating)return;
+    if(!cbToken){status('Sign in before adjustment');return;}
+    cbPending[key]=Number(params.getValue(key,0)); cbEdit[key]=new Date().getTime();
+}
+function adjust(key,delta,low,high) {
+    if(!cbToken){status('Sign in before adjustment');return;}
+    var value=Number(params.getValue(key,0));
+    params.setValue(key,0,Math.max(low,Math.min(high,value+delta)));
+}
+function preset(number) {
+    var store=Number(params.getValue('store',0))==1;
+    if(store &amp;&amp; String(params.getValue('confirmation',0))!='OVERWRITE') {status('Type OVERWRITE to store; then select preset');return;}
+    send('preset',{number:number,store:store,confirm:String(params.getValue('confirmation',0))},function(r){if(r)status(r.status);});
+    params.setValue('store',0,0);params.setValue('confirmation',0,'');
+}
+function poll() {
+    refreshBridgeLink();
+    if(cbBusy)return; cbBusy=true;
+    var camera=selected(),epoch=cbEpoch;
+    request('state',{},function(r){
+        cbBusy=false; if(!r || epoch!=cbEpoch || camera!=selected())return;
+        cbLastFeedback=new Date().getTime();cbCameras=[];
+        for(var i=0;i&lt;r.cameras.length;i++)if(r.cameras[i].manufacturer==CB_MANUFACTURER)cbCameras.push(r.cameras[i]);
+        var c=null;for(var i=0;i&lt;cbCameras.length;i++)if(cbCameras[i].id==camera){c=cbCameras[i];cbIndex=i;}
+        if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
+        if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
+        ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
+        ogscript.rename('connection',(c.simulator?'SIMULATOR | ':'HARDWARE | ')+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        for(var n=0;n&lt;6;n++) {
+            var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' — ')[0]:'';
+            ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'—');
+            ogscript.setStyle('camera_pick_'+n,'bg#'+(n==cbIndex?'7433bd':'494f5b')+';fg#ffffff;bdr:none;size:15;');
+        }
+        ogscript.setStyle('connection','fg#'+(c.health=='online'||c.health=='simulated'?'8dca95':'d7bb8c')+';size:12;txt-align:west;');
+        if(CB_MANUFACTURER=='Panasonic') {
+            for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n));
+            var ross=r.ross||{};
+            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'unverified')+' | Preset follow: '+(ross.preset_follow||'unverified'));
+        }
+        cbUpdating=true;
+        var tally=c.tally||{};
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
+        try {
+            for(var key in c.parameters) {
+                var p=c.parameters[key];
+                if(CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported &amp;&amp; p.low&lt;=p.high) {
+                    var range=String(p.low)+';'+String(p.high)+';';
+                    if(cbConstraints[key]!=range){params.setAccess(key,1);params.getParam(key,0).replaceConstraint(range);cbConstraints[key]=range;}
+                }
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain')?p.value-150:p.value);
+                ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
+                if(p.confirmation=='confirmed' &amp;&amp; !cbPending.hasOwnProperty(key) &amp;&amp; (!cbEdit[key] || new Date().getTime()-cbEdit[key]&gt;1000)) {
+                    // DashBoard blocks local setValue while the parameter is read-only.
+                    params.setAccess(key,1);params.setValue(key,0,CB_MANUFACTURER=='Sony' &amp;&amp; (key=='shutter'||key=='zoom')?String(p.value):p.value);
+                }
+                var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; p.confirmation=='confirmed' &amp;&amp; p.writable!==false;
+                if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
+                if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
+                params.setAccess(key,enabled?1:0);
+            }
+        } finally {cbUpdating=false;}
+        status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control')+' | Ross positioner: UNVERIFIED');
+    });
+}
+function tick() {
+    cbTick++;
+    if(cbToken)for(var key in cbPending){var value=cbPending[key];delete cbPending[key];send('write',{parameter:key,value:value,snap:CB_MANUFACTURER=='Sony'},null);break;}
+    if(cbTick%5==0)poll();
+    if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE — no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
+}
+
+    var originalPoll=poll;
+    poll=function(){
+      if(active&amp;&amp;U.config){for(var i=0;i&lt;U.config.cameras.length;i++)if(U.config.cameras[i].id==selected()){
+        U.index=i;uRoster();var c=U.config.cameras[i];uStatus('Controlling CAM '+c.number+' / '+c.name);break;}}
+      originalPoll();
+    };
+    var originalCameraAt=cameraAt;
+    cameraAt=function(index){cbTouchEnabled=false;if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');originalCameraAt(index);};
+    var originalSend=send;
+    send=function(action,data,callback){if(!active&amp;&amp;action!='stop'){status('Select this camera from Cameras / setup.');return;}originalSend(action,data,callback);};
+    return {run:function(code,source){return function(){return eval(code);}.call(source);},
+      enter:function(token,cid){cbToken=token;cbTouchEnabled=false;cbEpoch++;cbPending={};cbEdit={};cbConstraints={};active=true;
+        params.setAccess('camera',1);params.setValue('camera',0,cid);params.setAccess('camera',0);
+        if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');poll();},
+      leave:function(callback){cbEpoch++;cbPending={};cbEdit={};cbTouchEnabled=false;active=false;
+        if(!cbToken){callback(true);return;}request('command',{camera:selected(),action:'stop',data:{}},function(r){if(r){cbToken='';callback(true);}else callback(false);});}};
+})(params,ogscript);
+
+var U_PANELS={Panasonic:CB_Panasonic,Marshall:CB_Marshall,Sony:CB_Sony};
+// Shared native camera setup. Passwords are cleared before each HTTP request.
+var U={token:'',role:'',config:null,revision:'',index:0,editing:'',maker:'',switching:false};
+var U_PROFILES=['panasonic','panasonic-sim','sony-sdk','marshall-CV226','marshall-CV228','marshall-lab'];
+function uValue(key){return params.getValue('setup_'+key,0);}
+function uSet(key,value){params.setValue('setup_'+key,0,value);}
+function uStatus(text){ogscript.rename('unified_status',String(text));}
+function uRequest(path,data,callback){
+    data.token=U.token;
+    ogscript.asyncPost(String(params.getValue('bridge',0)).replace(/\/+$/,'')+'/api/'+path,'request='+encodeURIComponent(JSON.stringify(data)),function(raw){
+        var r;try{r=JSON.parse(String(raw));}
+        catch(e){uStatus('Cannot read CameraBridge response. Check the connection.');if(callback)callback(null);return;}
+        if(r.error){uStatus(r.error);if(callback)callback(null);return;}
+        if(callback)try{callback(r);}catch(e){uStatus('Panel update failed: '+String(e).slice(0,160));}
+    });
+}
+function uLogin(){
+    var data={username:String(params.getValue('username',0)),password:String(params.getValue('password',0))};
+    params.setValue('password',0,'');
+    uRequest('login',data,function(r){if(!r)return;U.token=r.token;U.role=r.role;uStatus('Signed in as '+r.role);uLoad();});
+}
+function uLeave(callback){
+    if(U.switching){uStatus('Wait for the previous camera to stop.');return;}
+    if(!U.maker){callback();return;}
+    U.switching=true;
+    U_PANELS[U.maker].leave(function(ok){U.switching=false;if(ok){U.maker='';callback();}else uStatus('Previous camera stop failed. Check CameraBridge before changing cameras.');});
+}
+function uSetup(){uLeave(function(){ogscript.reveal('unified_setup');});}
+function uLogout(){uLeave(function(){uRequest('logout',{},function(){U.token='';U.role='';uStatus('Signed out');});ogscript.reveal('unified_setup');});}
+function uLoad(){
+    if(!U.token){uStatus('Sign in to load camera setup.');return;}
+    if(U.role!='admin'){uStatus('Operator signed in. Administrator access is required to change camera setup.');uLive();return;}
+    uRequest('setup',{operation:'load'},function(r){if(!r)return;U.config=r.configuration;U.revision=r.revision;U.index=Math.min(U.index,Math.max(0,U.config.cameras.length-1));uBridgeRead();uRoster();uStatus(r.pending?'Loaded saved setup. Apply it to update the running service.':'Loaded running camera setup.');});
+}
+function uLive(){uRequest('state',{},function(r){if(!r)return;U.config={cameras:r.cameras};uRoster();});}
+function uRoster(){
+    var cameras=U.config?U.config.cameras:[];
+    for(var n=0;n&lt;8;n++){
+        var i=Math.floor(U.index/8)*8+n,c=cameras[i];
+        ogscript.rename('roster_'+n,c?'CAM '+c.number+'  '+c.name+'\n'+c.manufacturer+' '+c.model+(c.enabled===false?' / disabled':''):'—');
+        ogscript.setStyle('roster_'+n,'bg#'+(i==U.index?'7433bd':'494f5b')+';fg#ffffff;size:16;');
+    }
+    var c=cameras[U.index];ogscript.rename('setup_selected',c?'Selected: CAM '+c.number+' / '+c.name:'No configured cameras');
+}
+function uPick(slot){if(!U.config)return;var index=Math.floor(U.index/8)*8+slot;if(index&gt;=U.config.cameras.length)return;U.index=index;uEdit();uRoster();}
+function uListPage(delta){if(!U.config||!U.config.cameras.length)return;U.index=(Math.floor(U.index/8)*8+delta*8+Math.ceil(U.config.cameras.length/8)*8)%(Math.ceil(U.config.cameras.length/8)*8);uRoster();}
+function uProfile(){
+    var p=U_PROFILES[Number(uValue('profile'))];
+    ogscript.rename('setup_profile_help',p=='sony-sdk'?'Sony: save the camera, then set access on the Camera access page.':p.indexOf('marshall-CV')==0?'Marshall hardware control is pending. Save this profile disabled.':p=='marshall-lab'?'Marshall simulator only. No serial packets are sent.':'Panasonic AW-HE130 CGI. Camera HTTP authentication is not implemented in this driver.');
+}
+function uNew(){
+    U.editing='';var used={},number=1;
+    if(U.config)for(var i=0;i&lt;U.config.cameras.length;i++)used[U.config.cameras[i].number]=true;
+    while(used[number]&amp;&amp;number&lt;255)number++;
+    var defaults={name:'Camera '+number,profile:0,host:'',port:80,number:number,input:number,enabled:1,pivot:1,store:0,tally:1,address:Math.min(number,126),remove:'',access_user:'',access_password:'',fingerprint:'',terms:0};
+    for(var key in defaults)uSet(key,defaults[key]);uProfile();uStatus('New camera. Save the camera, then apply the saved setup.');
+}
+function uEdit(){
+    if(!U.config||!U.config.cameras[U.index])return;var c=U.config.cameras[U.index];U.editing=c.id;
+    var p=c.driver=='panasonic'?(c.simulator?'panasonic-sim':'panasonic'):c.driver=='marshall-pending'?'marshall-'+c.model:c.driver;
+    var values={name:c.name,profile:Math.max(0,U_PROFILES.indexOf(p)),host:c.host||'',port:c.port||80,number:c.number,input:c.carbonite_input,enabled:c.enabled===false?0:1,pivot:c.pivotcam?1:0,store:c.allow_store?1:0,tally:c.tally_enabled===false?0:1,address:c.tally_address===undefined?Math.min(c.carbonite_input,126):c.tally_address,remove:'',access_user:'',access_password:'',fingerprint:'',terms:0};
+    for(var key in values)uSet(key,values[key]);uProfile();uStatus('Editing '+c.name+'. Access passwords are not read back.');
+}
+function uSave(){
+    if(U.role!='admin'||!U.config){uStatus('Sign in as administrator, then load the camera list.');return;}
+    var p=U_PROFILES[Number(uValue('profile'))],old=null;
+    for(var i=0;i&lt;U.config.cameras.length;i++)if(U.config.cameras[i].id==U.editing)old=U.config.cameras[i];
+    var c={};if(old)for(var key in old)c[key]=old[key];
+    c.number=Number(uValue('number'));c.id=U.editing||'camera_'+c.number;
+    c.name=String(uValue('name')).replace(/^\s+|\s+$/g,'');
+    if(!c.name){uStatus('Enter a camera name.');return;}
+    c.driver=p=='panasonic-sim'?'panasonic':p.indexOf('marshall-CV')==0?'marshall-pending':p;
+    c.manufacturer=p=='sony-sdk'?'Sony':p.indexOf('marshall')==0?'Marshall':'Panasonic';
+    c.model=p=='sony-sdk'?'PXW-Z200':p=='marshall-CV226'?'CV226':c.manufacturer=='Marshall'?'CV228':'AW-HE130';
+    c.host=String(uValue('host')).replace(/^\s+|\s+$/g,'');c.port=Number(uValue('port'));c.carbonite_input=Number(uValue('input'));
+    c.simulator=p=='panasonic-sim'||p=='marshall-lab';c.enabled=Number(uValue('enabled'))==1;c.pivotcam=Number(uValue('pivot'))==1;
+    c.allow_store=Number(uValue('store'))==1;c.tally_enabled=Number(uValue('tally'))==1;c.tally_address=Number(uValue('address'));
+    if(c.driver=='marshall-lab'){c.gateway='LAB ONLY';c.address=1;}
+    uRequest('setup',{operation:'save',revision:U.revision,previous:U.editing,camera:c},function(r){if(!r)return;U.config=r.configuration;U.revision=r.revision;U.editing=c.id;for(var i=0;i&lt;U.config.cameras.length;i++)if(U.config.cameras[i].id==c.id)U.index=i;uRoster();uStatus(r.status);});
+}
+function uRemove(){
+    if(!U.editing){uStatus('Select a saved camera first.');return;}
+    var confirmation=String(uValue('remove'));uSet('remove','');
+    uRequest('setup',{operation:'remove',revision:U.revision,camera:U.editing,confirmation:confirmation},function(r){if(!r)return;U.config=r.configuration;U.revision=r.revision;U.index=0;uNew();uRoster();uStatus(r.status);});
+}
+function uApply(){uLeave(function(){uRequest('setup',{operation:'apply',revision:U.revision},function(r){if(r)uStatus(r.status);});});}
+function uControl(){
+    if(!U.config||!U.config.cameras[U.index]){uStatus('Load the list and select a camera first.');return;}
+    var c=U.config.cameras[U.index];
+    uRequest('state',{},function(r){if(!r)return;var found=false,live=null;for(var i=0;i&lt;r.cameras.length;i++)if(r.cameras[i].id==c.id){found=true;live=r.cameras[i];}
+        if(!found){uStatus('Camera is not running. Enable it and apply the saved setup first.');return;}
+        var keys=['host','port','driver','manufacturer','model','number','carbonite_input','enabled','simulator'];
+        for(var k=0;k&lt;keys.length;k++)if(String(c[keys[k]])!=String(live[keys[k]])){uStatus('Camera setup differs from the running camera. Apply saved setup, then reload the list.');return;}
+        uLeave(function(){U.maker=c.manufacturer;U_PANELS[U.maker].enter(U.token,c.id);ogscript.reveal('unified_'+U.maker);uStatus('Controlling CAM '+c.number+' / '+c.name);});
+    });
+}
+function uFingerprint(){
+    if(U_PROFILES[Number(uValue('profile'))]!='sony-sdk'){uStatus('SSH access applies to the Sony SDK profile.');return;}
+    uRequest('sony/fingerprint',{host:String(uValue('host'))},function(r){if(r){uSet('fingerprint',r.fingerprint);uStatus('Compare the fingerprint with the camera identity before saving access.');}});
+}
+function uSaveAccess(){
+    var data={camera:U.editing,username:String(uValue('access_user')),password:String(uValue('access_password')),fingerprint:String(uValue('fingerprint')),acknowledge_terms:Number(uValue('terms'))==1};
+    uSet('access_password','');
+    if(!U.editing||U_PROFILES[Number(uValue('profile'))]!='sony-sdk'){uStatus('Save or select a Sony camera first.');return;}
+    uRequest('sony/credentials',data,function(r){if(r)uStatus(r.status);});
+}
+function uTick(){if(U.maker&amp;&amp;!U.switching)U_PANELS[U.maker].run('tick();');}
+function uClose(){params.setValue('password',0,'');uSet('access_password','');if(U.maker)U_PANELS[U.maker].leave(function(){});}
+function uBridgeRead(){
+    var p=U.config.pivotcam||{},t=U.config.tally||{};
+    var fields={bridge_pivot:p.enabled?1:0,bridge_bind:p.bind||'127.0.0.1',bridge_controller:p.controller||'192.168.96.123',bridge_first:(p.base_port===undefined?19010:p.base_port)+1,bridge_tally:t.enabled?1:0,bridge_tally_bind:t.bind||'127.0.0.1',bridge_tally_source:t.source||'192.168.96.123',bridge_tally_port:t.port||5727,bridge_program:t.program_tally===1?0:1,bridge_offset:(t.address_offset||0)+1};
+    for(var key in fields)uSet(key,fields[key]);
+}
+function uBridgeSave(){
+    if(U.role!='admin'||!U.config){uStatus('Sign in as administrator, then load the camera list.');return;}
+    var p={},t={},key;for(key in (U.config.pivotcam||{}))p[key]=U.config.pivotcam[key];for(key in (U.config.tally||{}))t[key]=U.config.tally[key];
+    p.enabled=Number(uValue('bridge_pivot'))==1;p.bind=String(uValue('bridge_bind'));p.controller=String(uValue('bridge_controller'));p.base_port=Number(uValue('bridge_first'))-1;
+    t.enabled=Number(uValue('bridge_tally'))==1;t.bind=String(uValue('bridge_tally_bind'));t.source=String(uValue('bridge_tally_source'));t.port=Number(uValue('bridge_tally_port'));t.program_tally=Number(uValue('bridge_program'))+1;t.address_offset=Number(uValue('bridge_offset'))-1;
+    uRequest('setup',{operation:'bridge',revision:U.revision,pivotcam:p,tally:t},function(r){if(r){U.config=r.configuration;U.revision=r.revision;uStatus(r.status);}});
+}
+</api>
+  <meta>
+    <params>
+      <param oid="bridge" name="bridge" type="STRING" value="http://127.0.0.1:8088" access="1" widget="3" maxlength="256" />
+      <param oid="username" name="username" type="STRING" value="" access="1" widget="3" maxlength="256" />
+      <param oid="password" name="password" type="STRING" value="" access="1" widget="4" maxlength="256" />
+      <param oid="setup_name" name="Camera name" access="1" type="STRING" value="New camera" widget="3" maxlength="1024" />
+      <param oid="setup_profile" name="Manufacturer / model" access="1" type="INT32" value="0" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">Panasonic AW-HE130</constraint>
+        <constraint key="1">Panasonic simulator</constraint>
+        <constraint key="2">Sony PXW-Z200 / SDK</constraint>
+        <constraint key="3">Marshall CV226 / pending</constraint>
+        <constraint key="4">Marshall CV228 / pending</constraint>
+        <constraint key="5">Marshall simulator</constraint>
+      </param>
+      <param oid="setup_host" name="Camera IP / host" access="1" type="STRING" value="" widget="3" maxlength="1024" />
+      <param oid="setup_port" name="Camera port (Sony SDK uses its own transport)" access="1" type="INT32" value="80" constrainttype="INT_RANGE" constraint="1;65535;" widget="5" />
+      <param oid="setup_number" name="Camera number / PIVOTCam port = base + number" access="1" type="INT32" value="1" constrainttype="INT_RANGE" constraint="1;255;" widget="5" />
+      <param oid="setup_input" name="Carbonite input" access="1" type="INT32" value="1" constrainttype="INT_RANGE" constraint="1;255;" widget="5" />
+      <param oid="setup_enabled" name="Camera enabled" access="1" type="INT32" value="1" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">OFF</constraint>
+        <constraint key="1">ON</constraint>
+      </param>
+      <param oid="setup_pivot" name="PIVOTCam enabled" access="1" type="INT32" value="1" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">OFF</constraint>
+        <constraint key="1">ON</constraint>
+      </param>
+      <param oid="setup_store" name="Allow preset store" access="1" type="INT32" value="0" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">OFF</constraint>
+        <constraint key="1">ON</constraint>
+      </param>
+      <param oid="setup_tally" name="Camera tally enabled" access="1" type="INT32" value="1" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">OFF</constraint>
+        <constraint key="1">ON</constraint>
+      </param>
+      <param oid="setup_address" name="TSL tally address (input 1 defaults to address 1)" access="1" type="INT32" value="1" constrainttype="INT_RANGE" constraint="0;126;" widget="5" />
+      <param oid="setup_remove" name="Type REMOVE to remove the selected camera" access="1" type="STRING" value="" widget="3" maxlength="1024" />
+      <param oid="setup_access_user" name="Camera username" access="1" type="STRING" value="" widget="3" maxlength="1024" />
+      <param oid="setup_access_password" name="Camera password" access="1" type="STRING" value="" widget="4" maxlength="1024" />
+      <param oid="setup_fingerprint" name="Verified SSH fingerprint" access="1" type="STRING" value="" widget="3" maxlength="1024" />
+      <param oid="setup_terms" name="I have read and accept the Sony SDK terms" access="1" type="INT32" value="0" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">NO</constraint>
+        <constraint key="1">YES</constraint>
+      </param>
+      <param oid="setup_bridge_pivot" name="PIVOTCam receiver" access="1" type="INT32" value="0" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">OFF</constraint>
+        <constraint key="1">ON</constraint>
+      </param>
+      <param oid="setup_bridge_first" name="First camera TCP port (camera number 1)" access="1" type="INT32" value="19011" constrainttype="INT_RANGE" constraint="1025;65281;" widget="5" />
+      <param oid="setup_bridge_bind" name="PIVOTCam listen IP (this bridge host)" access="1" type="STRING" value="127.0.0.1" widget="3" maxlength="1024" />
+      <param oid="setup_bridge_controller" name="Allowed Carbonite source IP" access="1" type="STRING" value="192.168.96.123" widget="3" maxlength="1024" />
+      <param oid="setup_bridge_tally" name="TSL 3.1 tally receiver" access="1" type="INT32" value="0" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">OFF</constraint>
+        <constraint key="1">ON</constraint>
+      </param>
+      <param oid="setup_bridge_tally_port" name="Tally UDP port" access="1" type="INT32" value="5727" constrainttype="INT_RANGE" constraint="1024;65535;" widget="5" />
+      <param oid="setup_bridge_tally_bind" name="Tally listen IP (this bridge host)" access="1" type="STRING" value="127.0.0.1" widget="3" maxlength="1024" />
+      <param oid="setup_bridge_tally_source" name="Allowed tally sender IP" access="1" type="STRING" value="192.168.96.123" widget="3" maxlength="1024" />
+      <param oid="setup_bridge_program" name="Program tally bit (Carbonite default: tally 2)" access="1" type="INT32" value="1" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">Tally 1</constraint>
+        <constraint key="1">Tally 2</constraint>
+      </param>
+      <param oid="setup_bridge_offset" name="Input-to-TSL address offset" access="1" type="INT32" value="1" constrainttype="INT_CHOICE" widget="7">
+        <constraint key="0">-1</constraint>
+        <constraint key="1">0</constraint>
+        <constraint key="2">+1</constraint>
+      </param>
+      <param oid="panasonic_bridge" name="Backend URL" type="STRING" value="http://127.0.0.1:8088" widget="3" access="1" maxlength="256" />
+      <param oid="panasonic_username" name="Username" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="panasonic_password" name="Password" type="STRING" value="" widget="4" access="1" maxlength="256" />
+      <param oid="panasonic_camera" name="Camera ID" type="STRING" value="pana1" widget="3" access="0" maxlength="256" />
+      <param oid="panasonic_confirmation" name="Type OVERWRITE" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="panasonic_shot_name" name="Shot name" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="panasonic_speed" name="Jog speed" type="INT32" value="12" access="1" constrainttype="INT_RANGE" constraint="1;49;" />
+      <param oid="panasonic_store" name="Store armed" type="INT32" value="0" access="1" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="panasonic_shot_number" name="Shot number" type="INT32" value="1" access="1" constrainttype="INT_RANGE" constraint="1;100;" />
+      <param oid="panasonic_iris_auto" name="IRIS MODE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="panasonic_iris" name="IRIS" type="INT32" value="1365" access="0" constrainttype="INT_RANGE" constraint="1365;4095;" />
+      <param oid="panasonic_focus_auto" name="FOCUS MODE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="panasonic_zoom" name="ZOOM POSITION" type="INT32" value="1365" access="0" constrainttype="INT_RANGE" constraint="1365;4095;" />
+      <param oid="panasonic_focus" name="FOCUS POSITION" type="INT32" value="1365" access="0" constrainttype="INT_RANGE" constraint="1365;4095;" />
+      <param oid="panasonic_red_gain" name="RED GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
+      <param oid="panasonic_blue_gain" name="BLUE GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
+      <param oid="panasonic_wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_CHOICE">
+        <constraint key="0">ATW</constraint>
+        <constraint key="2">AWB A</constraint>
+        <constraint key="3">AWB B</constraint>
+        <constraint key="4">3200K</constraint>
+        <constraint key="5">5600K</constraint>
+        <constraint key="9">VAR</constraint>
+      </param>
+      <param oid="panasonic_detail" name="DETAIL" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="marshall_bridge" name="Backend URL" type="STRING" value="http://127.0.0.1:8088" widget="3" access="1" maxlength="256" />
+      <param oid="marshall_username" name="Username" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="marshall_password" name="Password" type="STRING" value="" widget="4" access="1" maxlength="256" />
+      <param oid="marshall_camera" name="Camera ID" type="STRING" value="marshall1" widget="3" access="0" maxlength="256" />
+      <param oid="marshall_confirmation" name="Type OVERWRITE" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="marshall_shot_name" name="Shot name" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="marshall_speed" name="Jog speed" type="INT32" value="12" access="1" constrainttype="INT_RANGE" constraint="1;49;" />
+      <param oid="marshall_store" name="Store armed" type="INT32" value="0" access="1" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="marshall_shot_number" name="Shot number" type="INT32" value="1" access="1" constrainttype="INT_RANGE" constraint="1;100;" />
+      <param oid="marshall_wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;3;" />
+      <param oid="marshall_red_gain" name="RED GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;255;" />
+      <param oid="marshall_blue_gain" name="BLUE GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;255;" />
+      <param oid="marshall_exposure_auto" name="EXPOSURE MODE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="marshall_brightness" name="BRIGHTNESS" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="marshall_gain" name="GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="marshall_agc_limit" name="AGC LIMIT" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="marshall_shutter" name="SHUTTER" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;15;" />
+      <param oid="marshall_black_level" name="BLACK LEVEL" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;32;" />
+      <param oid="marshall_gamma" name="GAMMA ×10" type="INT32" value="3" access="0" constrainttype="INT_RANGE" constraint="3;8;" />
+      <param oid="marshall_colour" name="COLOUR" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="marshall_sharpness" name="SHARPNESS" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;20;" />
+      <param oid="marshall_dnr" name="NOISE REDUCTION" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;3;" />
+      <param oid="marshall_mirror" name="MIRROR" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="marshall_flip" name="FLIP" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="marshall_digital_zoom" name="DIGITAL ZOOM ×10" type="INT32" value="10" access="0" constrainttype="INT_RANGE" constraint="10;160;" />
+      <param oid="sony_bridge" name="bridge" type="STRING" value="http://127.0.0.1:8088" widget="3" access="1" maxlength="256" />
+      <param oid="sony_username" name="username" type="STRING" value="" widget="3" access="1" maxlength="256" />
+      <param oid="sony_password" name="password" type="STRING" value="" widget="4" access="1" maxlength="256" />
+      <param oid="sony_camera" name="camera" type="STRING" value="sony1" widget="3" access="0" maxlength="256" />
+      <param oid="sony_speed" type="INT32" value="24" access="1" constrainttype="INT_RANGE" constraint="1;49;" />
+      <param oid="sony_iris" name="Iris (f-number x 100)" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;65535;" />
+      <param oid="sony_iris_auto" name="Iris: 1 auto / 2 manual" type="INT32" value="1" access="0" constrainttype="INT_RANGE" constraint="1;2;" />
+      <param oid="sony_focus_auto" name="Focus: 1 auto / 2 manual" type="INT32" value="1" access="0" constrainttype="INT_RANGE" constraint="1;2;" />
+      <param oid="sony_wb_mode" name="White balance: 1 auto / 2 manual" type="INT32" value="1" access="0" constrainttype="INT_RANGE" constraint="1;2;" />
+      <param oid="sony_red_gain" name="Red gain (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
+      <param oid="sony_blue_gain" name="Blue gain (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
+      <param oid="sony_gain" name="Gain dB (Sony native)" type="INT32" value="-32768" access="0" constrainttype="INT_RANGE" constraint="-32768;65535;" />
+      <param oid="sony_shutter" name="Shutter speed (Sony native)" type="STRING" value="0" access="0" maxlength="32" />
+      <param oid="sony_colour_temperature" name="White balance temperature" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;65535;" />
+      <param oid="sony_zoom" name="Zoom scale (readback)" type="STRING" value="0" access="0" maxlength="32" />
+    </params>
+    <timer id="unified_tick" rate="200" autostart="true" />
+    <timertask timerid="unified_tick" tasktype="ogscript">uTick();</timertask>
+  </meta>
+  <label name="CameraBridge" left="16" top="12" width="260" height="44" style="fg#e2e4e9;size:26;txt-align:west;" />
+  <button name="Cameras / setup" left="300" top="10" width="240" height="52" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+    <task tasktype="ogscript">uSetup();</task>
+  </button>
+  <button name="Control selected camera" left="560" top="10" width="320" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+    <task tasktype="ogscript">uControl();</task>
+  </button>
+  <label name="Starting…" left="900" top="10" width="450" height="52" style="fg#e2e4e9;size:14;txt-align:west;" id="unified_status" />
+  <tab left="0" top="72" width="1366" height="800" tabposition="none">
+    <abs id="unified_setup" name="Cameras" width="1366" height="800">
+      <label name="Bridge URL" left="16" top="6" width="480" height="24" style="fg#e2e4e9;size:15;txt-align:west;" />
+      <param oid="bridge" left="16" top="34" width="480" height="48" showlabel="false" style="size:18;" />
+      <label name="Admin / operator" left="510" top="6" width="260" height="24" style="fg#e2e4e9;size:15;txt-align:west;" />
+      <param oid="username" left="510" top="34" width="260" height="48" showlabel="false" style="size:18;" />
+      <label name="Password" left="784" top="6" width="260" height="24" style="fg#e2e4e9;size:15;txt-align:west;" />
+      <param oid="password" left="784" top="34" width="260" height="48" showlabel="false" style="size:18;" />
+      <button name="Sign in" left="1060" top="34" width="132" height="48" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">uLogin();</task>
+      </button>
+      <button name="Sign out" left="1202" top="34" width="148" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">uLogout();</task>
+      </button>
+      <label name="Configured cameras" left="16" top="94" width="450" height="28" style="fg#e2e4e9;size:20;txt-align:west;" />
+      <button name="Reload" left="16" top="130" width="136" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">uLoad();</task>
+      </button>
+      <button name="Previous" left="164" top="130" width="136" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">uListPage(-1);</task>
+      </button>
+      <button name="Next" left="312" top="130" width="136" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">uListPage(1);</task>
+      </button>
+      <button name="—" left="16" top="192" width="432" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="roster_0">
+        <task tasktype="ogscript">uPick(0);</task>
+      </button>
+      <button name="—" left="16" top="256" width="432" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="roster_1">
+        <task tasktype="ogscript">uPick(1);</task>
+      </button>
+      <button name="—" left="16" top="320" width="432" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="roster_2">
+        <task tasktype="ogscript">uPick(2);</task>
+      </button>
+      <button name="—" left="16" top="384" width="432" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="roster_3">
+        <task tasktype="ogscript">uPick(3);</task>
+      </button>
+      <button name="—" left="16" top="448" width="432" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="roster_4">
+        <task tasktype="ogscript">uPick(4);</task>
+      </button>
+      <button name="—" left="16" top="512" width="432" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="roster_5">
+        <task tasktype="ogscript">uPick(5);</task>
+      </button>
+      <button name="—" left="16" top="576" width="432" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="roster_6">
+        <task tasktype="ogscript">uPick(6);</task>
+      </button>
+      <button name="—" left="16" top="640" width="432" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="roster_7">
+        <task tasktype="ogscript">uPick(7);</task>
+      </button>
+      <label name="No configured cameras" left="16" top="714" width="432" height="70" style="fg#e2e4e9;size:15;txt-align:west;" id="setup_selected" />
+      <tab left="468" top="156" width="882" height="628" tabposition="none">
+        <abs id="setup_camera_form" name="Camera setup" width="882" height="628">
+          <label name="Camera name" left="0" top="0" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_name" left="0" top="28" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Manufacturer / model" left="438" top="0" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_profile" left="438" top="28" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Camera IP / host" left="0" top="84" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_host" left="0" top="112" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Camera port (Sony SDK uses its own transport)" left="438" top="84" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_port" left="438" top="112" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Camera number / PIVOTCam port = base + number" left="0" top="168" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_number" left="0" top="196" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Carbonite input" left="438" top="168" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_input" left="438" top="196" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Camera enabled" left="0" top="252" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_enabled" left="0" top="280" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="PIVOTCam enabled" left="438" top="252" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_pivot" left="438" top="280" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Allow preset store" left="0" top="336" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_store" left="0" top="364" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Camera tally enabled" left="438" top="336" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_tally" left="438" top="364" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="TSL tally address (input 1 defaults to address 1)" left="0" top="420" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_address" left="0" top="448" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Type REMOVE to remove the selected camera" left="438" top="420" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_remove" left="438" top="448" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Select a camera profile." left="0" top="502" width="870" height="42" style="fg#e2e4e9;size:13;txt-align:west;" id="setup_profile_help" />
+          <button name="New" left="0" top="554" width="112" height="60" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">uNew();</task>
+          </button>
+          <button name="Save" left="124" top="554" width="112" height="60" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">uSave();</task>
+          </button>
+          <button name="Remove" left="248" top="554" width="128" height="60" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">uRemove();</task>
+          </button>
+          <button name="Apply saved setup" left="390" top="554" width="280" height="60" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">uApply();</task>
+          </button>
+        </abs>
+        <abs id="setup_access_form" name="Camera access" width="882" height="628">
+          <label name="SONY CAMERA ACCESS" left="0" top="0" width="860" height="34" style="fg#e2e4e9;size:22;txt-align:west;" />
+          <label name="Save the Sony camera on Camera settings first. Select it in the list.&#10;The password is stored on the bridge host and is not read back." left="0" top="44" width="860" height="62" style="fg#e2e4e9;size:16;txt-align:west;" />
+          <label name="Camera username" left="0" top="120" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_access_user" left="0" top="148" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Camera password" left="438" top="120" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_access_password" left="438" top="148" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Verified SSH fingerprint" left="0" top="218" width="848" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_fingerprint" left="0" top="246" width="848" height="48" showlabel="false" style="size:18;" />
+          <button name="Read fingerprint" left="0" top="312" width="270" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">uFingerprint();</task>
+          </button>
+          <label name="Compare this fingerprint with the camera identity before saving access." left="288" top="312" width="560" height="56" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <label name="I have read and accept the Sony SDK terms" left="0" top="388" width="848" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_terms" left="0" top="416" width="848" height="48" showlabel="false" style="size:18;" />
+          <button name="Save camera access" left="0" top="494" width="390" height="60" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">uSaveAccess();</task>
+          </button>
+          <label name="Sony SDK terms: support.d-imaging.sony.co.jp/app/sdk/licenseagreement_d/en-US.html&#10;Panasonic HTTP authentication and Marshall hardware access are not implemented." left="0" top="566" width="860" height="58" style="fg#e2e4e9;size:13;txt-align:west;" />
+        </abs>
+        <abs id="setup_bridge_form" name="Bridge / interop" width="882" height="628">
+          <label name="PIVOTCam receiver" left="0" top="0" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_pivot" left="0" top="28" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="First camera TCP port (camera number 1)" left="438" top="0" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_first" left="438" top="28" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="PIVOTCam listen IP (this bridge host)" left="0" top="84" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_bind" left="0" top="112" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Allowed Carbonite source IP" left="438" top="84" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_controller" left="438" top="112" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="TSL 3.1 tally receiver" left="0" top="168" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_tally" left="0" top="196" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Tally UDP port" left="438" top="168" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_tally_port" left="438" top="196" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Tally listen IP (this bridge host)" left="0" top="252" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_tally_bind" left="0" top="280" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Allowed tally sender IP" left="438" top="252" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_tally_source" left="438" top="280" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Program tally bit (Carbonite default: tally 2)" left="0" top="336" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_program" left="0" top="364" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="Input-to-TSL address offset" left="438" top="336" width="410" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <param oid="setup_bridge_offset" left="438" top="364" width="410" height="48" showlabel="false" style="size:18;" />
+          <label name="The listener IP must belong to the Windows/Linux bridge host.&#10;Allow these ports through its firewall. Save changes, then apply the saved setup.&#10;Per-camera tally addresses override the input-to-TSL address offset." left="0" top="432" width="860" height="92" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <button name="Save bridge settings" left="0" top="554" width="390" height="60" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">uBridgeSave();</task>
+          </button>
+          <button name="Apply saved setup" left="414" top="554" width="390" height="60" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">uApply();</task>
+          </button>
+        </abs>
+      </tab>
+      <button name="Camera settings" left="468" top="96" width="270" height="48" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">ogscript.reveal('setup_camera_form');</task>
+      </button>
+      <button name="Camera access" left="750" top="96" width="270" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">ogscript.reveal('setup_access_form');</task>
+      </button>
+      <button name="Bridge / interop" left="1032" top="96" width="318" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">ogscript.reveal('setup_bridge_form');</task>
+      </button>
+    </abs>
+    <abs id="unified_Panasonic" name="Panasonic" width="1366" height="800">
+      <ogscript handles="onchange" oid="panasonic_iris_auto" element="0">CB_Panasonic.run("changed('iris_auto');",this);</ogscript>
+      <ogscript handles="onchange" oid="panasonic_iris" element="0">CB_Panasonic.run("changed('iris');",this);</ogscript>
+      <ogscript handles="onchange" oid="panasonic_focus_auto" element="0">CB_Panasonic.run("changed('focus_auto');",this);</ogscript>
+      <ogscript handles="onchange" oid="panasonic_zoom" element="0">CB_Panasonic.run("changed('zoom');",this);</ogscript>
+      <ogscript handles="onchange" oid="panasonic_focus" element="0">CB_Panasonic.run("changed('focus');",this);</ogscript>
+      <ogscript handles="onchange" oid="panasonic_red_gain" element="0">CB_Panasonic.run("changed('red_gain');",this);</ogscript>
+      <ogscript handles="onchange" oid="panasonic_blue_gain" element="0">CB_Panasonic.run("changed('blue_gain');",this);</ogscript>
+      <ogscript handles="onchange" oid="panasonic_wb_mode" element="0">CB_Panasonic.run("changed('wb_mode');",this);</ogscript>
+      <ogscript handles="onchange" oid="panasonic_detail" element="0">CB_Panasonic.run("changed('detail');",this);</ogscript>
+      <abs left="8" top="8" width="1350" height="80" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="CameraBridge / Panasonic" left="16" top="10" width="325" height="28" style="fg#e2e4e9;size:21;txt-align:west;" />
+        <label name="AW-HE130 · PTZ &amp; paint" left="16" top="45" width="325" height="24" style="fg#abb1bd;size:14;txt-align:west;" />
+        <reveal id="panasonic_nav_ptz" name="PTZ" targetid="panasonic_page_ptz" left="350" top="12" width="104" height="56" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" />
+        <reveal id="panasonic_nav_presets" name="Presets" targetid="panasonic_page_presets" left="462" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+        <reveal id="panasonic_nav_paint" name="Paint" targetid="panasonic_page_paint" left="574" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+        <reveal id="panasonic_nav_td1c" name="TD1C" targetid="panasonic_page_td1c" left="686" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+        <reveal id="panasonic_nav_config" name="Config" targetid="panasonic_page_config" left="798" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+        <abs id="panasonic_bridge_launcher" left="920" top="12" width="180" height="56">
+          <help id="panasonic_open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;">&lt;html&gt;Set the backend URL on Config. Select Open CameraBridge again after feedback loads.&lt;/html&gt;</help>
+        </abs>
+        <image src="file:///C:/Users/rackpc01/Documents/Codex/2026-10-21/files-pasted-by-the-user-camerabridge/outputs/camerabridge/dashboard/assets/panasonic.png" left="1164" top="15" width="164" height="48" />
+      </abs>
+      <label name="Camera identification pending" left="164" top="100" width="1178" height="26" style="fg#e2e4e9;size:18;txt-align:west;" id="panasonic_identity" />
+      <label name="SIMULATOR / awaiting feedback" left="164" top="130" width="1178" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="panasonic_connection" />
+      <abs left="8" top="104" width="140" height="624" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="CAMERAS" left="10" top="10" width="120" height="26" style="fg#e2e4e9;size:14;txt-align:west;" />
+        <button name="—" left="8" top="42" width="124" height="54" buttontype="push" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_0">
+          <task tasktype="ogscript">CB_Panasonic.run("cameraAt(0);",this);</task>
+        </button>
+        <button name="—" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_1">
+          <task tasktype="ogscript">CB_Panasonic.run("cameraAt(1);",this);</task>
+        </button>
+        <button name="—" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_2">
+          <task tasktype="ogscript">CB_Panasonic.run("cameraAt(2);",this);</task>
+        </button>
+        <button name="—" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_3">
+          <task tasktype="ogscript">CB_Panasonic.run("cameraAt(3);",this);</task>
+        </button>
+        <button name="—" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_4">
+          <task tasktype="ogscript">CB_Panasonic.run("cameraAt(4);",this);</task>
+        </button>
+        <button name="—" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_camera_pick_5">
+          <task tasktype="ogscript">CB_Panasonic.run("cameraAt(5);",this);</task>
+        </button>
+        <button name="Next" left="8" top="432" width="124" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Panasonic.run("nextCamera();",this);</task>
+        </button>
+        <button name="Refresh" left="8" top="492" width="124" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Panasonic.run("poll();",this);</task>
+        </button>
+        <button name="STOP" left="8" top="552" width="124" height="64" buttontype="push" style="bg#a23d4c;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Panasonic.run("stop();",this);</task>
+        </button>
+      </abs>
+      <tab left="164" top="164" width="1186" height="564" tabposition="none" delay="false" onchange="CB_Panasonic.run(&quot;highlightPage(String(this.getTitleAt(this.getSelectedIndex())));&quot;,this);">
+        <abs id="panasonic_page_ptz" name="PTZ" width="1186" height="564" style="bg#25282e;">
+          <label name="PAN / TILT CONTROL" left="12" top="0" width="408" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
+          <button name="Touch control DISABLED" left="12" top="36" width="408" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_touch_enable">
+            <task tasktype="ogscript">CB_Panasonic.run("touchEnable();",this);</task>
+          </button>
+          <abs left="12" top="96" width="408" height="344" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <button name="↖" left="8" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(-1,1,0,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="UP" left="142" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,1,0,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="↗" left="276" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(1,1,0,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="LEFT" left="8" top="120" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(-1,0,0,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="RIGHT" left="276" top="120" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(1,0,0,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="↙" left="8" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(-1,-1,0,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="DOWN" left="142" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,-1,0,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="↘" left="276" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(1,-1,0,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="STOP" left="142" top="120" width="124" height="104" buttontype="push" style="bg#91414b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("stop();",this);</task>
+            </button>
+          </abs>
+          <label name="JOG SPEED" left="12" top="451" width="408" height="26" style="fg#e2e4e9;size:14;txt-align:west;" />
+          <button name="−" left="12" top="482" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Panasonic.run("adjust('speed',-1,1,49);",this);</task>
+          </button>
+          <param oid="panasonic_speed" left="84" top="482" width="264" height="48" showlabel="false" widget="6" style="size:18;" />
+          <button name="+" left="356" top="482" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Panasonic.run("adjust('speed',1,1,49);",this);</task>
+          </button>
+          <label name="Release / exit stops · 0.9s watchdog" left="12" top="537" width="408" height="26" style="fg#a9bbc8;size:13;txt-align:west;" />
+          <abs left="440" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="IRIS" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <param oid="panasonic_iris" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="CLOSE" left="14" top="108" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris',value:1365},null);",this);</task>
+            </button>
+            <button name="OPEN" left="14" top="405" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris',value:4095},null);",this);</task>
+            </button>
+            <param oid="panasonic_iris" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_iris" />
+            <button name="Manual" left="14" top="502" width="96" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris_auto',value:0},null);",this);</task>
+            </button>
+            <button name="Auto" left="118" top="502" width="96" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris_auto',value:1},null);",this);</task>
+            </button>
+          </abs>
+          <abs left="684" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="ZOOM POSITION" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <param oid="panasonic_zoom" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="WIDE" left="14" top="108" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,-1,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="TELE" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,1,0);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <param oid="panasonic_zoom" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_zoom" />
+          </abs>
+          <abs left="928" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="FOCUS POSITION" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <param oid="panasonic_focus" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="NEAR" left="14" top="108" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,0,-1);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <button name="FAR" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+              <ogscript handles="onmousedown">CB_Panasonic.run("jog(0,0,0,1);",this);</ogscript>
+              <ogscript handles="onmouseup">CB_Panasonic.run("stop();",this);</ogscript>
+              <ogscript handles="onmouseexit">CB_Panasonic.run("stop();",this);</ogscript>
+            </button>
+            <param oid="panasonic_focus" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_focus" />
+            <button name="Manual" left="14" top="502" width="96" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'focus_auto',value:0},null);",this);</task>
+            </button>
+            <button name="Auto" left="118" top="502" width="96" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'focus_auto',value:1},null);",this);</task>
+            </button>
+          </abs>
+        </abs>
+        <abs id="panasonic_page_presets" name="Presets" width="1186" height="564" style="bg#25282e;">
+          <label name="CAMERA SHOTS / BANK 01–20" left="12" top="0" width="1162" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+          <button name="01&#10;Shot 1" left="12" top="42" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_1">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(1);",this);</task>
+          </button>
+          <button name="02&#10;Shot 2" left="182" top="42" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_2">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(2);",this);</task>
+          </button>
+          <button name="03&#10;Shot 3" left="352" top="42" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_3">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(3);",this);</task>
+          </button>
+          <button name="04&#10;Shot 4" left="522" top="42" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_4">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(4);",this);</task>
+          </button>
+          <button name="05&#10;Shot 5" left="692" top="42" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_5">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(5);",this);</task>
+          </button>
+          <button name="06&#10;Shot 6" left="12" top="168" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_6">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(6);",this);</task>
+          </button>
+          <button name="07&#10;Shot 7" left="182" top="168" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_7">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(7);",this);</task>
+          </button>
+          <button name="08&#10;Shot 8" left="352" top="168" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_8">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(8);",this);</task>
+          </button>
+          <button name="09&#10;Shot 9" left="522" top="168" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_9">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(9);",this);</task>
+          </button>
+          <button name="10&#10;Shot 10" left="692" top="168" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_10">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(10);",this);</task>
+          </button>
+          <button name="11&#10;Shot 11" left="12" top="294" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_11">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(11);",this);</task>
+          </button>
+          <button name="12&#10;Shot 12" left="182" top="294" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_12">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(12);",this);</task>
+          </button>
+          <button name="13&#10;Shot 13" left="352" top="294" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_13">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(13);",this);</task>
+          </button>
+          <button name="14&#10;Shot 14" left="522" top="294" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_14">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(14);",this);</task>
+          </button>
+          <button name="15&#10;Shot 15" left="692" top="294" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_15">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(15);",this);</task>
+          </button>
+          <button name="16&#10;Shot 16" left="12" top="420" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_16">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(16);",this);</task>
+          </button>
+          <button name="17&#10;Shot 17" left="182" top="420" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_17">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(17);",this);</task>
+          </button>
+          <button name="18&#10;Shot 18" left="352" top="420" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_18">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(18);",this);</task>
+          </button>
+          <button name="19&#10;Shot 19" left="522" top="420" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_19">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(19);",this);</task>
+          </button>
+          <button name="20&#10;Shot 20" left="692" top="420" width="158" height="114" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="panasonic_shot_20">
+            <task tasktype="ogscript">CB_Panasonic.run("preset(20);",this);</task>
+          </button>
+          <abs left="874" top="42" width="300" height="516" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="RECALL / STORE" left="14" top="12" width="272" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <label name="0 recall / 1 store" left="14" top="49" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+            <param oid="panasonic_store" left="14" top="80" width="272" height="48" showlabel="false" widget="6" style="size:18;" />
+            <label name="Overwrite confirmation" left="14" top="143" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+            <param oid="panasonic_confirmation" left="14" top="176" width="272" height="48" showlabel="false" style="size:18;" />
+            <label name="Type OVERWRITE before storing." left="14" top="232" width="272" height="45" style="fg#a9bbc8;size:13;txt-align:west;" />
+            <label name="NAME A SHOT" left="14" top="288" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+            <param oid="panasonic_shot_number" left="14" top="324" width="80" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="panasonic_shot_name" left="102" top="324" width="184" height="48" showlabel="false" style="size:18;" />
+            <button name="Save shot name" left="14" top="388" width="272" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("renamePreset();",this);</task>
+            </button>
+            <label name="Physical recall completion&#10;requires camera feedback." left="14" top="454" width="272" height="48" style="fg#a9bbc8;size:13;txt-align:west;" />
+          </abs>
+        </abs>
+        <abs id="panasonic_page_paint" name="Paint" width="1186" height="564" style="bg#25282e;">
+          <abs left="12" top="12" width="208" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="RED GAIN" left="16" top="12" width="176" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="panasonic_red_gain" left="16" top="50" width="176" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="panasonic_red_gain" left="32" top="110" width="144" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("adjust('red_gain',-1,0,300);",this);</task>
+            </button>
+            <button name="+" left="112" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("adjust('red_gain',1,0,300);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="176" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_red_gain" />
+          </abs>
+          <abs left="236" top="12" width="208" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="BLUE GAIN" left="16" top="12" width="176" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="panasonic_blue_gain" left="16" top="50" width="176" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="panasonic_blue_gain" left="32" top="110" width="144" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("adjust('blue_gain',-1,0,300);",this);</task>
+            </button>
+            <button name="+" left="112" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("adjust('blue_gain',1,0,300);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="176" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_blue_gain" />
+          </abs>
+          <abs left="460" top="12" width="208" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="DETAIL" left="16" top="12" width="176" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="panasonic_detail" left="16" top="50" width="176" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="panasonic_detail" left="32" top="110" width="144" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("adjust('detail',-1,0,1);",this);</task>
+            </button>
+            <button name="+" left="112" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("adjust('detail',1,0,1);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="176" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_detail" />
+          </abs>
+          <abs left="700" top="12" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="WHITE BALANCE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="panasonic_wb_mode" left="16" top="50" width="442" height="56" showlabel="false" widget="7" style="size:18;" />
+            <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_wb_mode" />
+          </abs>
+          <abs left="700" top="176" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="IRIS MODE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <button name="Manual" left="16" top="50" width="214" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris_auto',value:0},null);",this);</task>
+            </button>
+            <button name="Auto" left="244" top="50" width="214" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'iris_auto',value:1},null);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_iris_auto" />
+          </abs>
+          <abs left="700" top="340" width="474" height="148" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="FOCUS MODE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <button name="Manual" left="16" top="50" width="214" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'focus_auto',value:0},null);",this);</task>
+            </button>
+            <button name="Auto" left="244" top="50" width="214" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Panasonic.run("send('write',{parameter:'focus_auto',value:1},null);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="114" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="panasonic_actual_focus_auto" />
+          </abs>
+          <label name="R/B gain: −150..+150 · enable a manual white-balance memory to adjust." left="12" top="528" width="1162" height="30" style="fg#a9bbc8;size:13;txt-align:west;" />
+        </abs>
+        <abs id="panasonic_page_td1c" name="TD1C" width="1186" height="564" style="bg#25282e;">
+          <label name="TOUCHDRIVE / CARBONITE CAMERA BRIDGE" left="16" top="12" width="1154" height="32" style="fg#e2e4e9;size:19;txt-align:west;" />
+          <label name="Connection not verified" left="16" top="60" width="1154" height="52" style="fg#e2e4e9;size:15;txt-align:west;" id="panasonic_ross_state" />
+          <label name="Physical positioner and native shot commands reach the development simulator." left="16" top="132" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <label name="Movement verification is partial; continuous response still needs work." left="16" top="188" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <label name="Actual Preset-bus following is pending; the selected target is a lab fixture." left="16" top="244" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <label name="Native Custom Control Recall Shot has been observed at the simulator." left="16" top="300" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <label name="Real-camera motion and shot completion require separate verification." left="16" top="356" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
+          <button name="LAB: select on Preset" left="16" top="440" width="330" height="56" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Panasonic.run("labBus('preset');",this);</task>
+          </button>
+          <button name="LAB: change Program only" left="362" top="440" width="330" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Panasonic.run("labBus('program');",this);</task>
+          </button>
+          <label name="Simulator selection only. These buttons do not change the switcher." left="16" top="516" width="1154" height="32" style="fg#a9bbc8;size:13;txt-align:west;" />
+        </abs>
+        <abs id="panasonic_page_config" name="Config" width="1186" height="564" style="bg#25282e;">
+          <button name="Lock camera" left="200" top="368" width="218" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Panasonic.run("send('lock',{value:true},null);",this);</task>
+          </button>
+          <button name="Unlock camera" left="442" top="368" width="218" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Panasonic.run("send('lock',{value:false},null);",this);</task>
+          </button>
+          <button name="Tally ON" left="700" top="288" width="210" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Panasonic.run("send('tally',{program:true,preview:false},null);",this);</task>
+          </button>
+          <button name="Tally OFF" left="934" top="288" width="210" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Panasonic.run("send('tally',{program:false,preview:false},null);",this);</task>
+          </button>
+          <label name="Tally feedback pending" left="700" top="360" width="450" height="88" style="fg#e2e4e9;size:14;txt-align:west;" id="panasonic_tally_state" />
+          <label name="Tally enable / disable, configuration and diagnostics: open CameraBridge setup." left="20" top="454" width="1140" height="36" style="fg#a9bbc8;size:14;txt-align:west;" />
+          <label name="SIMULATOR feedback confirms simulator state. Verify hardware separately." left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
+          <label name="Use Cameras / setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
+        </abs>
+      </tab>
+      <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#b9c5cf;size:14;txt-align:west;" id="panasonic_status" />
+    </abs>
+    <abs id="unified_Marshall" name="Marshall" width="1366" height="800">
+      <ogscript handles="onchange" oid="marshall_wb_mode" element="0">CB_Marshall.run("changed('wb_mode');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_red_gain" element="0">CB_Marshall.run("changed('red_gain');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_blue_gain" element="0">CB_Marshall.run("changed('blue_gain');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_exposure_auto" element="0">CB_Marshall.run("changed('exposure_auto');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_brightness" element="0">CB_Marshall.run("changed('brightness');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_gain" element="0">CB_Marshall.run("changed('gain');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_agc_limit" element="0">CB_Marshall.run("changed('agc_limit');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_shutter" element="0">CB_Marshall.run("changed('shutter');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_black_level" element="0">CB_Marshall.run("changed('black_level');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_gamma" element="0">CB_Marshall.run("changed('gamma');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_colour" element="0">CB_Marshall.run("changed('colour');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_sharpness" element="0">CB_Marshall.run("changed('sharpness');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_dnr" element="0">CB_Marshall.run("changed('dnr');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_mirror" element="0">CB_Marshall.run("changed('mirror');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_flip" element="0">CB_Marshall.run("changed('flip');",this);</ogscript>
+      <ogscript handles="onchange" oid="marshall_digital_zoom" element="0">CB_Marshall.run("changed('digital_zoom');",this);</ogscript>
+      <abs left="8" top="8" width="1350" height="80" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="CameraBridge / Marshall" left="16" top="10" width="325" height="28" style="fg#e2e4e9;size:21;txt-align:west;" />
+        <label name="CV226 / CV228 · paint &amp; setup" left="16" top="45" width="325" height="24" style="fg#abb1bd;size:14;txt-align:west;" />
+        <reveal id="marshall_nav_paint" name="Paint" targetid="marshall_page_paint" left="350" top="12" width="104" height="56" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" />
+        <reveal id="marshall_nav_image" name="Image" targetid="marshall_page_image" left="462" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+        <reveal id="marshall_nav_exposure" name="Exposure" targetid="marshall_page_exposure" left="574" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+        <reveal id="marshall_nav_osd" name="OSD" targetid="marshall_page_osd" left="686" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+        <reveal id="marshall_nav_config" name="Config" targetid="marshall_page_config" left="798" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+        <abs id="marshall_bridge_launcher" left="920" top="12" width="180" height="56">
+          <help id="marshall_open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;">&lt;html&gt;Set the backend URL on Config. Select Open CameraBridge again after feedback loads.&lt;/html&gt;</help>
+        </abs>
+        <image src="file:///C:/Users/rackpc01/Documents/Codex/2026-10-21/files-pasted-by-the-user-camerabridge/outputs/camerabridge/dashboard/assets/marshall.png" left="1151" top="15" width="177" height="48" />
+      </abs>
+      <label name="Camera identification pending" left="164" top="100" width="1178" height="26" style="fg#e2e4e9;size:18;txt-align:west;" id="marshall_identity" />
+      <label name="SIMULATOR / awaiting feedback" left="164" top="130" width="1178" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="marshall_connection" />
+      <abs left="8" top="104" width="140" height="624" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="CAMERAS" left="10" top="10" width="120" height="26" style="fg#e2e4e9;size:14;txt-align:west;" />
+        <button name="—" left="8" top="42" width="124" height="54" buttontype="push" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_0">
+          <task tasktype="ogscript">CB_Marshall.run("cameraAt(0);",this);</task>
+        </button>
+        <button name="—" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_1">
+          <task tasktype="ogscript">CB_Marshall.run("cameraAt(1);",this);</task>
+        </button>
+        <button name="—" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_2">
+          <task tasktype="ogscript">CB_Marshall.run("cameraAt(2);",this);</task>
+        </button>
+        <button name="—" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_3">
+          <task tasktype="ogscript">CB_Marshall.run("cameraAt(3);",this);</task>
+        </button>
+        <button name="—" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_4">
+          <task tasktype="ogscript">CB_Marshall.run("cameraAt(4);",this);</task>
+        </button>
+        <button name="—" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="marshall_camera_pick_5">
+          <task tasktype="ogscript">CB_Marshall.run("cameraAt(5);",this);</task>
+        </button>
+        <button name="Next" left="8" top="432" width="124" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Marshall.run("nextCamera();",this);</task>
+        </button>
+        <button name="Refresh" left="8" top="492" width="124" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Marshall.run("poll();",this);</task>
+        </button>
+        <button name="STOP" left="8" top="552" width="124" height="64" buttontype="push" style="bg#a23d4c;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Marshall.run("stop();",this);</task>
+        </button>
+      </abs>
+      <tab left="164" top="164" width="1186" height="564" tabposition="none" delay="false" onchange="CB_Marshall.run(&quot;highlightPage(String(this.getTitleAt(this.getSelectedIndex())));&quot;,this);">
+        <abs id="marshall_page_paint" name="Paint" width="1186" height="564" style="bg#25282e;">
+          <abs left="12" top="12" width="276" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="RED GAIN" left="16" top="12" width="244" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="marshall_red_gain" left="16" top="50" width="244" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="marshall_red_gain" left="32" top="110" width="212" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('red_gain',-1,0,255);",this);</task>
+            </button>
+            <button name="+" left="180" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('red_gain',1,0,255);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="244" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_red_gain" />
+          </abs>
+          <abs left="306" top="12" width="276" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="BLUE GAIN" left="16" top="12" width="244" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="marshall_blue_gain" left="16" top="50" width="244" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="marshall_blue_gain" left="32" top="110" width="212" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('blue_gain',-1,0,255);",this);</task>
+            </button>
+            <button name="+" left="180" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('blue_gain',1,0,255);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="244" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_blue_gain" />
+          </abs>
+          <abs left="600" top="12" width="276" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="BLACK LEVEL" left="16" top="12" width="244" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="marshall_black_level" left="16" top="50" width="244" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="marshall_black_level" left="32" top="110" width="212" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('black_level',-1,0,32);",this);</task>
+            </button>
+            <button name="+" left="180" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('black_level',1,0,32);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="244" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_black_level" />
+          </abs>
+          <abs left="894" top="12" width="276" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="GAMMA ×10" left="16" top="12" width="244" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="marshall_gamma" left="16" top="50" width="244" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="marshall_gamma" left="32" top="110" width="212" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('gamma',-1,3,8);",this);</task>
+            </button>
+            <button name="+" left="180" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('gamma',1,3,8);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="244" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_gamma" />
+          </abs>
+          <label name="LAB MODEL · CV226/CV228 serial command map awaits camera verification." left="12" top="528" width="1162" height="30" style="fg#d7bb8c;size:13;txt-align:west;" />
+        </abs>
+        <abs id="marshall_page_image" name="Image" width="1186" height="564" style="bg#25282e;">
+          <abs left="12" top="12" width="276" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="COLOUR" left="16" top="12" width="244" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="marshall_colour" left="16" top="50" width="244" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="marshall_colour" left="32" top="110" width="212" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('colour',-1,0,20);",this);</task>
+            </button>
+            <button name="+" left="180" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('colour',1,0,20);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="244" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_colour" />
+          </abs>
+          <abs left="306" top="12" width="276" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="SHARPNESS" left="16" top="12" width="244" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="marshall_sharpness" left="16" top="50" width="244" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="marshall_sharpness" left="32" top="110" width="212" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('sharpness',-1,0,20);",this);</task>
+            </button>
+            <button name="+" left="180" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('sharpness',1,0,20);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="244" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_sharpness" />
+          </abs>
+          <abs left="600" top="12" width="276" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="BRIGHTNESS" left="16" top="12" width="244" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="marshall_brightness" left="16" top="50" width="244" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="marshall_brightness" left="32" top="110" width="212" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('brightness',-1,0,20);",this);</task>
+            </button>
+            <button name="+" left="180" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('brightness',1,0,20);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="244" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_brightness" />
+          </abs>
+          <abs left="894" top="12" width="276" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="GAIN" left="16" top="12" width="244" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="marshall_gain" left="16" top="50" width="244" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="marshall_gain" left="32" top="110" width="212" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('gain',-1,0,20);",this);</task>
+            </button>
+            <button name="+" left="180" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('gain',1,0,20);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="462" width="244" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_gain" />
+          </abs>
+          <label name="LAB MODEL · CV226/CV228 serial command map awaits camera verification." left="12" top="528" width="1162" height="30" style="fg#d7bb8c;size:13;txt-align:west;" />
+        </abs>
+        <abs id="marshall_page_exposure" name="Exposure" width="1186" height="564" style="bg#25282e;">
+          <abs left="12" top="12" width="572" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="WHITE BALANCE" left="16" top="8" width="540" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('wb_mode',-1,0,3);",this);</task>
+            </button>
+            <param oid="marshall_wb_mode" left="88" top="39" width="396" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="492" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('wb_mode',1,0,3);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="540" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_wb_mode" />
+          </abs>
+          <abs left="602" top="12" width="572" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="EXPOSURE MODE" left="16" top="8" width="540" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('exposure_auto',-1,0,1);",this);</task>
+            </button>
+            <param oid="marshall_exposure_auto" left="88" top="39" width="396" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="492" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('exposure_auto',1,0,1);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="540" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_exposure_auto" />
+          </abs>
+          <abs left="12" top="148" width="572" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="AGC LIMIT" left="16" top="8" width="540" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('agc_limit',-1,0,20);",this);</task>
+            </button>
+            <param oid="marshall_agc_limit" left="88" top="39" width="396" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="492" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('agc_limit',1,0,20);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="540" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_agc_limit" />
+          </abs>
+          <abs left="602" top="148" width="572" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="SHUTTER" left="16" top="8" width="540" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('shutter',-1,0,15);",this);</task>
+            </button>
+            <param oid="marshall_shutter" left="88" top="39" width="396" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="492" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('shutter',1,0,15);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="540" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_shutter" />
+          </abs>
+          <abs left="12" top="284" width="572" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="NOISE REDUCTION" left="16" top="8" width="540" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('dnr',-1,0,3);",this);</task>
+            </button>
+            <param oid="marshall_dnr" left="88" top="39" width="396" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="492" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('dnr',1,0,3);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="540" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_dnr" />
+          </abs>
+          <abs left="602" top="284" width="572" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="MIRROR" left="16" top="8" width="540" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('mirror',-1,0,1);",this);</task>
+            </button>
+            <param oid="marshall_mirror" left="88" top="39" width="396" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="492" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('mirror',1,0,1);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="540" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_mirror" />
+          </abs>
+          <abs left="12" top="420" width="572" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="FLIP" left="16" top="8" width="540" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('flip',-1,0,1);",this);</task>
+            </button>
+            <param oid="marshall_flip" left="88" top="39" width="396" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="492" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('flip',1,0,1);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="540" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_flip" />
+          </abs>
+          <abs left="602" top="420" width="572" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="DIGITAL ZOOM ×10" left="16" top="8" width="540" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('digital_zoom',-1,10,160);",this);</task>
+            </button>
+            <param oid="marshall_digital_zoom" left="88" top="39" width="396" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="492" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Marshall.run("adjust('digital_zoom',1,10,160);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="540" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="marshall_actual_digital_zoom" />
+          </abs>
+        </abs>
+        <abs id="marshall_page_osd" name="OSD" width="1186" height="564" style="bg#25282e;">
+          <label name="OSD / CAMERA SETUP" left="16" top="12" width="1154" height="32" style="fg#e2e4e9;size:19;txt-align:west;" />
+          <label name="Fixed cameras · no mechanical pan/tilt" left="16" top="56" width="1154" height="30" style="fg#a9bbc8;size:15;txt-align:west;" />
+          <button name="MENU" left="200" top="112" width="164" height="68" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('osd',{key:'menu'},function(r){if(r)status(r.status);});",this);</task>
+          </button>
+          <button name="UP" left="200" top="196" width="164" height="68" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('osd',{key:'up'},function(r){if(r)status(r.status);});",this);</task>
+          </button>
+          <button name="LEFT" left="20" top="280" width="164" height="68" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('osd',{key:'left'},function(r){if(r)status(r.status);});",this);</task>
+          </button>
+          <button name="ENTER" left="200" top="280" width="164" height="68" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('osd',{key:'enter'},function(r){if(r)status(r.status);});",this);</task>
+          </button>
+          <button name="RIGHT" left="380" top="280" width="164" height="68" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('osd',{key:'right'},function(r){if(r)status(r.status);});",this);</task>
+          </button>
+          <button name="DOWN" left="200" top="364" width="164" height="68" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('osd',{key:'down'},function(r){if(r)status(r.status);});",this);</task>
+          </button>
+          <button name="BACK" left="200" top="448" width="164" height="68" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('osd',{key:'back'},function(r){if(r)status(r.status);});",this);</task>
+          </button>
+          <label name="RS485 adapter / address / firmware" left="620" top="156" width="546" height="32" style="fg#e2e4e9;size:17;txt-align:west;" />
+          <label name="Synthetic LAB model.&#10;No serial packets are transmitted.&#10;Exact gateway and camera firmware pending." left="620" top="216" width="546" height="160" style="fg#a9bbc8;size:16;txt-align:west;" />
+        </abs>
+        <abs id="marshall_page_config" name="Config" width="1186" height="564" style="bg#25282e;">
+          <button name="Lock camera" left="200" top="368" width="218" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('lock',{value:true},null);",this);</task>
+          </button>
+          <button name="Unlock camera" left="442" top="368" width="218" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Marshall.run("send('lock',{value:false},null);",this);</task>
+          </button>
+          <label name="Tally enable / disable, configuration and diagnostics: open CameraBridge setup." left="20" top="454" width="1140" height="36" style="fg#a9bbc8;size:14;txt-align:west;" />
+          <label name="SIMULATOR feedback confirms simulator state. Verify hardware separately." left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
+          <label name="Use Cameras / setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
+        </abs>
+      </tab>
+      <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#b9c5cf;size:14;txt-align:west;" id="marshall_status" />
+    </abs>
+    <abs id="unified_Sony" name="Sony" width="1366" height="800">
+      <ogscript handles="onchange" oid="sony_iris" element="0">CB_Sony.run("changed('iris');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_iris_auto" element="0">CB_Sony.run("changed('iris_auto');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_focus_auto" element="0">CB_Sony.run("changed('focus_auto');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_wb_mode" element="0">CB_Sony.run("changed('wb_mode');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_red_gain" element="0">CB_Sony.run("changed('red_gain');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_blue_gain" element="0">CB_Sony.run("changed('blue_gain');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_gain" element="0">CB_Sony.run("changed('gain');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_shutter" element="0">CB_Sony.run("changed('shutter');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_colour_temperature" element="0">CB_Sony.run("changed('colour_temperature');",this);</ogscript>
+      <ogscript handles="onchange" oid="sony_zoom" element="0">CB_Sony.run("changed('zoom');",this);</ogscript>
+      <abs left="8" top="8" width="1350" height="80" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="CameraBridge / Sony" left="16" top="12" width="320" height="30" style="fg#e2e4e9;size:22;txt-align:west;" />
+        <label name="PXW-Z200 · lens &amp; paint" left="16" top="47" width="320" height="24" style="fg#e2e4e9;size:14;txt-align:west;" />
+        <reveal id="sony_nav_lens" name="Lens" targetid="sony_page_lens" left="350" top="12" width="120" height="56" style="bg#494f5b;fg#ffffff;size:16;" />
+        <reveal id="sony_nav_paint" name="Paint" targetid="sony_page_paint" left="480" top="12" width="120" height="56" style="bg#494f5b;fg#ffffff;size:16;" />
+        <reveal id="sony_nav_tally" name="Tally" targetid="sony_page_tally" left="610" top="12" width="120" height="56" style="bg#494f5b;fg#ffffff;size:16;" />
+        <reveal id="sony_nav_config" name="Config" targetid="sony_page_config" left="740" top="12" width="120" height="56" style="bg#494f5b;fg#ffffff;size:16;" />
+        <abs id="sony_bridge_launcher" left="890" top="12" width="180" height="56">
+          <help id="sony_open_bridge" name="Open setup" left="0" top="0" width="180" height="56" title="CameraBridge setup">Set the bridge URL on Config.</help>
+        </abs>
+        <image src="file:///C:/Users/rackpc01/Documents/Codex/2026-10-21/files-pasted-by-the-user-camerabridge/outputs/camerabridge/dashboard/assets/sony.png" left="1150" top="22" width="150" height="29" />
+      </abs>
+      <label name="Camera identification pending" left="164" top="100" width="1180" height="28" style="fg#e2e4e9;size:18;txt-align:west;" id="sony_identity" />
+      <label name="Awaiting feedback" left="164" top="133" width="1180" height="24" style="fg#e2e4e9;size:14;txt-align:west;" id="sony_connection" />
+      <abs left="8" top="104" width="140" height="624" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="CAMERAS" left="10" top="10" width="120" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
+        <button name="—" left="8" top="42" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_0">
+          <task tasktype="ogscript">CB_Sony.run("cameraAt(0);",this);</task>
+        </button>
+        <button name="—" left="8" top="106" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_1">
+          <task tasktype="ogscript">CB_Sony.run("cameraAt(1);",this);</task>
+        </button>
+        <button name="—" left="8" top="170" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_2">
+          <task tasktype="ogscript">CB_Sony.run("cameraAt(2);",this);</task>
+        </button>
+        <button name="—" left="8" top="234" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_3">
+          <task tasktype="ogscript">CB_Sony.run("cameraAt(3);",this);</task>
+        </button>
+        <button name="—" left="8" top="298" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_4">
+          <task tasktype="ogscript">CB_Sony.run("cameraAt(4);",this);</task>
+        </button>
+        <button name="—" left="8" top="362" width="124" height="54" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_camera_pick_5">
+          <task tasktype="ogscript">CB_Sony.run("cameraAt(5);",this);</task>
+        </button>
+        <button name="Next" left="8" top="438" width="124" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Sony.run("nextCamera();",this);</task>
+        </button>
+        <button name="Refresh" left="8" top="500" width="124" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Sony.run("poll();",this);</task>
+        </button>
+        <button name="STOP" left="8" top="564" width="124" height="52" buttontype="push" style="bg#a23d4c;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">CB_Sony.run("stop();",this);</task>
+        </button>
+      </abs>
+      <tab left="164" top="164" width="1186" height="564" tabposition="none" onchange="CB_Sony.run(&quot;highlightPage(String(this.getTitleAt(this.getSelectedIndex())));&quot;,this);">
+        <abs id="sony_page_lens" name="Lens" width="1186" height="564" style="bg#25282e;">
+          <button name="Touch control DISABLED" left="12" top="12" width="560" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" id="sony_touch_enable">
+            <task tasktype="ogscript">CB_Sony.run("touchEnable();",this);</task>
+          </button>
+          <label name="ZOOM" left="12" top="92" width="560" height="32" style="fg#e2e4e9;size:20;txt-align:west;" />
+          <button name="WIDE" left="12" top="138" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+            <ogscript handles="onmousedown">CB_Sony.run("jog(0,0,-1,0);",this);</ogscript>
+            <ogscript handles="onmouseup">CB_Sony.run("stop();",this);</ogscript>
+            <ogscript handles="onmouseexit">CB_Sony.run("stop();",this);</ogscript>
+          </button>
+          <button name="TELE" left="293" top="138" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+            <ogscript handles="onmousedown">CB_Sony.run("jog(0,0,1,0);",this);</ogscript>
+            <ogscript handles="onmouseup">CB_Sony.run("stop();",this);</ogscript>
+            <ogscript handles="onmouseexit">CB_Sony.run("stop();",this);</ogscript>
+          </button>
+          <label name="FOCUS" left="12" top="270" width="560" height="32" style="fg#e2e4e9;size:20;txt-align:west;" />
+          <button name="NEAR" left="12" top="316" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+            <ogscript handles="onmousedown">CB_Sony.run("jog(0,0,0,-1);",this);</ogscript>
+            <ogscript handles="onmouseup">CB_Sony.run("stop();",this);</ogscript>
+            <ogscript handles="onmouseexit">CB_Sony.run("stop();",this);</ogscript>
+          </button>
+          <button name="FAR" left="293" top="316" width="265" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
+            <ogscript handles="onmousedown">CB_Sony.run("jog(0,0,0,1);",this);</ogscript>
+            <ogscript handles="onmouseup">CB_Sony.run("stop();",this);</ogscript>
+            <ogscript handles="onmouseexit">CB_Sony.run("stop();",this);</ogscript>
+          </button>
+          <abs left="594" top="12" width="580" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="IRIS" left="16" top="8" width="548" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('iris',-1,0,65535);",this);</task>
+            </button>
+            <param oid="sony_iris" left="88" top="39" width="404" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="500" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('iris',1,0,65535);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="548" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_iris" />
+          </abs>
+          <abs left="594" top="182" width="580" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="IRIS MODE" left="16" top="8" width="548" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('iris_auto',-1,1,2);",this);</task>
+            </button>
+            <param oid="sony_iris_auto" left="88" top="39" width="404" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="500" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('iris_auto',1,1,2);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="548" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_iris_auto" />
+          </abs>
+          <abs left="594" top="352" width="580" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="FOCUS MODE" left="16" top="8" width="548" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('focus_auto',-1,1,2);",this);</task>
+            </button>
+            <param oid="sony_focus_auto" left="88" top="39" width="404" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="500" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('focus_auto',1,1,2);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="548" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_focus_auto" />
+          </abs>
+          <label name="ZOOM SCALE" left="12" top="452" width="560" height="22" style="fg#e2e4e9;size:14;txt-align:west;" />
+          <label name="Awaiting camera" left="12" top="478" width="560" height="24" style="fg#a9bbc8;size:14;txt-align:west;" id="sony_actual_zoom" />
+          <label name="Hold / release stops · fixed-speed SDK lens jog · no pan/tilt motors" left="12" top="506" width="560" height="48" style="fg#a9bbc8;size:14;txt-align:west;" />
+        </abs>
+        <abs id="sony_page_paint" name="Paint" width="1186" height="564" style="bg#25282e;">
+          <abs left="12" top="12" width="212" height="530" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="RED GAIN" left="16" top="12" width="180" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="sony_red_gain" left="16" top="50" width="180" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="sony_red_gain" left="32" top="110" width="148" height="308" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('red_gain',-1,-32768,65535);",this);</task>
+            </button>
+            <button name="+" left="116" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('red_gain',1,-32768,65535);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="492" width="180" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_red_gain" />
+          </abs>
+          <abs left="238" top="12" width="212" height="530" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="BLUE GAIN" left="16" top="12" width="180" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="sony_blue_gain" left="16" top="50" width="180" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="sony_blue_gain" left="32" top="110" width="148" height="308" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('blue_gain',-1,-32768,65535);",this);</task>
+            </button>
+            <button name="+" left="116" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('blue_gain',1,-32768,65535);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="492" width="180" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_blue_gain" />
+          </abs>
+          <abs left="464" top="12" width="212" height="530" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="COLOUR TEMPERATURE" left="16" top="12" width="180" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
+            <param oid="sony_colour_temperature" left="16" top="50" width="180" height="48" showlabel="false" widget="6" style="size:18;" />
+            <param oid="sony_colour_temperature" left="32" top="110" width="148" height="308" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+            <button name="−" left="16" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('colour_temperature',-1,0,65535);",this);</task>
+            </button>
+            <button name="+" left="116" top="430" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('colour_temperature',1,0,65535);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="492" width="180" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_colour_temperature" />
+          </abs>
+          <abs left="704" top="12" width="470" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="WHITE BALANCE" left="16" top="8" width="438" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('wb_mode',-1,1,2);",this);</task>
+            </button>
+            <param oid="sony_wb_mode" left="88" top="39" width="294" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="390" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('wb_mode',1,1,2);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="438" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_wb_mode" />
+          </abs>
+          <abs left="704" top="186" width="470" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="GAIN" left="16" top="8" width="438" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('gain',-1,-32768,65535);",this);</task>
+            </button>
+            <param oid="sony_gain" left="88" top="39" width="294" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="390" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('gain',1,-32768,65535);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="438" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_gain" />
+          </abs>
+          <abs left="704" top="360" width="470" height="122" style="bg#2c3037;bdr:line;bdr#383d45;">
+            <label name="SHUTTER" left="16" top="8" width="438" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+            <button name="−" left="16" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('shutter',-1,0,4294967295);",this);</task>
+            </button>
+            <param oid="sony_shutter" left="88" top="39" width="294" height="48" showlabel="false" widget="6" style="size:18;" />
+            <button name="+" left="390" top="39" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+              <task tasktype="ogscript">CB_Sony.run("adjust('shutter',1,0,4294967295);",this);</task>
+            </button>
+            <label name="unknown · never read" left="16" top="90" width="438" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="sony_actual_shutter" />
+          </abs>
+        </abs>
+        <abs id="sony_page_tally" name="Tally" width="1186" height="564" style="bg#25282e;">
+          <label name="CAMERA TALLY" left="20" top="16" width="1140" height="36" style="fg#e2e4e9;size:22;txt-align:west;" />
+          <label name="Per-camera enable defaults to ON. Change it in CameraBridge setup." left="20" top="70" width="1140" height="36" style="fg#e2e4e9;size:17;txt-align:west;" />
+          <label name="Awaiting tally feedback" left="20" top="136" width="1140" height="85" style="fg#e2e4e9;size:17;txt-align:west;" id="sony_tally_state" />
+          <button name="PROGRAM" left="20" top="258" width="350" height="80" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Sony.run("send('tally',{program:true,preview:false},function(r){if(r)poll();});",this);</task>
+          </button>
+          <button name="PREVIEW" left="400" top="258" width="350" height="80" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Sony.run("send('tally',{program:false,preview:true},function(r){if(r)poll();});",this);</task>
+          </button>
+          <button name="OFF" left="780" top="258" width="350" height="80" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+            <task tasktype="ogscript">CB_Sony.run("send('tally',{program:false,preview:false},function(r){if(r)poll();});",this);</task>
+          </button>
+          <label name="PXW-Z200: external tally lamp control is not listed in Sony SDK 2.02.00.&#10;Unsupported lamp requests are reported. Recording is never used as tally." left="20" top="390" width="1130" height="100" style="fg#d7bb8c;size:16;txt-align:west;" />
+        </abs>
+        <abs id="sony_page_config" name="Config" width="1186" height="564" style="bg#25282e;">
+          <label name="Set the camera network access and verified SSH fingerprint in CameraBridge setup." left="20" top="386" width="1140" height="60" style="fg#e2e4e9;size:17;txt-align:west;" />
+          <label name="Values use Sony native units. Only available camera controls are writable." left="20" top="470" width="1140" height="48" style="fg#a9bbc8;size:15;txt-align:west;" />
+          <label name="Use Cameras / setup for connection, camera setup, and shared sign-in." left="20" top="20" width="1140" height="80" style="fg#e2e4e9;size:20;txt-align:west;" />
+        </abs>
+      </tab>
+      <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#e2e4e9;size:14;txt-align:west;" id="sony_status" />
+    </abs>
+  </tab>
+  <ogscript handles="onchange" oid="setup_profile" element="0">uProfile(); if(Number(uValue('profile'))&gt;=3){uSet('pivot',0);if(Number(uValue('profile'))&lt;5)uSet('enabled',0);}</ogscript>
+  <ogscript handles="onload">uNew();uStatus('Set the bridge URL and sign in.');</ogscript>
+  <ogscript handles="onclose">uClose();</ogscript>
+</abs>

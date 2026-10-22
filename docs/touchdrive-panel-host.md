@@ -33,7 +33,12 @@ python tools/td_panel_host.py --bind 192.168.96.61 --touchdrive 192.168.96.122
 4. Open the panel download URL in the TouchDrive browser.
 5. Download the applicable grid file.
 6. Open that file in DashBoard.
-7. Sign in on its Config page.
+7. Sign in on **Cameras / setup** in the unified panel.
+
+The unified download is `http://192.168.96.61:8089/CameraBridge.grid`.
+See [the panel guide](unified-dashboard.md) for native camera setup.
+The backend must also include the unified setup API.
+Use `--backend-port PORT` if its local HTTP port differs from 8088.
 
 Panel URLs are `http://192.168.96.61:8089/Panasonic.grid` and `http://192.168.96.61:8089/Marshall.grid`.
 The downloads contain the panel-host URL and HTTP image paths.

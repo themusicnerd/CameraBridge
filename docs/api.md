@@ -31,6 +31,9 @@ Native panels can send URL-encoded `request=JSON` through ogScript.
 | POST | `/api/command` | Authenticated camera command |
 | GET | `/api/config` | Administrator; current configuration |
 | POST | `/api/config` | Administrator; validate and save pending configuration |
+| POST | `/api/setup` | Administrator; revision-checked native camera and bridge setup |
+| POST | `/api/sony/fingerprint` | Administrator; read a camera SSH fingerprint |
+| POST | `/api/sony/credentials` | Administrator; save camera access separately from configuration |
 | GET | `/api/snapshots` | Saved paint snapshots |
 | POST | `/api/snapshot` | Capture confirmed paint values |
 | POST | `/api/lab/ross/bus` | Administrator; enabled VISCA lab only |
@@ -38,6 +41,32 @@ Native panels can send URL-encoded `request=JSON` through ogScript.
 
 The TouchDrive host does not expose `/api/service/stop`.
 It permits only its fixed path list.
+
+## Native camera setup
+
+Send `operation: "load"` to `/api/setup`.
+The response contains `configuration`, `revision`, and `pending`.
+It returns the saved pending configuration if one exists.
+Other operations must include that revision.
+An older revision returns HTTP 400 without changing the saved setup.
+
+| Operation | Required fields |
+|---|---|
+| `save` | Complete `camera` object; `previous` is its existing ID, or empty for a new camera |
+| `remove` | `camera` ID and `confirmation: "REMOVE"` |
+| `bridge` | Complete `pivotcam` and `tally` objects |
+| `apply` | No additional fields |
+
+Each response includes the updated configuration and revision.
+Saving does not change the running engine.
+Apply requests the existing desktop restart procedure when desktop control is available.
+A console service reports that a manual restart is required.
+See [configuration](configuration.md) for camera fields.
+
+The Sony access endpoint accepts a camera in the active or saved pending configuration.
+Supply its `camera` ID, `username`, `password`, verified `fingerprint`, and `acknowledge_terms: true`.
+The response contains status only.
+The setup and configuration endpoints never return the stored camera password.
 
 ## Camera commands
 

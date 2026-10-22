@@ -30,6 +30,7 @@ def main():
         subprocess.run([exe,'panels','--output',str(root/'panels')],check=True)
         assert (root/'panels/CameraBridge-Panasonic.grid').is_file()
         assert (root/'panels/CameraBridge-Sony.grid').is_file()
+        assert (root/'panels/CameraBridge.grid').is_file()
         helper=pathlib.Path(exe).parent/'_internal/sony'/('CameraBridge-Sony.exe' if __import__('sys').platform=='win32' else 'CameraBridge-Sony')
         if __import__('sys').platform=='win32':
             assert {'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll'}<={p.name.lower() for p in helper.parent.glob('*.dll')}
@@ -49,6 +50,10 @@ def main():
             assert b'CameraBridge' in api('/')
             login=json.loads(api('/api/login',{'username':'smoke','password':'release-test-password'}))
             state=json.loads(api('/api/state',{'token':login['token']}));assert len(state['cameras'])==3
+            roster=json.loads(api('/api/setup',{'token':login['token'],'operation':'load'}))
+            camera=dict(roster['configuration']['cameras'][0],name='Packaged native setup check')
+            saved=json.loads(api('/api/setup',{'token':login['token'],'operation':'save','revision':roster['revision'],'previous':camera['id'],'camera':camera}))
+            assert saved['configuration']['cameras'][0]['name']==camera['name'] and saved['pending']
             api('/api/command',{'token':login['token'],'camera':'pana1','action':'write','data':{'parameter':'iris','value':1400}})
             deadline=time.monotonic()+15
             while True:

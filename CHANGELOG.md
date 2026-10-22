@@ -1,5 +1,15 @@
 # Change record
 
+## 0.3.0rc6
+
+- Add a unified native DashBoard panel for camera setup and camera control.
+- Add camera type, address, camera number, Carbonite input, and tally options in that panel.
+- Add Sony access setup without storing passwords in the grid file.
+- Add PIVOTCam and TSL receiver settings in DashBoard.
+- Check configuration revisions before saving camera setup.
+- Stop the previous camera before changing control pages.
+- Preserve the separate manufacturer panels.
+
 ## 0.2.0rc3
 
 - Add native release packages for Windows, Linux and both macOS processor types.

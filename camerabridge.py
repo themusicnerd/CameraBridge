@@ -17,6 +17,11 @@ def export_panels(output):
             image.set('src',(destination/'assets'/f'{manufacturer.lower()}.png').as_uri())
         target=destination/f'CameraBridge-{manufacturer}.grid';tree.write(target,encoding='utf-8',xml_declaration=True)
         print(target)
+    tree=ET.parse(ROOT/'dashboard/CameraBridge.grid')
+    for image in tree.iter('image'):
+        image.set('src',(destination/'assets'/image.get('src').rsplit('/',1)[-1]).as_uri())
+    target=destination/'CameraBridge.grid';tree.write(target,encoding='utf-8',xml_declaration=True)
+    print(target)
 
 def main():
     args=sys.argv[1:]

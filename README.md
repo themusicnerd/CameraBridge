@@ -3,7 +3,7 @@
 CameraBridge connects native Ross DashBoard panels to one camera control service.
 It includes Panasonic camera emulators and a Marshall lab model.
 
-**Version 0.2.0rc3 is a development release. Production acceptance is incomplete.**
+**Version 0.3.0rc6 is a development release. Production acceptance is incomplete.**
 
 ## Download and start
 
@@ -44,9 +44,12 @@ Use the [installation procedure](docs/installation.md) for prerequisites and ope
 
 1. Export the panels with `CameraBridge-cli panels --output ./panels`.
 2. In DashBoard, select **File > Open**.
-3. Open the Panasonic or Marshall grid file in the exported directory.
-4. Select **Config**.
+3. Open `CameraBridge.grid` in the exported directory.
+4. Select **Cameras / setup**.
 5. Sign in with the CameraBridge account.
+
+Use [the unified panel guide](docs/unified-dashboard.md) to add cameras and select their controls.
+Separate Panasonic, Marshall, and Sony panels remain available.
 
 On Windows, use `.\CameraBridge-cli.exe` in place of `CameraBridge`.
 On Linux and macOS, use `./CameraBridge-cli`.
