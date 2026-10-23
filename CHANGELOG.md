@@ -1,5 +1,13 @@
 # Change record
 
+## 0.3.0rc17
+
+- Add AK-HC1800G on AW-PH360N through a transparent TCP/RS-422 gateway.
+- Set a separate gateway IP and TCP port for each camera.
+- Add the combined profile to web setup and native DashBoard.
+- Report serial head commands as sent without invented feedback.
+- Preserve the PH360 lens extender by keeping autofocus mode unavailable.
+
 ## 0.3.0rc16
 
 - Reject movement queued before a stop, without requiring a new neutral sequence.

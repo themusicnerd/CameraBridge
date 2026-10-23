@@ -123,10 +123,9 @@ class PresetFollower:
                 if c['driver'].motion_state.get(axis)==command:
                     record('motion-skip-unchanged',camera=camera,command=command)
                     self.update_status();return
-                c['driver'].motion_state.pop(axis,None)
-                response=c['driver'].send(command)
-                if response!=expected:raise ViscaError('Downstream speed command not acknowledged',0x41)
-                c['driver'].motion_state[command[:4] if command.startswith('#PTS') else command[:2]]=command
+                # The driver checks real acknowledgements where available.
+                # Legacy serial heads report transmission without inventing one.
+                c['driver'].send_motion(command)
             self.update_status();self.engine.event(camera,'lab-visca-motion',axes=dict(self.axes))
 
     def halt(self,camera):
@@ -180,7 +179,7 @@ class PivotCamServer(LabViscaServer):
     def __init__(self,address,engine,camera,follower,controller,allow_store=False):
         self.controller=str(ipaddress.IPv4Address(controller))
         ipaddress.IPv4Address(address[0])
-        if camera not in engine.cameras or engine.cameras[camera]['config']['driver'] not in ('panasonic','sony-sdk'):
+        if camera not in engine.cameras or engine.cameras[camera]['config']['driver'] not in ('panasonic','panasonic-serial','sony-sdk'):
             raise ValueError('PIVOTCam requires an enabled Panasonic or Sony camera')
         self.configure(address,engine,camera,follower,allow_store)
 

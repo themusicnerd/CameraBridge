@@ -7,6 +7,7 @@ import time
 from .scheduling import CameraAccess
 from .protocol import PANASONIC,Parameter,panasonic_parameters
 from .drivers import Panasonic
+from .panasonic_serial import PanasonicSerial,parameters as serial_parameters
 from .sony import Sony,SONY
 
 MARSHALL_LAB={p.id:p for p in [
@@ -58,10 +59,11 @@ class Engine:
             if not c.get('enabled',True):continue
             lab=c['driver']=='marshall-lab'
             sony=c['driver']=='sony-sdk'
-            if not lab and not sony and c['driver']!='panasonic':
+            serial=c['driver']=='panasonic-serial'
+            if not lab and not sony and not serial and c['driver']!='panasonic':
                 raise ValueError('Unsupported production driver; no guessed Marshall serial commands')
-            definitions=SONY if sony else MARSHALL_LAB if lab else panasonic_parameters(c.get('model','AW-HE130'))
-            driver=Sony(c,storage) if sony else LabMarshall() if lab else Panasonic(c['host'],c.get('port',80),model=c.get('model','AW-HE130'))
+            definitions=serial_parameters() if serial else SONY if sony else MARSHALL_LAB if lab else panasonic_parameters(c.get('model','AW-HE130'))
+            driver=PanasonicSerial(c['host'],c['port']) if serial else Sony(c,storage) if sony else LabMarshall() if lab else Panasonic(c['host'],c.get('port',80),model=c.get('model','AW-HE130'))
             self.cameras[c['id']]={'config':c,'driver':driver,'defs':definitions,'io':CameraAccess(),
                 'params':{k:{'value':None,'requested':None,'confirmation':'unknown','last_query':None,'last_command':None,'error':None} for k in definitions},
                 'pending':{},'owner':None,'lease_until':0,'generation':0,'motion_deadline':0,'moving':False,'locked':False,'error':None,
@@ -255,7 +257,7 @@ class Engine:
                     if not hasattr(driver,'tally'):raise NotImplementedError('No tally driver for this camera')
                     with c['io'].priority(5):actual=driver.tally(**tally)
                     expected={'program':tally['program'],'preview':tally['preview'] if isinstance(driver,Sony) else False}
-                    with self.lock:c['tally'].update(actual=actual,status='confirmed' if actual==expected else 'mismatch',error=None,updated=time.time());self.revision+=1
+                    with self.lock:c['tally'].update(actual=actual,status='sent' if actual.get('delivery')=='sent' else 'confirmed' if actual==expected else 'mismatch',error=None,updated=time.time());self.revision+=1
                     self.event(cid,'tally-readback',actual=actual)
                 except Exception as exc:
                     with self.lock:c['tally'].update(status='unsupported' if isinstance(exc,NotImplementedError) else 'error',error=str(exc)[:180],updated=time.time());self.revision+=1
@@ -278,7 +280,7 @@ class Engine:
                             with self.lock:self.check_mode(c,key)
                             actual=driver.write(key,value)
                             with self.lock:
-                                c['params'][key].update(value=actual,confirmation='confirmed' if actual==value else 'mismatch',last_query=time.time(),error=None)
+                                c['params'][key].update(value=actual,confirmation='sent' if isinstance(driver,PanasonicSerial) and not driver.metadata(key)['readback'] else 'confirmed' if actual==value else 'mismatch',last_query=time.time(),error=None)
                                 if not c['moving'] and not c['pending'] and c['owner']==owner:c['owner']=None;c['lease_until']=0
                             self.event(cid,'readback',parameter=key,value=actual)
                 elif time.monotonic()>=next_poll:
@@ -306,7 +308,7 @@ class Engine:
                         with self.lock:
                             v=c['params'][key]
                             v.update(value=actual,last_query=time.time(),error=None)
-                            if v['confirmation']!='pending':v['confirmation']='confirmed' if actual is not None else 'unsupported'
+                            if v['confirmation']!='pending':v['confirmation']='confirmed' if actual is not None else 'sent' if isinstance(driver,PanasonicSerial) and v['last_command'] and driver.metadata(key)['writable'] else 'unavailable' if isinstance(driver,PanasonicSerial) and driver.metadata(key)['writable'] else 'unsupported'
                             c['health']='simulated' if c['config'].get('simulator') else 'online';c['error']=None
                             self.revision+=1
                         # Spread queries; finish a round without a burst.
@@ -347,7 +349,7 @@ class Engine:
         for t in self.threads:t.join(3)
         for c in self.cameras.values():
             try:
-                if c['config'].get('tally_enabled',True) and c['tally']['actual'] and any(c['tally']['actual'].values()):
+                if c['config'].get('tally_enabled',True) and ((c['tally']['actual'] and any(c['tally']['actual'].values())) or (isinstance(c['driver'],PanasonicSerial) and (c['tally']['requested'] or {}).get('program'))):
                     with c['io']:c['driver'].tally(False,False)
             except Exception:pass
             if hasattr(c['driver'],'close'):c['driver'].close()

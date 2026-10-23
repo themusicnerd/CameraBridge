@@ -120,7 +120,7 @@ def validate_config(c):
         camera.setdefault('tally_enabled',True)
         if type(camera['tally_enabled']) is not bool:raise ValueError('Invalid tally enable option')
         if 'tally_address' in camera and (type(camera['tally_address']) is not int or not 0<=camera['tally_address']<=126):raise ValueError('TSL address must be 0..126')
-        if camera['driver'] not in ('panasonic','marshall-lab','sony-sdk','marshall-pending'):raise ValueError('Driver not implemented')
+        if camera['driver'] not in ('panasonic','panasonic-serial','marshall-lab','sony-sdk','marshall-pending'):raise ValueError('Driver not implemented')
         if camera['driver'] in ('sony-sdk','marshall-pending'):
             if camera['driver']=='marshall-pending' and camera.get('enabled',True):raise ValueError('This camera profile requires its hardware integration; save it disabled')
             if camera.get('simulator'):raise ValueError('Pending hardware profiles are not simulators')
@@ -131,7 +131,12 @@ def validate_config(c):
         if camera['driver']=='marshall-lab' and not camera.get('simulator'):raise ValueError('Marshall lab must be labelled simulator')
         if camera['driver']=='panasonic' and camera['model'] not in PANASONIC_MODELS:raise ValueError('Unknown Panasonic model profile')
         if camera['driver']=='panasonic' and camera.get('simulator') and camera['model']!='AW-HE130':raise ValueError('The Panasonic simulator uses the HE130 profile')
-        if camera['driver'] in ('panasonic','sony-sdk'):
+        if camera['driver']=='panasonic-serial':
+            from .panasonic_serial import MODEL
+            if camera.get('model')!=MODEL:raise ValueError('Unknown Panasonic serial head profile')
+            if camera.get('simulator'):raise ValueError('Serial gateways require a real TCP endpoint')
+            if 'port' not in camera:raise ValueError('Set the serial gateway TCP port')
+        if camera['driver'] in ('panasonic','panasonic-serial','sony-sdk'):
             if camera.get('manufacturer')!=('Sony' if camera['driver']=='sony-sdk' else 'Panasonic'):raise ValueError('Driver/manufacturer mismatch')
             host=camera.get('host','')
             if not isinstance(host,str) or not host or any(x in host for x in '/@?#:'):raise ValueError('Invalid camera host')
@@ -139,7 +144,9 @@ def validate_config(c):
             if camera['driver']=='sony-sdk':ipaddress.IPv4Address(host)
         if camera['driver']=='marshall-lab' and camera.get('manufacturer')!='Marshall':raise ValueError('Driver/manufacturer mismatch')
         if type(camera.get('pivotcam',False)) is not bool or type(camera.get('allow_store',False)) is not bool:raise ValueError('Invalid PIVOTCam option')
-        if camera.get('pivotcam') and camera['driver'] not in ('panasonic','sony-sdk'):raise ValueError('PIVOTCam requires Panasonic or Sony')
+        if camera.get('pivotcam') and camera['driver'] not in ('panasonic','panasonic-serial','sony-sdk'):raise ValueError('PIVOTCam requires Panasonic or Sony')
+    endpoints=[(camera['host'].lower(),camera['port']) for camera in c['cameras'] if camera['driver']=='panasonic-serial' and camera.get('enabled',True)]
+    if len(endpoints)!=len(set(endpoints)):raise ValueError('Use one Panasonic head per serial gateway TCP endpoint')
     tally=c.get('tally',{})
     if not isinstance(tally,dict) or type(tally.get('enabled',False)) is not bool:raise ValueError('Invalid tally receiver configuration')
     if tally.get('enabled'):

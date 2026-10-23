@@ -1,6 +1,6 @@
 // Shared native camera setup. Passwords are cleared before each HTTP request.
 var U={token:'',role:'',config:null,revision:'',index:0,editing:'',maker:'',switching:false};
-var U_PROFILES=['panasonic','sony-sdk','marshall-CV226','marshall-CV228'].concat(__PANASONIC_PROFILES__);
+var U_PROFILES=['panasonic','sony-sdk','marshall-CV226','marshall-CV228'].concat(__PANASONIC_PROFILES__).concat(['panasonic-serial']);
 function uValue(key){return params.getValue('setup_'+key,0);}
 function uSet(key,value){params.setValue('setup_'+key,0,value);}
 function uStatus(text){ogscript.rename('unified_status',String(text));}
@@ -47,7 +47,7 @@ function uListPage(delta){if(!U.config||!U.config.cameras.length)return;U.index=
 function uProfile(){
     var p=U_PROFILES[Number(uValue('profile'))];
     if(p.indexOf('marshall-CV')==0){uSet('pivot',0);uSet('enabled',0);}
-    ogscript.rename('setup_profile_help',p=='sony-sdk'?'Sony: save the camera, then set access on the Camera access page.':p.indexOf('marshall-CV')==0?'Marshall hardware control is pending. Save this profile disabled.':p=='marshall-lab'?'Marshall simulator only. No serial packets are sent.':'Panasonic CGI compatibility profile. HE2: digital PTZ, shots 1–9, no focus. Unsupported controls stay read-only. HTTP authentication is not implemented.');
+    ogscript.rename('setup_profile_help',p=='panasonic-serial'?'Enter the USR gateway IP and TCP port. RS-422: 9600 8N1. Head jog, iris and tally commands have no lamp or position feedback. Shots 1-50; recall speed unavailable.':p=='sony-sdk'?'Sony: save the camera, then set access on the Camera access page.':p.indexOf('marshall-CV')==0?'Marshall hardware control is pending. Save this profile disabled.':p=='marshall-lab'?'Marshall simulator only. No serial packets are sent.':'Panasonic CGI compatibility profile. HE2: digital PTZ, shots 1–9, no focus. Unsupported controls stay read-only. HTTP authentication is not implemented.');
 }
 function uNew(){
     U.editing='';var used={},number=1;
@@ -70,9 +70,9 @@ function uSave(){
     c.number=Number(uValue('number'));c.id=U.editing||'camera_'+c.number;
     c.name=String(uValue('name')).replace(/^\s+|\s+$/g,'');
     if(!c.name){uStatus('Enter a camera name.');return;}
-    c.driver=p.indexOf('panasonic')==0?'panasonic':p.indexOf('marshall-CV')==0?'marshall-pending':p;
+    c.driver=p=='panasonic-serial'?'panasonic-serial':p.indexOf('panasonic')==0?'panasonic':p.indexOf('marshall-CV')==0?'marshall-pending':p;
     c.manufacturer=p=='sony-sdk'?'Sony':p.indexOf('marshall')==0?'Marshall':'Panasonic';
-    c.model=p=='sony-sdk'?'PXW-Z200':p=='marshall-CV226'?'CV226':c.manufacturer=='Marshall'?'CV228':p.indexOf('panasonic:')==0?p.substring(10):'AW-HE130';
+    c.model=p=='panasonic-serial'?'AK-HC1800G + AW-PH360N':p=='sony-sdk'?'PXW-Z200':p=='marshall-CV226'?'CV226':c.manufacturer=='Marshall'?'CV228':p.indexOf('panasonic:')==0?p.substring(10):'AW-HE130';
     c.host=String(uValue('host')).replace(/^\s+|\s+$/g,'');c.port=Number(uValue('port'));c.carbonite_input=Number(uValue('input'));
     c.simulator=p=='panasonic-sim'||p=='marshall-lab';c.enabled=Number(uValue('enabled'))==1;c.pivotcam=Number(uValue('pivot'))==1;
     c.allow_store=Number(uValue('store'))==1;c.tally_enabled=Number(uValue('tally'))==1;c.tally_address=Number(uValue('address'));

@@ -47,4 +47,9 @@ assert.equal(config.cameras.at(-1).number,3);assert.equal(config.cameras.at(-1).
 assert.equal(config.cameras[1].host,'192.168.96.21','other camera setup must remain intact');
 run("U.index=0;U.config.cameras[0]=Object.assign({},U.config.cameras[0],{host:'192.168.96.99'});uControl();");
 assert.match(labels.unified_status,/differs from the running camera/,'pending host changes cannot control the old camera');
+run('uNew();uSet("profile",U_PROFILES.indexOf("panasonic-serial"));uProfile();uSet("host","192.0.2.44");uSet("port",2304);uSet("number",4);uSave();');
+assert.equal(config.cameras.at(-1).driver,'panasonic-serial');
+assert.equal(config.cameras.at(-1).model,'AK-HC1800G + AW-PH360N');
+assert.equal(config.cameras.at(-1).port,2304);
+assert.match(labels.setup_profile_help,/USR gateway/);
 console.log('Unified generated panel: scripts parse, scoped feedback, login, camera handover, stop failure, inactive controls, camera setup passed.');

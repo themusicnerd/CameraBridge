@@ -60,10 +60,10 @@ def build():
         entry(parent, 'setup_'+key, x, y+28, width, 48, None)
 
     value('name','Camera name',0,0,default='New camera')
-    value('profile','Manufacturer / model',438,0,default=0,choices=['Panasonic AW-HE130','Sony PXW-Z200 / SDK','Marshall CV226','Marshall CV228']+[model_label(m) for m in MODELS if m!='AW-HE130'])
+    value('profile','Manufacturer / model',438,0,default=0,choices=['Panasonic AW-HE130','Sony PXW-Z200 / SDK','Marshall CV226','Marshall CV228']+[model_label(m) for m in MODELS if m!='AW-HE130']+['Panasonic AK-HC1800G + AW-PH360N / TCP-RS422'])
     listener=script(root, "uProfile();", 'onchange');listener.set('oid','setup_profile');listener.set('element','0')
-    value('host','Camera IP / host',0,84)
-    value('port','Camera port (Sony SDK uses its own transport)',438,84,default=80,low=1,high=65535)
+    value('host','Camera / Serial Gateway IP',0,84)
+    value('port','Camera HTTP / Serial Gateway TCP Port',438,84,default=80,low=1,high=65535)
     value('number','Camera number / PIVOTCam port = base + number',0,168,default=1,low=1,high=255)
     value('input','Carbonite input',438,168,default=1,low=1,high=255)
     for key,caption,x,y,default in [('enabled','Camera enabled',0,252,1),('pivot','PIVOTCam enabled',438,252,1),('store','Allow preset store',0,336,0),('tally','Camera tally enabled',438,336,1)]:

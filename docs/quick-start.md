@@ -205,3 +205,8 @@ Select **Quit** in the tray menu to stop it.
 [Carbonite device setup reference](https://help.rossvideo.com/carbonite-device-db/Topics/Devices/Robo-Cam/Ross-PIVOTCam.html)
 
 
+
+## Panasonic Serial Heads
+
+For an AK-HC1800G on an AW-PH360N, use the [serial gateway setup](panasonic-serial.md).
+Set the gateway TCP port separately for each camera.

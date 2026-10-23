@@ -3,13 +3,14 @@ import html
 import json
 import pathlib
 import re
+from backend.panasonic_serial import MODEL as SERIAL_MODEL
 from backend.panasonic_models import MODELS,profile_id,label
 
 def build():
     path=pathlib.Path(__file__).resolve().parents[1]/'web/admin.html'
     source=path.read_text(encoding='utf-8')
     if 'id="camera-catalog"' in source:
-        catalog=[dict(manufacturer='Panasonic',model=m,driver='panasonic') for m in MODELS]+[dict(manufacturer='Sony',model='PXW-Z200',driver='sony-sdk'),dict(manufacturer='Marshall',model='CV226',driver='marshall-pending'),dict(manufacturer='Marshall',model='CV228',driver='marshall-pending')]
+        catalog=[dict(manufacturer='Panasonic',model=m,driver='panasonic') for m in MODELS]+[dict(manufacturer='Panasonic',model=SERIAL_MODEL,driver='panasonic-serial'),dict(manufacturer='Sony',model='PXW-Z200',driver='sony-sdk'),dict(manufacturer='Marshall',model='CV226',driver='marshall-pending'),dict(manufacturer='Marshall',model='CV228',driver='marshall-pending')]
         source,n=re.subn(r'(<script id="camera-catalog" type="application/json">).*?(</script>)',lambda m:m[1]+json.dumps(catalog)+m[2],source,flags=re.S)
         if n!=1:raise ValueError('Camera catalog missing')
         path.write_text(source,encoding='utf-8');return

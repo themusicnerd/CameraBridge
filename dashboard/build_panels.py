@@ -200,19 +200,19 @@ function poll() {
             for(var key in c.parameters) {
                 var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
                 try {
-                if(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain') && cbConstraints[key]!='gain_'+cbGainStep){params.replaceConstraint(key,'gain_range_'+cbGainStep);cbConstraints[key]='gain_'+cbGainStep;}
+                if(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain') && cbConstraints[key]!=(cbCapabilities.gain_constraint||'gain_range_'+cbGainStep)){var gainRange=cbCapabilities.gain_constraint||'gain_range_'+cbGainStep;params.replaceConstraint(key,gainRange);cbConstraints[key]=gainRange;}
                 if((CB_MANUFACTURER=='Sony' && key!='shutter' && key!='zoom' && p.supported || CB_MANUFACTURER=='Panasonic' && key=='detail') && p.low<=p.high) {
                     var range=String(p.low)+';'+String(p.high)+';';
                     if(cbConstraints[key]!=range){params.setAccess(key,1);if(CB_MANUFACTURER=='Panasonic')params.replaceConstraint(key,'detail_range_'+p.high);else params.getParam(key,0).replaceConstraint(String(range));cbConstraints[key]=range;}
                 }
-                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1):p.value);
+                var value=p.value===null?'unknown':String(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain')?(p.value-150)/(p.display_divisor||1)*(p.display_multiplier||1):p.value);
                 if(CB_MANUFACTURER=='Panasonic' && key=='wb_mode'){var wbNames=cbCapabilities.pan_tilt_type=='digital'?{0:'Auto ATW',1:'Manual A',2:'Manual B',3:'Auto ATW',4:'3200K',5:'5600K'}:{0:'Auto ATW',2:'Manual A',3:'Manual B',4:'3200K',5:'5600K',9:'Variable'};value=wbNames[p.value]||value;}
                 ogscript.rename('actual_'+key,value+' | '+p.confirmation+' | '+(p.age_seconds===null?'never read':Math.round(p.age_seconds)+'s'));
                 if(p.confirmation=='confirmed' && !cbPending.hasOwnProperty(key) && (!cbEdit[key] || new Date().getTime()-cbEdit[key]>1000)) {
                     // DashBoard blocks local setValue while the parameter is read-only.
                     params.setAccess(key,1);params.setValue(key,0,CB_MANUFACTURER=='Sony' && (key=='shutter'||key=='zoom')?String(p.value):p.value);
                 }
-                var enabled=!!cbToken && !c.locked && p.confirmation=='confirmed' && p.writable!==false;
+                var enabled=!!cbToken && !c.locked && (p.confirmation=='confirmed'||p.readback===false&&p.supported&&c.health=='online') && p.writable!==false;
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled && m && m.confirmation=='confirmed' && (','+pair[1]+',').indexOf(','+m.value+',')>=0;}
                 if(CB_MANUFACTURER=='Marshall' && (key=='red_gain'||key=='blue_gain'))enabled=enabled && c.parameters.wb_mode.value==1;
                 params.setAccess(key,enabled?1:0);

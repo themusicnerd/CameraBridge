@@ -52,6 +52,16 @@ def main():
                 process.communicate('quit\n',timeout=20);assert process.returncode==0;process=start();ready();page.reload();expect(page.locator('#login')).to_be_hidden();expect(page.locator('#savestatus')).to_have_text('All Changes Saved')
                 page.locator('#addcamera').click();new=page.locator('#roster details').last;new.locator('[data-field=enabled]').uncheck();new.locator('[data-field=manufacturer]').select_option('Sony');expect(new.locator('[data-field=model]')).to_have_value('PXW-Z200');new.locator('[data-field=manufacturer]').select_option('Panasonic');new.locator('[data-field=model]').select_option('AW-HE2');new.locator('[data-field=host]').fill('192.0.2.42');new.locator('[data-field=host]').press('Tab');expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
                 assert api('api/config',token=token)['cameras'][1]['model']=='AW-HE2'
+                new.locator('[data-field=model]').select_option('AK-HC1800G + AW-PH360N')
+                expect(new.locator('[data-field=host]').locator('..')).to_contain_text('USR Gateway IP')
+                expect(new.locator('[data-field=port]').locator('..')).to_contain_text('Gateway TCP Port')
+                new.locator('[data-field=port]').fill('2302');new.locator('[data-field=port]').press('Tab')
+                expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                serial=api('api/config',token=token)['cameras'][1]
+                assert serial['driver']=='panasonic-serial' and serial['port']==2302 and serial['enabled'] is False
+                expect(new.locator('[data-field=host]').locator('..').locator('a')).to_have_attribute('href','http://192.0.2.42/')
+                if args.screenshots:page.screenshot(path=str(args.screenshots/'CameraBridge-Serial-Gateway.png'),full_page=True)
+
                 page.locator('#accesssettings summary').click();page.locator('#authentication').uncheck();expect(page.locator('#sessionstatus')).to_have_text('Authentication Off',timeout=20000);assert api('api/config')['authentication_enabled'] is False
                 # A new browser gets open access only while the setting is disabled.
                 guest=browser.new_context().new_page();guest.goto(url);expect(guest.locator('#login')).to_be_hidden();expect(guest.locator('#savestatus')).to_have_text('All Changes Saved')
