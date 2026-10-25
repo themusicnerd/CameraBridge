@@ -26,6 +26,8 @@ var cbConstraints = {};
 var cbRanges = {};
 var cbGainStep=1;
 var cbCapabilities = {};
+var cbWritable={},cbAllowed={},cbNumberEditor=null;
+var cbNumberFields={},cbRangeFields={};
 var cbPresetSpeeds = {};
 var cbMotionFlight=false, cbMotionIntent=null, cbMotionHeld=null, cbMotionLast=0, cbMotionStop=false, cbMotionFull=false;
 function status(text) {
@@ -33,7 +35,7 @@ function status(text) {
     ogscript.rename('status', text);
 }
 function highlightPage(name) {
-    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
+    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','Config']:['Paint','Image','Exposure','OSD','Config'];
     for(var i=0;i<pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
 }
 function request(path, data, callback) {
@@ -62,9 +64,61 @@ function refreshBridgeLink() {
     ogscript.setXML('bridge_launcher','<help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;"><![CDATA['+html+']]></help>');
     cbLinkUrl=url;
 }
+
+function numberFormat(key,value) {
+    return value===null || value===undefined?'Unknown':String(value);
+}
+function numberRefresh(key) {
+    if(cbNumberFields[key])ogscript.rename('number_entry_'+key,numberFormat(key,params.getValue(key,0)));
+}
+function numberBounds(key) {
+    if(key=='speed')return [1,49];
+    if(key=='recall_speed')return [1,30];
+    if(key=='shot_number')return [1,cbCapabilities.preset_max===undefined?100:cbCapabilities.preset_max];
+    return cbRanges[key];
+}
+function numberEditable(key) {
+    return !!cbToken && !cbHandover && ((key=='speed'||key=='recall_speed'||key=='shot_number') || cbWritable[key]===true);
+}
+function numberOpen(key) {
+    if(!numberEditable(key)){status('This Value Is Read Only');return;}
+    var bounds=numberBounds(key);if(!bounds){status('Wait For Camera Range Feedback');return;}
+    if(key=='recall_speed' && cbCapabilities.preset_speed===false){status('Recall Speed Is Unavailable For This Camera');return;}
+    if(cbMotionHeld)release();
+    cbNumberEditor={key:key,camera:selected(),epoch:cbEpoch,replace:true};
+    params.setValue('number_value',0,String(params.getValue(key,0)));
+    params.setValue('number_title',0,key.replace(/_/g,' ').toUpperCase());
+    params.setValue('number_limits',0,'Range '+bounds[0]+' to '+bounds[1]+(cbAllowed[key]&&cbAllowed[key].length?' | Values '+cbAllowed[key].join(', '):''));
+    params.setValue('number_error',0,'');ogscript.reveal('number_popup');
+}
+function numberDigit(digit) {
+    if(!cbNumberEditor)return;
+    var old=cbNumberEditor.replace?'':String(params.getValue('number_value',0));cbNumberEditor.replace=false;
+    if(old.length<18)params.setValue('number_value',0,old+digit);
+}
+function numberDelete() {
+    if(!cbNumberEditor)return;cbNumberEditor.replace=false;
+    params.setValue('number_value',0,String(params.getValue('number_value',0)).slice(0,-1));
+}
+function numberSign() {
+    if(!cbNumberEditor)return;cbNumberEditor.replace=false;
+    var text=String(params.getValue('number_value',0));params.setValue('number_value',0,text.charAt(0)=='-'?text.substring(1):'-'+text);
+}
+function numberCancel() {cbNumberEditor=null;ogscript.hide('number_popup');}
+function numberApply() {
+    var editor=cbNumberEditor;if(!editor)return;
+    if(editor.camera!=selected() || editor.epoch!=cbEpoch || !numberEditable(editor.key)){numberCancel();status('Camera Changed; Value Not Applied');return;}
+    var text=String(params.getValue('number_value',0)),bounds=numberBounds(editor.key),value=Number(text);
+    if(!/^-?[0-9]+$/.test(text) || !isFinite(value) || Math.floor(value)!=value || value<bounds[0] || value>bounds[1]){params.setValue('number_error',0,'Enter An Integer From '+bounds[0]+' To '+bounds[1]);return;}
+    if(cbAllowed[editor.key]&&cbAllowed[editor.key].length&&cbAllowed[editor.key].indexOf(value)<0){params.setValue('number_error',0,'Select A Listed Value');return;}
+    if((editor.key=='red_gain'||editor.key=='blue_gain') && value%cbGainStep){params.setValue('number_error',0,'Use Steps Of '+cbGainStep);return;}
+    params.setValue(editor.key,0,CB_MANUFACTURER=='Sony'&&(editor.key=='shutter'||editor.key=='zoom')?String(value):value);
+    numberRefresh(editor.key);numberCancel();
+}
+
 function selected() { return String(params.getValue('camera',0)); }
 function send(action, data, callback) {
-    if (!cbToken) { status('Sign in to control cameras. Lab feedback is read-only.'); return; }
+    if (!cbToken) { status('Sign in to control cameras.'); return; }
     if (cbHandover && action!='stop') { status('Camera handover: waiting for previous stop'); return; }
     request('command',{camera:selected(),action:action,data:data || {}},callback);
 }
@@ -137,10 +191,8 @@ function renamePreset() {
     if(cbCapabilities.preset_speed)d.speed=Number(params.getValue('recall_speed',0));
     send('label_preset',d,function(r){if(r)poll();});
 }
-function labBus(bus) {
-    request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
-}
 function changed(key) {
+    numberRefresh(key);
     if(cbUpdating)return;
     if(!cbToken){status('Sign in before adjustment');return;}
     var value=Number(params.getValue(key,0));
@@ -185,20 +237,20 @@ function poll() {
         cbCapabilities=c.capabilities||{};cbGainStep=cbCapabilities.gain_display_divisor||1;
         if(CB_MANUFACTURER=='Panasonic') {
             cbPresetSpeeds=c.preset_speeds||{};
+            ogscript.rename('shot_number_label','Shot Number (1 to '+(cbCapabilities.preset_max||100)+') / Name');
             ogscript.rename('paint_help','Auto ATW follows the scene. Manual A / B hold white balance and allow gain adjustment.');
             if(c.white_balance_once)ogscript.rename('awb_result','One Shot: '+c.white_balance_once.status+(c.white_balance_once.error?' | '+c.white_balance_once.error:' | completion not reported'));
             var active=c.active_preset||{};
             ogscript.rename('preset_feedback',active.number?'Shot '+active.number+' | Speed '+(active.speed||'Camera Default')+' | '+active.state:'No Shot Recalled');
             for(var n=1;n<=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n)+(cbPresetSpeeds[String(n)]?' | S'+cbPresetSpeeds[String(n)]:''));
-            var ross=r.ross||{};
-            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
         cbUpdating=true;
         var tally=c.tally||{};
         if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
-                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
+                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];cbAllowed[key]=p.allowed||[];
+                if(cbRangeFields[key])ogscript.rename('range_'+key,'Range '+p.low+' to '+p.high);
                 try {
                 if(CB_MANUFACTURER=='Panasonic' && (key=='red_gain'||key=='blue_gain') && cbConstraints[key]!=(cbCapabilities.gain_constraint||'gain_range_'+cbGainStep)){var gainRange=cbCapabilities.gain_constraint||'gain_range_'+cbGainStep;params.replaceConstraint(key,gainRange);cbConstraints[key]=gainRange;}
                 if((CB_MANUFACTURER=='Sony' && key!='shutter' && key!='zoom' && p.supported || CB_MANUFACTURER=='Panasonic' && key=='detail') && p.low<=p.high) {
@@ -215,10 +267,11 @@ function poll() {
                 var enabled=!!cbToken && !c.locked && (p.confirmation=='confirmed'||p.readback===false&&p.supported&&c.health=='online') && p.writable!==false;
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled && m && m.confirmation=='confirmed' && (','+pair[1]+',').indexOf(','+m.value+',')>=0;}
                 if(CB_MANUFACTURER=='Marshall' && (key=='red_gain'||key=='blue_gain'))enabled=enabled && c.parameters.wb_mode.value==1;
-                params.setAccess(key,enabled?1:0);
+                cbWritable[key]=!!enabled;params.setAccess(key,enabled?1:0);numberRefresh(key);
                 } catch(panelError) { cbNoticeUntil=new Date().getTime()+10000;status('Panel '+key+': '+String(panelError)); }
             }
         } finally {cbUpdating=false;}
+        for(var localKey in cbNumberFields)if(!c.parameters[localKey])numberRefresh(localKey);
         status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
     });
 }

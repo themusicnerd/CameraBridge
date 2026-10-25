@@ -120,7 +120,7 @@ var CB_MAKER=(function(nativeParams,nativeScript){
       setValue:function(k,i,v){nativeParams.setValue(prefix+k,i,v);},setAccess:function(k,v){nativeParams.setAccess(prefix+k,v);},
       getParam:function(k,i){return nativeParams.getParam(prefix+k,i);},
       replaceConstraint:function(k,id){nativeParams.replaceConstraint(prefix+k,prefix+id);}};
-    var ogscript={rename:function(k,v){nativeScript.rename(prefix+k,v);},setStyle:function(k,v){nativeScript.setStyle(prefix+k,v);},
+    var ogscript={reveal:function(k){nativeScript.reveal(prefix+k);},hide:function(k){nativeScript.hide(prefix+k);},rename:function(k,v){nativeScript.rename(prefix+k,v);},setStyle:function(k,v){nativeScript.setStyle(prefix+k,v);},
       asyncPost:function(u,d,c){nativeScript.asyncPost(u,d,c);},
       setXML:function(k,xml){nativeScript.setXML(prefix+k,String(xml).replace(/\bid="([^"]+)"/g,'id="'+prefix+'$1"'));}};
     ORIGINAL

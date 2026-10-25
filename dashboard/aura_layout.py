@@ -1,5 +1,6 @@
 """Native TD1C touch layout. A 1366x800 canvas leaves room for DashBoard chrome."""
 import xml.etree.ElementTree as ET
+import json
 from build_panels import COMMON,HERE,node,script,task,field
 
 BG='25282e';SURFACE='2c3037';BUTTON='494f5b';PURPLE='7433bd';BLUE='49a8d8'
@@ -19,7 +20,13 @@ def button(parent,text,x,y,w,code,h=52,colour=BUTTON,id=None):
 def card(parent,x,y,w,h):return node(parent,'abs',left=x,top=y,width=w,height=h,style=f'bg#{SURFACE};bdr:line;bdr#383d45;')
 
 def entry(parent,key,x,y,w,h=48,widget=6):
-    e=field(parent,key,x,y,w,h,widget);e.set('style','size:18;');return e
+    if widget==6:
+        # Use a touch launch surface rather than relying on parameter-widget
+        # mouse forwarding, which differs between native DashBoard builds.
+        e=node(parent,'button',id='number_entry_'+key,name='...',buttontype='push',left=x,top=y,width=w,height=h,style='bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;')
+        task(e,"numberOpen('"+key+"');");return e
+    e=field(parent,key,x,y,w,h,widget);e.set('style','size:18;txt-align:center;');return e
+
 
 def feedback(parent,key,x,y,w):label(parent,'unknown · never read',x,y,w,30,'actual_'+key,'a9bbc8',12)
 
@@ -36,19 +43,22 @@ def steps(parent,key,low,high,x,y,w):
 
 def vertical(parent,key,p,x,y,w=276,h=520):
     box=card(parent,x,y,w,h);label(box,SHORT[key],16,12,w-32,30,size=17)
-    entry(box,key,16,50,w-32);fader(box,key,32,110,w-64,h-222)
+    entry(box,key,16,50,w-32);label(box,'Range '+str(p.low)+' to '+str(p.high),16,100,w-32,22,'range_'+key,size=12);fader(box,key,32,134,w-64,h-246)
     button(box,'−',16,h-100,80,f"adjust('{key}',-1,{p.low},{p.high});",52)
     button(box,'+',w-96,h-100,80,f"adjust('{key}',1,{p.low},{p.high});",52)
     feedback(box,key,16,h-38,w-32);return box
 
 def horizontal(parent,key,p,x,y,w=572):
-    box=card(parent,x,y,w,122);label(box,SHORT[key],16,8,w-32,26,size=16)
+    box=card(parent,x,y,w,122);label(box,SHORT[key],16,8,w-240,26,size=16);label(box,'Range '+str(p.low)+' to '+str(p.high),w-218,8,202,26,'range_'+key,size=12)
     steps(box,key,p.low,p.high,16,39,w-32);feedback(box,key,16,90,w-32);return box
 
-def jog_button(parent,text,x,y,w,h,axes):
-    b=node(parent,'button',name=text,left=x,top=y,width=w,height=h,style='bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;')
-    script(b,'jog('+','.join(map(str,axes))+');','onmousedown')
-    script(b,'release();','onmouseup');script(b,'release();','onmouseexit');return b
+def jog_button(parent,text,x,y,w,h,axes,root=None):
+    ident='jog_'+('_'.join(str(a).replace('-','minus') for a in axes))
+    b=node(parent,'button',id=ident,name=text,buttontype='push',left=x,top=y,width=w,height=h,style='bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;')
+    target=root if root is not None else b
+    for event,code in [('onmousedown','jog('+','.join(map(str,axes))+');'),('onmouseup','release();'),('onmouseexit','release();')]:
+        script(target,code,event).set('targetid',ident)
+    return b
 
 def build(manufacturer,defs):
     pana=manufacturer=='Panasonic'
@@ -85,8 +95,8 @@ def build(manufacturer,defs):
     header=card(root,8,8,1350,80)
     label(header,'CameraBridge / '+manufacturer,16,10,325,28,size=21)
     label(header,'PTZ and Camera Control' if pana else 'CV226 / CV228 · paint & setup',16,45,325,24,colour='abb1bd',size=14)
-    pages=['PTZ','Presets','Paint','TD1C','Config'] if pana else ['Paint','Image','Exposure','OSD','Config']
-    for i,name in enumerate(pages):node(header,'reveal',id='nav_'+name.lower(),name='TouchDrive' if name=='TD1C' else name,targetid='page_'+name.lower(),left=350+i*112,top=12,width=104,height=56,style=f'bg#{PURPLE if i==0 else BUTTON};fg#ffffff;bdr:none;size:16;')
+    pages=['PTZ','Presets','Paint','Config'] if pana else ['Paint','Image','Exposure','OSD','Config']
+    for i,name in enumerate(pages):node(header,'reveal',id='nav_'+name.lower(),name='TouchDrive' if name=='TD1C' else name,targetid='page_'+name.lower(),left=350+i*(144 if pana else 112),top=12,width=132 if pana else 104,height=56,style=f'bg#{PURPLE if i==0 else BUTTON};fg#ffffff;bdr:none;size:16;')
     launcher=node(header,'abs',id='bridge_launcher',left=920,top=12,width=180,height=56)
     help_button=node(launcher,'help',id='open_bridge',left=0,top=0,width=180,height=56,name='Open setup',title='CameraBridge setup',popupwidth=600,popupheight=180,style=f'bg#{BLUE};fg#ffffff;size:16;')
     help_button.text='<html>Set the backend URL on Config. Select Open CameraBridge again after feedback loads.</html>' 
@@ -105,19 +115,19 @@ def build(manufacturer,defs):
         button(ptz,'Touch control DISABLED',12,36,408,'touchEnable();',48,BUTTON,'touch_enable')
         pad=card(ptz,12,96,408,344)
         positions=[('↖',0,0,(-1,1,0,0)),('UP',1,0,(0,1,0,0)),('↗',2,0,(1,1,0,0)),('LEFT',0,1,(-1,0,0,0)),('RIGHT',2,1,(1,0,0,0)),('↙',0,2,(-1,-1,0,0)),('DOWN',1,2,(0,-1,0,0)),('↘',2,2,(1,-1,0,0))]
-        for text,x,y,axes in positions:jog_button(pad,text,8+x*134,8+y*112,124,104,axes)
+        for text,x,y,axes in positions:jog_button(pad,text,8+x*134,8+y*112,124,104,axes,root)
         button(pad,'STOP',142,120,124,'stop();',104,'91414b')
-        label(ptz,'JOG SPEED',12,451,408,26,size=14);steps(ptz,'speed',1,49,12,482,408)
+        label(ptz,'JOG SPEED | RANGE 1 TO 49',12,451,408,26,size=14);steps(ptz,'speed',1,49,12,482,408)
         label(ptz,'Release / exit stops · 0.9s watchdog',12,537,408,26,colour='a9bbc8',size=13)
         for key,x,top,bottom in [('iris',440,'OPEN','CLOSE'),('zoom',684,'TELE','WIDE'),('focus',928,'FAR','NEAR')]:
             box=card(ptz,x,0,228,560);label(box,SHORT[key],14,10,200,28,size=16);entry(box,key,14,48,200)
             if key=='iris':
-                button(box,top,14,108,200,"send('write',{parameter:'iris',value:4095},null);",52)
+                button(box,top,14,126,200,"send('write',{parameter:'iris',value:4095},null);",52)
                 button(box,bottom,14,405,200,"send('write',{parameter:'iris',value:1365},null);",52)
             else:
                 axes=(0,0,1,0) if key=='zoom' else (0,0,0,1)
-                jog_button(box,top,14,108,200,52,axes);jog_button(box,bottom,14,405,200,52,tuple(-v for v in axes))
-            fader(box,key,42,172,144,221);feedback(box,key,14,465,200)
+                jog_button(box,top,14,126,200,52,axes,root);jog_button(box,bottom,14,405,200,52,tuple(-v for v in axes),root)
+            label(box,'Range '+str(defs[key].low)+' to '+str(defs[key].high),14,99,200,22,'range_'+key,size=12);fader(box,key,42,192,144,201);feedback(box,key,14,465,200)
             if key in ('iris','focus'):
                 mode=key+'_auto'
                 button(box,'Manual',14,502,96,f"send('write',{{parameter:'{mode}',value:0}},null);",48)
@@ -129,7 +139,7 @@ def build(manufacturer,defs):
         label(side,'Type OVERWRITE to Store',14,114,272);entry(side,'confirmation',14,142,272,48,None)
         label(side,'Recall Speed: 1 Slow / 30 Fast',14,188,272,24,size=13);entry(side,'recall_speed',14,214,272,48)
         label(side,'Recall Speed Mode',14,260,272,24,size=13);entry(side,'use_saved_speed',14,286,272,48,7)
-        label(side,'Shot Number / Name',14,332,272,24,size=13);entry(side,'shot_number',14,358,70,48);entry(side,'shot_name',92,358,194,48,None)
+        label(side,'Shot Number (1 to 100) / Name',14,332,272,24,'shot_number_label',size=12);entry(side,'shot_number',14,358,70,48);entry(side,'shot_name',92,358,194,48,None)
         button(side,'Save Name and Speed',14,406,272,'renamePreset();',48)
         label(side,'No Shot Recalled',14,460,272,48,'preset_feedback',colour='a9bbc8',size=12)
         paint=content['Paint']
@@ -140,24 +150,15 @@ def build(manufacturer,defs):
         button(wb,'Manual B',312,48,146,'whiteBalance(3);',48)
         button(wb,'One Shot',16,106,214,'oneShot();',48)
         entry(wb,'wb_mode',244,106,214,48,6)
-        feedback(wb,'wb_mode',16,166,442)
-        label(wb,'One Shot: Not Requested',16,204,442,30,'awb_result',size=12)
+        label(wb,'Range 0 to 9',244,156,214,22,'range_wb_mode',size=12);feedback(wb,'wb_mode',16,182,442)
+        label(wb,'One Shot: Not Requested',16,216,442,26,'awb_result',size=12)
         for i,key in enumerate(['iris_auto','focus_auto']):
             box=card(paint,700,270+i*124,474,116);label(box,SHORT[key],16,4,442,26,size=16)
             button(box,'Manual',16,34,214,f"send('write',{{parameter:'{key}',value:0}},null);",48)
             button(box,'Auto',244,34,214,f"send('write',{{parameter:'{key}',value:1}},null);",48)
             feedback(box,key,16,84,442)
         label(paint,'White balance values depend on the selected model.',12,528,1162,30,'paint_help',colour='a9bbc8',size=13)
-        td=content['TD1C'];label(td,'TOUCHDRIVE / CARBONITE CAMERA BRIDGE',16,12,1154,32,size=19)
-        label(td,'Connection not verified',16,60,1154,52,'ross_state')
-        for i,text in enumerate(['Physical positioner and native shot commands reach the development simulator.',
-                                  'Movement verification is partial; continuous response still needs work.',
-                                  'Actual Preset-bus following is pending; the selected target is a lab fixture.',
-                                  'Native Custom Control Recall Shot has been observed at the simulator.',
-                                  'Real-camera motion and shot completion require separate verification.']):label(td,text,16,132+i*56,1154,44,size=15)
-        button(td,'LAB: select on Preset',16,440,330,"labBus('preset');",56,BLUE)
-        button(td,'LAB: change Program only',362,440,330,"labBus('program');",56)
-        label(td,'Simulator selection only. These buttons do not change the switcher.',16,516,1154,32,colour='a9bbc8',size=13)
+
     else:
         for page,keys in [('Paint',['red_gain','blue_gain','black_level','gamma']),('Image',['colour','sharpness','brightness','gain'])]:
             for i,key in enumerate(keys):vertical(content[page],key,defs[key],12+i*294,12,276,500)
@@ -183,6 +184,11 @@ def build(manufacturer,defs):
     label(config,'Tally enable / disable, configuration and diagnostics: open CameraBridge setup.',20,454,1140,36,colour='a9bbc8',size=14)
     label(config,'CameraBridge Connection Settings',20,506,1140,36,colour='d7bb8c',size=14)
     label(root,'Starting…',164,744,1186,44,'status','b9c5cf',14)
+    from numeric_entry import build as build_numeric
+    build_numeric(root,params)
+    numbers={e.get('id')[13:]:True for e in root.iter() if (e.get('id') or '').startswith('number_entry_')}
+    ranges={e.get('id')[6:]:True for e in root.findall('.//label') if (e.get('id') or '').startswith('range_')}
+    root.find('api').text+='\ncbNumberFields='+json.dumps(numbers)+';cbRangeFields='+json.dumps(ranges)+';'
     path=HERE/f'SW-{manufacturer}-Camera-Control.grid'
     ET.indent(root);ET.ElementTree(root).write(path,encoding='utf-8',xml_declaration=True)
     return path

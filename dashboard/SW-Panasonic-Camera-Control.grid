@@ -19,6 +19,8 @@ var cbConstraints = {};
 var cbRanges = {};
 var cbGainStep=1;
 var cbCapabilities = {};
+var cbWritable={},cbAllowed={},cbNumberEditor=null;
+var cbNumberFields={},cbRangeFields={};
 var cbPresetSpeeds = {};
 var cbMotionFlight=false, cbMotionIntent=null, cbMotionHeld=null, cbMotionLast=0, cbMotionStop=false, cbMotionFull=false;
 function status(text) {
@@ -26,7 +28,7 @@ function status(text) {
     ogscript.rename('status', text);
 }
 function highlightPage(name) {
-    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','TD1C','Config']:['Paint','Image','Exposure','OSD','Config'];
+    var pages=CB_MANUFACTURER=='Sony'?['Lens','Paint','Tally','Config']:CB_MANUFACTURER=='Panasonic'?['PTZ','Presets','Paint','Config']:['Paint','Image','Exposure','OSD','Config'];
     for(var i=0;i&lt;pages.length;i++)ogscript.setStyle('nav_'+pages[i].toLowerCase(),'bg#'+(pages[i]==name?'7433bd':'494f5b')+';fg#ffffff;bdr:none;');
 }
 function request(path, data, callback) {
@@ -55,9 +57,61 @@ function refreshBridgeLink() {
     ogscript.setXML('bridge_launcher','&lt;help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;"&gt;&lt;![CDATA['+html+']]&gt;&lt;/help&gt;');
     cbLinkUrl=url;
 }
+
+function numberFormat(key,value) {
+    return value===null || value===undefined?'Unknown':String(value);
+}
+function numberRefresh(key) {
+    if(cbNumberFields[key])ogscript.rename('number_entry_'+key,numberFormat(key,params.getValue(key,0)));
+}
+function numberBounds(key) {
+    if(key=='speed')return [1,49];
+    if(key=='recall_speed')return [1,30];
+    if(key=='shot_number')return [1,cbCapabilities.preset_max===undefined?100:cbCapabilities.preset_max];
+    return cbRanges[key];
+}
+function numberEditable(key) {
+    return !!cbToken &amp;&amp; !cbHandover &amp;&amp; ((key=='speed'||key=='recall_speed'||key=='shot_number') || cbWritable[key]===true);
+}
+function numberOpen(key) {
+    if(!numberEditable(key)){status('This Value Is Read Only');return;}
+    var bounds=numberBounds(key);if(!bounds){status('Wait For Camera Range Feedback');return;}
+    if(key=='recall_speed' &amp;&amp; cbCapabilities.preset_speed===false){status('Recall Speed Is Unavailable For This Camera');return;}
+    if(cbMotionHeld)release();
+    cbNumberEditor={key:key,camera:selected(),epoch:cbEpoch,replace:true};
+    params.setValue('number_value',0,String(params.getValue(key,0)));
+    params.setValue('number_title',0,key.replace(/_/g,' ').toUpperCase());
+    params.setValue('number_limits',0,'Range '+bounds[0]+' to '+bounds[1]+(cbAllowed[key]&amp;&amp;cbAllowed[key].length?' | Values '+cbAllowed[key].join(', '):''));
+    params.setValue('number_error',0,'');ogscript.reveal('number_popup');
+}
+function numberDigit(digit) {
+    if(!cbNumberEditor)return;
+    var old=cbNumberEditor.replace?'':String(params.getValue('number_value',0));cbNumberEditor.replace=false;
+    if(old.length&lt;18)params.setValue('number_value',0,old+digit);
+}
+function numberDelete() {
+    if(!cbNumberEditor)return;cbNumberEditor.replace=false;
+    params.setValue('number_value',0,String(params.getValue('number_value',0)).slice(0,-1));
+}
+function numberSign() {
+    if(!cbNumberEditor)return;cbNumberEditor.replace=false;
+    var text=String(params.getValue('number_value',0));params.setValue('number_value',0,text.charAt(0)=='-'?text.substring(1):'-'+text);
+}
+function numberCancel() {cbNumberEditor=null;ogscript.hide('number_popup');}
+function numberApply() {
+    var editor=cbNumberEditor;if(!editor)return;
+    if(editor.camera!=selected() || editor.epoch!=cbEpoch || !numberEditable(editor.key)){numberCancel();status('Camera Changed; Value Not Applied');return;}
+    var text=String(params.getValue('number_value',0)),bounds=numberBounds(editor.key),value=Number(text);
+    if(!/^-?[0-9]+$/.test(text) || !isFinite(value) || Math.floor(value)!=value || value&lt;bounds[0] || value&gt;bounds[1]){params.setValue('number_error',0,'Enter An Integer From '+bounds[0]+' To '+bounds[1]);return;}
+    if(cbAllowed[editor.key]&amp;&amp;cbAllowed[editor.key].length&amp;&amp;cbAllowed[editor.key].indexOf(value)&lt;0){params.setValue('number_error',0,'Select A Listed Value');return;}
+    if((editor.key=='red_gain'||editor.key=='blue_gain') &amp;&amp; value%cbGainStep){params.setValue('number_error',0,'Use Steps Of '+cbGainStep);return;}
+    params.setValue(editor.key,0,CB_MANUFACTURER=='Sony'&amp;&amp;(editor.key=='shutter'||editor.key=='zoom')?String(value):value);
+    numberRefresh(editor.key);numberCancel();
+}
+
 function selected() { return String(params.getValue('camera',0)); }
 function send(action, data, callback) {
-    if (!cbToken) { status('Sign in to control cameras. Lab feedback is read-only.'); return; }
+    if (!cbToken) { status('Sign in to control cameras.'); return; }
     if (cbHandover &amp;&amp; action!='stop') { status('Camera handover: waiting for previous stop'); return; }
     request('command',{camera:selected(),action:action,data:data || {}},callback);
 }
@@ -130,10 +184,8 @@ function renamePreset() {
     if(cbCapabilities.preset_speed)d.speed=Number(params.getValue('recall_speed',0));
     send('label_preset',d,function(r){if(r)poll();});
 }
-function labBus(bus) {
-    request('lab/ross/bus',{bus:bus,camera:selected()},function(r){if(r)poll();});
-}
 function changed(key) {
+    numberRefresh(key);
     if(cbUpdating)return;
     if(!cbToken){status('Sign in before adjustment');return;}
     var value=Number(params.getValue(key,0));
@@ -178,20 +230,20 @@ function poll() {
         cbCapabilities=c.capabilities||{};cbGainStep=cbCapabilities.gain_display_divisor||1;
         if(CB_MANUFACTURER=='Panasonic') {
             cbPresetSpeeds=c.preset_speeds||{};
+            ogscript.rename('shot_number_label','Shot Number (1 to '+(cbCapabilities.preset_max||100)+') / Name');
             ogscript.rename('paint_help','Auto ATW follows the scene. Manual A / B hold white balance and allow gain adjustment.');
             if(c.white_balance_once)ogscript.rename('awb_result','One Shot: '+c.white_balance_once.status+(c.white_balance_once.error?' | '+c.white_balance_once.error:' | completion not reported'));
             var active=c.active_preset||{};
             ogscript.rename('preset_feedback',active.number?'Shot '+active.number+' | Speed '+(active.speed||'Camera Default')+' | '+active.state:'No Shot Recalled');
             for(var n=1;n&lt;=20;n++)ogscript.rename('shot_'+n,('0'+n).slice(-2)+'\n'+((c.preset_names||{})[String(n)] || 'Shot '+n)+(cbPresetSpeeds[String(n)]?' | S'+cbPresetSpeeds[String(n)]:''));
-            var ross=r.ross||{};
-            ogscript.rename('ross_state','TouchDrive / Carbonite: '+(ross.state||'not connected')+' | Preset follow: '+(ross.preset_follow||'not connected'));
         }
         cbUpdating=true;
         var tally=c.tally||{};
         if(CB_MANUFACTURER!='Marshall')ogscript.rename('tally_state','Tally: '+(tally.enabled?'enabled':'disabled')+' | '+(tally.status||'unknown')+(tally.error?' | '+tally.error:''));
         try {
             for(var key in c.parameters) {
-                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];
+                var p=c.parameters[key];cbRanges[key]=[p.low,p.high];cbAllowed[key]=p.allowed||[];
+                if(cbRangeFields[key])ogscript.rename('range_'+key,'Range '+p.low+' to '+p.high);
                 try {
                 if(CB_MANUFACTURER=='Panasonic' &amp;&amp; (key=='red_gain'||key=='blue_gain') &amp;&amp; cbConstraints[key]!=(cbCapabilities.gain_constraint||'gain_range_'+cbGainStep)){var gainRange=cbCapabilities.gain_constraint||'gain_range_'+cbGainStep;params.replaceConstraint(key,gainRange);cbConstraints[key]=gainRange;}
                 if((CB_MANUFACTURER=='Sony' &amp;&amp; key!='shutter' &amp;&amp; key!='zoom' &amp;&amp; p.supported || CB_MANUFACTURER=='Panasonic' &amp;&amp; key=='detail') &amp;&amp; p.low&lt;=p.high) {
@@ -208,10 +260,11 @@ function poll() {
                 var enabled=!!cbToken &amp;&amp; !c.locked &amp;&amp; (p.confirmation=='confirmed'||p.readback===false&amp;&amp;p.supported&amp;&amp;c.health=='online') &amp;&amp; p.writable!==false;
                 if(p.dependency){var pair=p.dependency.split('=');var m=c.parameters[pair[0]];enabled=enabled &amp;&amp; m &amp;&amp; m.confirmation=='confirmed' &amp;&amp; (','+pair[1]+',').indexOf(','+m.value+',')&gt;=0;}
                 if(CB_MANUFACTURER=='Marshall' &amp;&amp; (key=='red_gain'||key=='blue_gain'))enabled=enabled &amp;&amp; c.parameters.wb_mode.value==1;
-                params.setAccess(key,enabled?1:0);
+                cbWritable[key]=!!enabled;params.setAccess(key,enabled?1:0);numberRefresh(key);
                 } catch(panelError) { cbNoticeUntil=new Date().getTime()+10000;status('Panel '+key+': '+String(panelError)); }
             }
         } finally {cbUpdating=false;}
+        for(var localKey in cbNumberFields)if(!c.parameters[localKey])numberRefresh(localKey);
         status('Feedback refreshed | '+(cbToken?'control authenticated':'read-only; sign in to control'));
     });
 }
@@ -222,7 +275,8 @@ function tick() {
     if(cbTick%5==0)poll();
     if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
-</api>
+
+cbNumberFields={"speed": true, "iris": true, "zoom": true, "focus": true, "recall_speed": true, "shot_number": true, "red_gain": true, "blue_gain": true, "detail": true, "wb_mode": true};cbRangeFields={"iris": true, "zoom": true, "focus": true, "red_gain": true, "blue_gain": true, "detail": true, "wb_mode": true};</api>
   <meta>
     <params>
       <param oid="bridge" name="Backend URL" type="STRING" value="http://127.0.0.1:8088" widget="3" access="1" maxlength="256" />
@@ -251,6 +305,10 @@ function tick() {
       <param oid="blue_gain" name="BLUE GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
       <param oid="wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;9;" />
       <param oid="detail" name="DETAIL" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
+      <param oid="number_value" name="New Value" type="STRING" value="" access="1" widget="3" maxlength="24" />
+      <param oid="number_title" name="number_title" type="STRING" value="Enter Value" access="1" widget="100" />
+      <param oid="number_limits" name="number_limits" type="STRING" value="Range" access="1" widget="100" />
+      <param oid="number_error" name="number_error" type="STRING" value="" access="1" widget="100" />
     </params>
     <constraint id="detail_range_1" constrainttype="INT_RANGE" constraint="0;1;" />
     <constraint id="detail_range_2" constrainttype="INT_RANGE" constraint="0;2;" />
@@ -274,11 +332,10 @@ function tick() {
   <abs left="8" top="8" width="1350" height="80" style="bg#2c3037;bdr:line;bdr#383d45;">
     <label name="CameraBridge / Panasonic" left="16" top="10" width="325" height="28" style="fg#e2e4e9;size:21;txt-align:west;" />
     <label name="PTZ and Camera Control" left="16" top="45" width="325" height="24" style="fg#abb1bd;size:14;txt-align:west;" />
-    <reveal id="nav_ptz" name="PTZ" targetid="page_ptz" left="350" top="12" width="104" height="56" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" />
-    <reveal id="nav_presets" name="Presets" targetid="page_presets" left="462" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
-    <reveal id="nav_paint" name="Paint" targetid="page_paint" left="574" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
-    <reveal id="nav_td1c" name="TouchDrive" targetid="page_td1c" left="686" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
-    <reveal id="nav_config" name="Config" targetid="page_config" left="798" top="12" width="104" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+    <reveal id="nav_ptz" name="PTZ" targetid="page_ptz" left="350" top="12" width="132" height="56" style="bg#7433bd;fg#ffffff;bdr:none;size:16;" />
+    <reveal id="nav_presets" name="Presets" targetid="page_presets" left="494" top="12" width="132" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+    <reveal id="nav_paint" name="Paint" targetid="page_paint" left="638" top="12" width="132" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
+    <reveal id="nav_config" name="Config" targetid="page_config" left="782" top="12" width="132" height="56" style="bg#494f5b;fg#ffffff;bdr:none;size:16;" />
     <abs id="bridge_launcher" left="920" top="12" width="180" height="56">
       <help id="open_bridge" left="0" top="0" width="180" height="56" name="Open setup" title="CameraBridge setup" popupwidth="600" popupheight="180" style="bg#49a8d8;fg#ffffff;size:16;">&lt;html&gt;Set the backend URL on Config. Select Open CameraBridge again after feedback loads.&lt;/html&gt;</help>
     </abs>
@@ -323,69 +380,42 @@ function tick() {
         <task tasktype="ogscript">touchEnable();</task>
       </button>
       <abs left="12" top="96" width="408" height="344" style="bg#2c3037;bdr:line;bdr#383d45;">
-        <button name="↖" left="8" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(-1,1,0,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <button name="UP" left="142" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(0,1,0,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <button name="↗" left="276" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(1,1,0,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <button name="LEFT" left="8" top="120" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(-1,0,0,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <button name="RIGHT" left="276" top="120" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(1,0,0,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <button name="↙" left="8" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(-1,-1,0,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <button name="DOWN" left="142" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(0,-1,0,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <button name="↘" left="276" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(1,-1,0,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
+        <button id="jog_minus1_1_0_0" name="↖" buttontype="push" left="8" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_0_1_0_0" name="UP" buttontype="push" left="142" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_1_1_0_0" name="↗" buttontype="push" left="276" top="8" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_minus1_0_0_0" name="LEFT" buttontype="push" left="8" top="120" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_1_0_0_0" name="RIGHT" buttontype="push" left="276" top="120" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_minus1_minus1_0_0" name="↙" buttontype="push" left="8" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_0_minus1_0_0" name="DOWN" buttontype="push" left="142" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_1_minus1_0_0" name="↘" buttontype="push" left="276" top="232" width="124" height="104" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
         <button name="STOP" left="142" top="120" width="124" height="104" buttontype="push" style="bg#91414b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">stop();</task>
         </button>
       </abs>
-      <label name="JOG SPEED" left="12" top="451" width="408" height="26" style="fg#e2e4e9;size:14;txt-align:west;" />
+      <label name="JOG SPEED | RANGE 1 TO 49" left="12" top="451" width="408" height="26" style="fg#e2e4e9;size:14;txt-align:west;" />
       <button name="−" left="12" top="482" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
         <task tasktype="ogscript">adjust('speed',-1,1,49);</task>
       </button>
-      <param oid="speed" left="84" top="482" width="264" height="48" showlabel="false" widget="6" style="size:18;" />
+      <button id="number_entry_speed" name="..." buttontype="push" left="84" top="482" width="264" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+        <task tasktype="ogscript">numberOpen('speed');</task>
+      </button>
       <button name="+" left="356" top="482" width="64" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
         <task tasktype="ogscript">adjust('speed',1,1,49);</task>
       </button>
       <label name="Release / exit stops · 0.9s watchdog" left="12" top="537" width="408" height="26" style="fg#a9bbc8;size:13;txt-align:west;" />
       <abs left="440" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="IRIS" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
-        <param oid="iris" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
-        <button name="OPEN" left="14" top="108" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <button id="number_entry_iris" name="..." buttontype="push" left="14" top="48" width="200" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('iris');</task>
+        </button>
+        <button name="OPEN" left="14" top="126" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">send('write',{parameter:'iris',value:4095},null);</task>
         </button>
         <button name="CLOSE" left="14" top="405" width="200" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">send('write',{parameter:'iris',value:1365},null);</task>
         </button>
-        <param oid="iris" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <label name="Range 1365 to 4095" left="14" top="99" width="200" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_iris" />
+        <param oid="iris" left="42" top="192" width="144" height="201" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
         <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_iris" />
         <button name="Manual" left="14" top="502" width="96" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">send('write',{parameter:'iris_auto',value:0},null);</task>
@@ -396,34 +426,24 @@ function tick() {
       </abs>
       <abs left="684" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="ZOOM POSITION" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
-        <param oid="zoom" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
-        <button name="TELE" left="14" top="108" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(0,0,1,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
+        <button id="number_entry_zoom" name="..." buttontype="push" left="14" top="48" width="200" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('zoom');</task>
         </button>
-        <button name="WIDE" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(0,0,-1,0);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <param oid="zoom" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <button id="jog_0_0_1_0" name="TELE" buttontype="push" left="14" top="126" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_0_0_minus1_0" name="WIDE" buttontype="push" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <label name="Range 1365 to 4095" left="14" top="99" width="200" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_zoom" />
+        <param oid="zoom" left="42" top="192" width="144" height="201" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
         <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_zoom" />
       </abs>
       <abs left="928" top="0" width="228" height="560" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="FOCUS POSITION" left="14" top="10" width="200" height="28" style="fg#e2e4e9;size:16;txt-align:west;" />
-        <param oid="focus" left="14" top="48" width="200" height="48" showlabel="false" widget="6" style="size:18;" />
-        <button name="FAR" left="14" top="108" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(0,0,0,1);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
+        <button id="number_entry_focus" name="..." buttontype="push" left="14" top="48" width="200" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('focus');</task>
         </button>
-        <button name="NEAR" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;">
-          <ogscript handles="onmousedown">jog(0,0,0,-1);</ogscript>
-          <ogscript handles="onmouseup">release();</ogscript>
-          <ogscript handles="onmouseexit">release();</ogscript>
-        </button>
-        <param oid="focus" left="42" top="172" width="144" height="221" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <button id="jog_0_0_0_1" name="FAR" buttontype="push" left="14" top="126" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <button id="jog_0_0_0_minus1" name="NEAR" buttontype="push" left="14" top="405" width="200" height="52" style="bg#202328;fg#e2e4e9;bdr:line;bdr#383d45;size:22;" />
+        <label name="Range 1365 to 4095" left="14" top="99" width="200" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_focus" />
+        <param oid="focus" left="42" top="192" width="144" height="201" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
         <label name="unknown · never read" left="14" top="465" width="200" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_focus" />
         <button name="Manual" left="14" top="502" width="96" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">send('write',{parameter:'focus_auto',value:0},null);</task>
@@ -498,16 +518,20 @@ function tick() {
       <abs left="874" top="42" width="300" height="516" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="RECALL / STORE" left="14" top="12" width="272" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
         <label name="Action" left="14" top="43" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
-        <param oid="store" left="14" top="70" width="272" height="48" showlabel="false" widget="7" style="size:18;" />
+        <param oid="store" left="14" top="70" width="272" height="48" showlabel="false" widget="7" style="size:18;txt-align:center;" />
         <label name="Type OVERWRITE to Store" left="14" top="114" width="272" height="26" style="fg#e2e4e9;size:15;txt-align:west;" />
-        <param oid="confirmation" left="14" top="142" width="272" height="48" showlabel="false" style="size:18;" />
+        <param oid="confirmation" left="14" top="142" width="272" height="48" showlabel="false" style="size:18;txt-align:center;" />
         <label name="Recall Speed: 1 Slow / 30 Fast" left="14" top="188" width="272" height="24" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="recall_speed" left="14" top="214" width="272" height="48" showlabel="false" widget="6" style="size:18;" />
+        <button id="number_entry_recall_speed" name="..." buttontype="push" left="14" top="214" width="272" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('recall_speed');</task>
+        </button>
         <label name="Recall Speed Mode" left="14" top="260" width="272" height="24" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="use_saved_speed" left="14" top="286" width="272" height="48" showlabel="false" widget="7" style="size:18;" />
-        <label name="Shot Number / Name" left="14" top="332" width="272" height="24" style="fg#e2e4e9;size:13;txt-align:west;" />
-        <param oid="shot_number" left="14" top="358" width="70" height="48" showlabel="false" widget="6" style="size:18;" />
-        <param oid="shot_name" left="92" top="358" width="194" height="48" showlabel="false" style="size:18;" />
+        <param oid="use_saved_speed" left="14" top="286" width="272" height="48" showlabel="false" widget="7" style="size:18;txt-align:center;" />
+        <label name="Shot Number (1 to 100) / Name" left="14" top="332" width="272" height="24" style="fg#e2e4e9;size:12;txt-align:west;" id="shot_number_label" />
+        <button id="number_entry_shot_number" name="..." buttontype="push" left="14" top="358" width="70" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('shot_number');</task>
+        </button>
+        <param oid="shot_name" left="92" top="358" width="194" height="48" showlabel="false" style="size:18;txt-align:center;" />
         <button name="Save Name and Speed" left="14" top="406" width="272" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">renamePreset();</task>
         </button>
@@ -517,8 +541,11 @@ function tick() {
     <abs id="page_paint" name="Paint" width="1186" height="564" style="bg#25282e;">
       <abs left="12" top="12" width="208" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="RED GAIN" left="16" top="12" width="176" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
-        <param oid="red_gain" left="16" top="50" width="176" height="48" showlabel="false" widget="6" style="size:18;" />
-        <param oid="red_gain" left="32" top="110" width="144" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <button id="number_entry_red_gain" name="..." buttontype="push" left="16" top="50" width="176" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('red_gain');</task>
+        </button>
+        <label name="Range 0 to 300" left="16" top="100" width="176" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_red_gain" />
+        <param oid="red_gain" left="32" top="134" width="144" height="254" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
         <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">adjust('red_gain',-1,0,300);</task>
         </button>
@@ -529,8 +556,11 @@ function tick() {
       </abs>
       <abs left="236" top="12" width="208" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="BLUE GAIN" left="16" top="12" width="176" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
-        <param oid="blue_gain" left="16" top="50" width="176" height="48" showlabel="false" widget="6" style="size:18;" />
-        <param oid="blue_gain" left="32" top="110" width="144" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <button id="number_entry_blue_gain" name="..." buttontype="push" left="16" top="50" width="176" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('blue_gain');</task>
+        </button>
+        <label name="Range 0 to 300" left="16" top="100" width="176" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_blue_gain" />
+        <param oid="blue_gain" left="32" top="134" width="144" height="254" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
         <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">adjust('blue_gain',-1,0,300);</task>
         </button>
@@ -541,8 +571,11 @@ function tick() {
       </abs>
       <abs left="460" top="12" width="208" height="500" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="DETAIL" left="16" top="12" width="176" height="30" style="fg#e2e4e9;size:17;txt-align:west;" />
-        <param oid="detail" left="16" top="50" width="176" height="48" showlabel="false" widget="6" style="size:18;" />
-        <param oid="detail" left="32" top="110" width="144" height="278" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
+        <button id="number_entry_detail" name="..." buttontype="push" left="16" top="50" width="176" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('detail');</task>
+        </button>
+        <label name="Range 0 to 1" left="16" top="100" width="176" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_detail" />
+        <param oid="detail" left="32" top="134" width="144" height="254" showlabel="false" widget="26" style="w.nospinner:true;w.labels:false;w.thumbcolor:#49a8d8;w.jumptoclick:false;size:16;" />
         <button name="−" left="16" top="400" width="80" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">adjust('detail',-1,0,1);</task>
         </button>
@@ -565,9 +598,12 @@ function tick() {
         <button name="One Shot" left="16" top="106" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">oneShot();</task>
         </button>
-        <param oid="wb_mode" left="244" top="106" width="214" height="48" showlabel="false" widget="6" style="size:18;" />
-        <label name="unknown · never read" left="16" top="166" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_wb_mode" />
-        <label name="One Shot: Not Requested" left="16" top="204" width="442" height="30" style="fg#e2e4e9;size:12;txt-align:west;" id="awb_result" />
+        <button id="number_entry_wb_mode" name="..." buttontype="push" left="244" top="106" width="214" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('wb_mode');</task>
+        </button>
+        <label name="Range 0 to 9" left="244" top="156" width="214" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_wb_mode" />
+        <label name="unknown · never read" left="16" top="182" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_wb_mode" />
+        <label name="One Shot: Not Requested" left="16" top="216" width="442" height="26" style="fg#e2e4e9;size:12;txt-align:west;" id="awb_result" />
       </abs>
       <abs left="700" top="270" width="474" height="116" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="IRIS MODE" left="16" top="4" width="442" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
@@ -591,30 +627,14 @@ function tick() {
       </abs>
       <label name="White balance values depend on the selected model." left="12" top="528" width="1162" height="30" style="fg#a9bbc8;size:13;txt-align:west;" id="paint_help" />
     </abs>
-    <abs id="page_td1c" name="TD1C" width="1186" height="564" style="bg#25282e;">
-      <label name="TOUCHDRIVE / CARBONITE CAMERA BRIDGE" left="16" top="12" width="1154" height="32" style="fg#e2e4e9;size:19;txt-align:west;" />
-      <label name="Connection not verified" left="16" top="60" width="1154" height="52" style="fg#e2e4e9;size:15;txt-align:west;" id="ross_state" />
-      <label name="Physical positioner and native shot commands reach the development simulator." left="16" top="132" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
-      <label name="Movement verification is partial; continuous response still needs work." left="16" top="188" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
-      <label name="Actual Preset-bus following is pending; the selected target is a lab fixture." left="16" top="244" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
-      <label name="Native Custom Control Recall Shot has been observed at the simulator." left="16" top="300" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
-      <label name="Real-camera motion and shot completion require separate verification." left="16" top="356" width="1154" height="44" style="fg#e2e4e9;size:15;txt-align:west;" />
-      <button name="LAB: select on Preset" left="16" top="440" width="330" height="56" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
-        <task tasktype="ogscript">labBus('preset');</task>
-      </button>
-      <button name="LAB: change Program only" left="362" top="440" width="330" height="56" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
-        <task tasktype="ogscript">labBus('program');</task>
-      </button>
-      <label name="Simulator selection only. These buttons do not change the switcher." left="16" top="516" width="1154" height="32" style="fg#a9bbc8;size:13;txt-align:west;" />
-    </abs>
     <abs id="page_config" name="Config" width="1186" height="564" style="bg#25282e;">
       <label name="CONNECTION / OPERATOR LOGIN" left="20" top="12" width="1140" height="32" style="fg#e2e4e9;size:19;txt-align:west;" />
       <label name="Backend" left="20" top="84" width="160" height="32" style="fg#e2e4e9;size:17;txt-align:west;" />
-      <param oid="bridge" left="200" top="76" width="780" height="52" showlabel="false" style="size:18;" />
+      <param oid="bridge" left="200" top="76" width="780" height="52" showlabel="false" style="size:18;txt-align:center;" />
       <label name="Username" left="20" top="152" width="160" height="32" style="fg#e2e4e9;size:17;txt-align:west;" />
-      <param oid="username" left="200" top="144" width="460" height="52" showlabel="false" style="size:18;" />
+      <param oid="username" left="200" top="144" width="460" height="52" showlabel="false" style="size:18;txt-align:center;" />
       <label name="Password" left="20" top="220" width="160" height="32" style="fg#e2e4e9;size:17;txt-align:west;" />
-      <param oid="password" left="200" top="212" width="460" height="52" showlabel="false" style="size:18;" />
+      <param oid="password" left="200" top="212" width="460" height="52" showlabel="false" style="size:18;txt-align:center;" />
       <button name="Sign in" left="200" top="288" width="218" height="56" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
         <task tasktype="ogscript">login();</task>
       </button>
@@ -638,5 +658,94 @@ function tick() {
       <label name="CameraBridge Connection Settings" left="20" top="506" width="1140" height="36" style="fg#d7bb8c;size:14;txt-align:west;" />
     </abs>
   </tab>
+  <ogscript handles="onmousedown" targetid="jog_minus1_1_0_0">jog(-1,1,0,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_minus1_1_0_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_minus1_1_0_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_0_1_0_0">jog(0,1,0,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_0_1_0_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_0_1_0_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_1_1_0_0">jog(1,1,0,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_1_1_0_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_1_1_0_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_minus1_0_0_0">jog(-1,0,0,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_minus1_0_0_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_minus1_0_0_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_1_0_0_0">jog(1,0,0,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_1_0_0_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_1_0_0_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_minus1_minus1_0_0">jog(-1,-1,0,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_minus1_minus1_0_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_minus1_minus1_0_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_0_minus1_0_0">jog(0,-1,0,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_0_minus1_0_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_0_minus1_0_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_1_minus1_0_0">jog(1,-1,0,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_1_minus1_0_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_1_minus1_0_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_0_0_1_0">jog(0,0,1,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_0_0_1_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_0_0_1_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_0_0_minus1_0">jog(0,0,-1,0);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_0_0_minus1_0">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_0_0_minus1_0">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_0_0_0_1">jog(0,0,0,1);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_0_0_0_1">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_0_0_0_1">release();</ogscript>
+  <ogscript handles="onmousedown" targetid="jog_0_0_0_minus1">jog(0,0,0,-1);</ogscript>
+  <ogscript handles="onmouseup" targetid="jog_0_0_0_minus1">release();</ogscript>
+  <ogscript handles="onmouseexit" targetid="jog_0_0_0_minus1">release();</ogscript>
   <label name="Starting…" left="164" top="744" width="1186" height="44" style="fg#b9c5cf;size:14;txt-align:west;" id="status" />
+  <popup id="number_popup" name="" left="460" top="80" width="1" height="1" group="camera-number-entry" style="bdr:none;bg#25282e;">
+    <abs width="460" height="540" style="bg#2c3037;bdr:line;bdr#49a8d8;">
+      <param oid="number_title" left="16" top="12" width="428" height="32" showlabel="false" widget="100" style="size:22;fg#ffffff;bg#2c3037;bdr:none;" />
+      <param oid="number_limits" left="16" top="48" width="428" height="28" showlabel="false" widget="100" style="size:15;fg#ffffff;bg#2c3037;bdr:none;" />
+      <param oid="number_error" left="16" top="150" width="428" height="44" showlabel="false" widget="100" style="size:14;fg#ef929f;bg#2c3037;bdr:none;" />
+      <param oid="number_value" left="16" top="84" width="428" height="64" showlabel="false" widget="3" style="size:26;txt-align:center;w.keyboard:disabled;" />
+      <button name="7" left="16" top="202" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('7');</task>
+      </button>
+      <button name="8" left="126" top="202" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('8');</task>
+      </button>
+      <button name="9" left="236" top="202" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('9');</task>
+      </button>
+      <button name="4" left="16" top="268" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('4');</task>
+      </button>
+      <button name="5" left="126" top="268" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('5');</task>
+      </button>
+      <button name="6" left="236" top="268" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('6');</task>
+      </button>
+      <button name="1" left="16" top="334" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('1');</task>
+      </button>
+      <button name="2" left="126" top="334" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('2');</task>
+      </button>
+      <button name="3" left="236" top="334" width="102" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('3');</task>
+      </button>
+      <button name="Delete" left="346" top="202" width="98" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDelete();</task>
+      </button>
+      <button name="Clear" left="346" top="268" width="98" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">params.setValue('number_value',0,'');</task>
+      </button>
+      <button name="+ / -" left="346" top="334" width="98" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberSign();</task>
+      </button>
+      <button name="0" left="16" top="400" width="322" height="58" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberDigit('0');</task>
+      </button>
+      <button name="Cancel" left="16" top="474" width="208" height="52" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberCancel();</task>
+      </button>
+      <button name="Enter" left="236" top="474" width="208" height="52" buttontype="push" style="bg#49a8d8;fg#ffffff;bdr:none;size:16;">
+        <task tasktype="ogscript">numberApply();</task>
+      </button>
+    </abs>
+  </popup>
 </abs>

@@ -1,5 +1,6 @@
 """Native Sony lens, paint and tally panel for the TouchDrive canvas."""
 import xml.etree.ElementTree as ET
+import json
 from build_panels import COMMON,HERE,node,script
 from aura_layout import BG,BLUE,BUTTON,card,label,button,entry,jog_button,vertical,horizontal
 
@@ -30,7 +31,7 @@ def build(defs):
     lens=pages['Lens'];button(lens,'Touch control DISABLED',12,12,560,'touchEnable();',56,id='touch_enable')
     for y,title,axis,low,high in [(92,'ZOOM',2,'WIDE','TELE'),(270,'FOCUS',3,'NEAR','FAR')]:
         label(lens,title,12,y,560,32,size=20)
-        axes=[0,0,0,0];axes[axis]=-1;jog_button(lens,low,12,y+46,265,104,axes);axes[axis]=1;jog_button(lens,high,293,y+46,265,104,axes)
+        axes=[0,0,0,0];axes[axis]=-1;jog_button(lens,low,12,y+46,265,104,axes,root);axes[axis]=1;jog_button(lens,high,293,y+46,265,104,axes,root)
     for i,key in enumerate(['iris','iris_auto','focus_auto']):horizontal(lens,key,defs[key],594,12+170*i,580)
     label(lens,'ZOOM SCALE',12,452,560,22,size=14)
     label(lens,'Awaiting camera',12,478,560,24,'actual_zoom',colour='a9bbc8',size=14)
@@ -49,4 +50,9 @@ def build(defs):
     label(config,'Set the camera network access and verified SSH fingerprint in CameraBridge setup.',20,386,1140,60,size=17)
     label(config,'Values use Sony native units. Only available camera controls are writable.',20,470,1140,48,colour='a9bbc8',size=15)
     label(root,'Starting…',164,744,1186,44,'status',size=14)
+    from numeric_entry import build as build_numeric
+    build_numeric(root,params)
+    numbers={e.get('id')[13:]:True for e in root.iter() if (e.get('id') or '').startswith('number_entry_')}
+    ranges={e.get('id')[6:]:True for e in root.findall('.//label') if (e.get('id') or '').startswith('range_')}
+    root.find('api').text+='\ncbNumberFields='+json.dumps(numbers)+';cbRangeFields='+json.dumps(ranges)+';'
     path=HERE/'SW-Sony-Camera-Control.grid';ET.indent(root);ET.ElementTree(root).write(path,encoding='utf-8',xml_declaration=True);return path

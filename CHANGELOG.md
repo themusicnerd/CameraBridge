@@ -1,5 +1,14 @@
 # Change record
 
+## 0.3.0rc18
+
+- Remove the obsolete TouchDrive page from Panasonic control panels.
+- Register direction-pad press, release, and exit events against explicit control IDs.
+- Center number fields and show their current model ranges.
+- Add a touch numeric popup with staged input, Enter, Cancel, and range checks.
+- Record completed dashboard movement requests for control verification.
+- Clarify the limited AK-HC1800G paint coverage.
+
 ## 0.3.0rc17
 
 - Add AK-HC1800G on AW-PH360N through a transparent TCP/RS-422 gateway.

@@ -1,14 +1,12 @@
-# CameraBridge 0.3.0rc17
+# CameraBridge 0.3.0rc18
 
-This release adds a Panasonic AK-HC1800G + AW-PH360N profile.
-Connect the head through a transparent TCP/RS-422 gateway.
-Set its IP address and TCP port for each camera in web setup or native DashBoard.
+The Panasonic panel has PTZ, Presets, Paint, and Config pages.
+The obsolete TouchDrive page has been removed.
+Number fields are centered and display the camera range.
+Select an editable camera number field to open the numeric popup.
+Enter changes only the selected value. Cancel does not change it.
+The popup rejects invalid values and closes safely after a camera change.
+Pan and tilt use explicit press, release, and pointer exit handlers.
 
-The profile provides pan, tilt, zoom, focus jog, iris commands, 50 shots, gain, detail, One Shot, and red tally commands.
-Serial head commands report Sent because physical feedback is not available.
-Autofocus mode, WB mode selection, and recall speed are not available in this profile.
-Physical camera and head checks remain to be completed.
-
-Use the current CameraBridge.grid file to add this profile in native DashBoard.
-Existing HE40 settings and positioner scheduling are retained.
-See [serial gateway setup](panasonic-serial.md) for the procedure.
+The AK-HC1800G + AW-PH360N profile still has a limited paint command set.
+See [paint coverage and serial setup](panasonic-serial.md).

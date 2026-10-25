@@ -18,7 +18,7 @@ state.cameras[0].parameters.red_gain={value:150,confirmation:'confirmed',age_sec
 const ctx=vm.createContext({JSON,Date,Math,String,Number,encodeURIComponent,
  params:{replaceConstraint:(oid,id)=>{assert.ok(xml.includes('id="'+id+'"'));},getValue:k=>values[k],setValue:(k,i,v)=>{assert.equal(access[k],1,'locked parameter '+k);values[k]=v;},setAccess:(k,v)=>{access[k]=v;},getParam:k=>({replaceConstraint:r=>assert.ok(values[k]!==undefined)})},
  ogscript:{rename:(id,text)=>{assert.ok(ids.has(id),'unknown label '+id);labels[id]=text;},setStyle:id=>assert.ok(ids.has(id),'unknown style '+id),
- reveal:id=>{assert.ok(ids.has(id),'unknown page '+id);pages.push(id);},setXML:id=>assert.ok(ids.has(id)),
+ reveal:id=>{assert.ok(ids.has(id),'unknown page '+id);pages.push(id);},hide:id=>{assert.ok(ids.has(id),'unknown popup '+id);},setXML:id=>assert.ok(ids.has(id)),
  asyncPost:(url,body,callback)=>{const d=JSON.parse(decodeURIComponent(body.slice(8)));requests.push({url,data:d});const path=url.split('/api/')[1];let result;
   if(path==='login')result={token:'admin-token',role:'admin'};
   else if(path==='state')result=state;

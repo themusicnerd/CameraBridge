@@ -43,6 +43,13 @@ Enter the gateway IP and TCP port in the camera connection fields.
 Save the setup and apply it.
 Use the current CameraBridge.grid file for this profile.
 
+## Paint Coverage
+
+This profile does not have the full AK-HC1800G paint command set.
+It has red gain, blue gain, detail, iris mode, iris commands, and One Shot.
+Master gain, shutter, master pedestal, separate channel pedestals, gamma, matrix, and other camera menu controls are not mapped.
+Use the camera or its existing control panel for those settings.
+
 ## Available Controls
 
 | Function | Behavior |

@@ -275,7 +275,9 @@ class Engine:
                             if key!='@motion':
                                 with self.lock:c['params'][key].update(confirmation='unknown',error='Ownership expired or command superseded')
                             continue
-                        if key=='@motion':driver.move(**value)
+                        if key=='@motion':
+                            driver.move(**value)
+                            self.event(cid,'motion-sent',axes=dict(value))
                         else:
                             with self.lock:self.check_mode(c,key)
                             actual=driver.write(key,value)

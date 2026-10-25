@@ -19,3 +19,17 @@ reply('stop',{error:'no camera'});assert.equal(ctx.cbTouchEnabled,false);assert.
 console.log('PASS: rapid direction changes wait for stop, discard superseded claims, retain latest direction, and disable on failed stop.');
 
 run('cbBusy=false;poll();');let nullReply=pending.shift();nullReply.cb('null');assert.equal(ctx.cbBusy,false);
+
+// Exercise the generated direction-pad bindings rather than only direct jog calls.
+const handlers=[...xml.matchAll(/<ogscript\b([^>]*handles="onmousedown"[^>]*)>([\s\S]*?)<\/ogscript>/g)];
+const pads=handlers.filter(m=>/targetid="jog_/.test(m[1]));
+assert.equal(pads.length,12);
+run("cbToken='token';cbTouchEnabled=true;");
+for(const handler of pads){
+ const code=decode(handler[2]);run(code);reply('claim');const command=reply('move');
+ assert.ok(Object.values(command.data).some(v=>typeof v==='number'&&v!==0));
+ run('release();');reply('stop');
+}
+assert.equal(pending.length,0);
+console.log('PASS: all eight pan/tilt pads and four lens directions have explicit press/release bindings.');
+require('./numeric_panel_smoke.cjs');

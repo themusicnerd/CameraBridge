@@ -176,6 +176,7 @@ class PanelTests(unittest.TestCase):
                 self.assertGreaterEqual(int(control.get('width')),48,control.get('name'))
                 self.assertGreaterEqual(int(control.get('height')),48,control.get('name'))
             for control in root.findall('.//param[@left]'):
+                if control.get('widget')=='100':continue
                 self.assertGreaterEqual(int(control.get('height')),48,control.get('oid'))
             faders=root.findall('.//param[@widget="26"]')
             self.assertGreaterEqual(len(faders),6 if manufacturer=='Panasonic' else 8)
@@ -197,7 +198,7 @@ class PanelTests(unittest.TestCase):
                     if child.get('top') is not None and child.get('height') is not None:
                         self.assertLessEqual(int(child.get('top'))+int(child.get('height')),height)
             self.assertIsNotNone(root.find(".//abs[@id='page_config']"))
-            if manufacturer=='Panasonic':self.assertIsNotNone(root.find(".//abs[@id='page_td1c']"))
+            if manufacturer=='Panasonic':self.assertIsNone(root.find(".//abs[@id='page_td1c']"))
     def test_two_native_panels_contract(self):
         for manufacturer in ('Panasonic','Marshall'):
             tree=ET.parse(ROOT/'dashboard'/f'SW-{manufacturer}-Camera-Control.grid');root=tree.getroot()
