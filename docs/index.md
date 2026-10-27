@@ -27,7 +27,6 @@ Read the feature table before you connect a physical camera.
 | Test Carbonite camera control | [Carbonite](ross-carbonite.md) |
 | Test the VISCA relay | [Lab protocol](ross-lab-protocol.md) |
 | Check physical equipment | [Hardware acceptance](ross-hardware-acceptance.md) |
-| Check TouchDrive host compatibility | [TD1C compatibility](td1c-compatibility.md) |
 | Read panel development facts | [Native panels](dashboard-custompanels.md) |
 | Read touch layout tests | [Touch layout](touch-layout-validation.md) |
 | Read native application tests | [Native validation](native-dashboard-validation.md) |

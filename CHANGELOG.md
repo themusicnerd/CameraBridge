@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- Reduce the collapsed TouchDrive toolbar button height to keep the DashBoard menu clear.
-- Allow horizontal dragging of the collapsed TouchDrive toolbar button and remember its position.
-- Move the TouchDrive launcher bar, system readings, and show/hide arrow to the top of the touchscreen.
+- Move custom TouchDrive desktop tools into an independent private project.
+- Keep standard camera panels, control, and tracking in CameraBridge.
+
 - Move Unreal rendering, NDI compositing, client assets, and renderer tests into the independent SWVirtualProduction repository.
 - Keep camera control, tracking calibration, FreeD output, and XPression tracking output in CameraBridge.
 - Link to the separate renderer installation and operator procedures.

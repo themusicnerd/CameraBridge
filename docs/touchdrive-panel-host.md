@@ -1,7 +1,8 @@
 # TouchDrive panel host
 
 This document describes the earlier Windows host arrangement.
-For the current local TD1C installation, see [CameraBridge on TouchDrive](touchdrive-installation.md).
+This guide covers the standard panel host.
+Custom TouchDrive desktop launchers are maintained in a separate private project.
 
 The Windows host runs the backend and emulators.
 The TouchDrive runs native grid panels and its browser.

@@ -12,7 +12,6 @@ Start with a 0.75-second buffer for testing. Match the video delay and check aud
 Interpolation does not add source measurements or exposure synchronization.
 Read docs/unreal-live-logo.md for the HE130 to Unreal live logo workflow and the remaining venue checks.
 
-This release also removes the bottom-bar toggle tooltip on TouchDrive.
 The crest mesh, Unreal Lens File integration, and complete broadcast signal path still need preparation and rehearsal.
 
 Windows x64 and Linux x64 packages are included.

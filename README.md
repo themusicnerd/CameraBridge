@@ -2,6 +2,8 @@
 
 CameraBridge connects native Ross DashBoard panels to one camera control service.
 This repository contains camera control, tracking configuration, and tracking-data output.
+Standard DashBoard camera panels are included.
+Custom TouchDrive desktop tools are maintained separately in a private project.
 Unreal rendering, NDI compositing, and client scene content are in the separate private [SWVirtualProduction repository](https://github.com/themusicnerd/SWVirtualProduction).
 CameraBridge sends FreeD to that renderer. It does not require the Unreal project to run.
 New installations start with an empty camera list.
