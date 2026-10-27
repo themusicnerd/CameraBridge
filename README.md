@@ -19,7 +19,7 @@ Read the [camera tracking guide](docs/camera-tracking.md) for FreeD output, Unre
 
 ## Download and start
 
-1. Open the [private release page](https://github.com/themusicnerd/CameraBridge/releases).
+1. Open the [release page](https://github.com/themusicnerd/CameraBridge/releases).
 2. Select the package for your operating system and processor.
 3. Extract the complete archive.
 4. Open CameraBridge.exe on Windows, CameraBridge.app on macOS, or CameraBridge on Linux.

@@ -8,3 +8,9 @@ dist/
 release/
 *.spec
 /sony/
+/deployment/touchdrive/
+/deployment/unreal/
+/docs/touchdrive-installation.md
+/docs/touchdrive-deployment-results.json
+/docs/td1c-compatibility.md
+*.bundle
