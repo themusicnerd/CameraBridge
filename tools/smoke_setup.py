@@ -40,7 +40,7 @@ def main():
                 token=page.evaluate('localStorage.getItem("camerabridge-device-session")')
                 assert api('api/config',token=token)['cameras'][0]['name']=='Studio Camera'
                 expect(row.locator('[data-field=name]')).to_have_value('Studio Camera');assert row.get_attribute('open') is not None
-                tracking=row.locator('.tracking-settings');tracking.locator('summary').click()
+                tracking=row.locator('.tracking-settings');tracking.locator(':scope > summary').click()
                 tracking.locator('[data-tracking=host]').fill('127.0.0.1');tracking.locator('[data-tracking=host]').press('Tab')
                 expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
                 assert api('api/config',token=token)['cameras'][0]['tracking_output']['host']=='127.0.0.1'
@@ -51,7 +51,7 @@ def main():
                     page.screenshot(path=str(args.screenshots/'CameraBridge-Tracking-Setup.png'),full_page=True)
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                     page.set_viewport_size({'width':1366,'height':872})
-                tracking.locator('summary').click()
+                tracking.locator(':scope > summary').click()
                 expect(row.locator('[data-field=host]').locator('..').locator('a')).to_have_attribute('href',f'http://127.0.0.1:{camera_port}/')
                 send_tsl(2);expect(row).to_have_attribute('data-tally','program',timeout=10000);expect(row.locator('.tally-feedback')).to_contain_text('Camera Tally Lamp: On',timeout=10000);expect(page.locator('#tslbadge')).to_have_text('TSL Receiving')
                 send_tsl(1);expect(row).to_have_attribute('data-tally','preview',timeout=10000);expect(row.locator('.tally-feedback')).to_contain_text('Camera Tally Lamp: Off',timeout=10000)

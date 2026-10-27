@@ -1,4 +1,4 @@
-# CameraBridge 0.3.0rc19
+# CameraBridge 0.3.0rc20
 
 This development release adds experimental measured FreeD output for supported Panasonic PTZ profiles. The setup page has separate Unreal and Windows XPression adapter ports. It shows measurement rate, age, and packet counts. Stale or invalid measurements stop output.
 

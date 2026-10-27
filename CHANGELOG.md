@@ -1,6 +1,6 @@
 # Change record
 
-## 0.3.0rc19
+## 0.3.0rc20
 
 - Add measured Panasonic head and lens feedback for experimental FreeD output.
 - Set receiver ports, camera ID, fixed mount position, and encoder calibration per camera.
