@@ -1,5 +1,8 @@
 # TouchDrive panel host
 
+This document describes the earlier Windows host arrangement.
+For the current local TD1C installation, see [CameraBridge on TouchDrive](touchdrive-installation.md).
+
 The Windows host runs the backend and emulators.
 The TouchDrive runs native grid panels and its browser.
 This arrangement does not install the backend on the TouchDrive.
