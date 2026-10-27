@@ -1,5 +1,14 @@
 # Change record
 
+## Unreleased
+
+- Add an Unreal 5.6 editor workflow for the ICMS crest and live camera graphics.
+- Add a local FreeD receiver, measured lens mapping, bounded video delay, and NDI output controls.
+- Add full composite, premultiplied fill/key, and straight-alpha graphics output modes.
+- Remove graphics on stale tracking and output black when camera video is lost.
+- Supply project preparation, launch controls, crest source meshes, and an operator guide.
+
+
 ## 0.3.0rc24
 
 - Add optional buffered interpolation to FreeD and XPression tracking output.
