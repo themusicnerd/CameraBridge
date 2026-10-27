@@ -34,12 +34,24 @@ def main():
                 assert page.get_by_text('Advanced JSON',exact=True).count()==0
                 assert 'verify camera feedback before control' not in page.locator('body').inner_text().lower()
                 assert page.locator('.app-logo').evaluate('(img)=>img.complete&&img.naturalWidth>0')
-                row=page.locator('#camera-p1');row.locator('summary').click();expect(row.locator('[data-field=manufacturer]')).to_have_value('Panasonic');assert row.locator('[data-field=model] option').filter(has_text='AW-HE2').count()==1
+                row=page.locator('#camera-p1');row.locator(':scope > summary').click();expect(row.locator('[data-field=manufacturer]')).to_have_value('Panasonic');assert row.locator('[data-field=model] option').filter(has_text='AW-HE2').count()==1
                 assert len(set(round(row.locator('[data-field="'+k+'"]').bounding_box()['y']) for k in ['number','name','manufacturer','model']))==1
                 row.locator('[data-field=name]').fill('Studio Camera');row.locator('[data-field=name]').press('Tab');expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
                 token=page.evaluate('localStorage.getItem("camerabridge-device-session")')
                 assert api('api/config',token=token)['cameras'][0]['name']=='Studio Camera'
                 expect(row.locator('[data-field=name]')).to_have_value('Studio Camera');assert row.get_attribute('open') is not None
+                tracking=row.locator('.tracking-settings');tracking.locator('summary').click()
+                tracking.locator('[data-tracking=host]').fill('127.0.0.1');tracking.locator('[data-tracking=host]').press('Tab')
+                expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                assert api('api/config',token=token)['cameras'][0]['tracking_output']['host']=='127.0.0.1'
+                expect(tracking.locator('.tracking-feedback')).to_contain_text('Disabled')
+                if args.screenshots:
+                    args.screenshots.mkdir(parents=True,exist_ok=True)
+                    page.set_viewport_size({'width':1920,'height':1016})
+                    page.screenshot(path=str(args.screenshots/'CameraBridge-Tracking-Setup.png'),full_page=True)
+                    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    page.set_viewport_size({'width':1366,'height':872})
+                tracking.locator('summary').click()
                 expect(row.locator('[data-field=host]').locator('..').locator('a')).to_have_attribute('href',f'http://127.0.0.1:{camera_port}/')
                 send_tsl(2);expect(row).to_have_attribute('data-tally','program',timeout=10000);expect(row.locator('.tally-feedback')).to_contain_text('Camera Tally Lamp: On',timeout=10000);expect(page.locator('#tslbadge')).to_have_text('TSL Receiving')
                 send_tsl(1);expect(row).to_have_attribute('data-tally','preview',timeout=10000);expect(row.locator('.tally-feedback')).to_contain_text('Camera Tally Lamp: Off',timeout=10000)
@@ -50,7 +62,7 @@ def main():
                 page.reload();expect(page.locator('#login')).to_be_hidden();expect(page.locator('#savestatus')).to_have_text('All Changes Saved')
                 # Restart the actual service while preserving browser storage and accounts.
                 process.communicate('quit\n',timeout=20);assert process.returncode==0;process=start();ready();page.reload();expect(page.locator('#login')).to_be_hidden();expect(page.locator('#savestatus')).to_have_text('All Changes Saved')
-                page.locator('#addcamera').click();new=page.locator('#roster details').last;new.locator('[data-field=enabled]').uncheck();new.locator('[data-field=manufacturer]').select_option('Sony');expect(new.locator('[data-field=model]')).to_have_value('PXW-Z200');new.locator('[data-field=manufacturer]').select_option('Panasonic');new.locator('[data-field=model]').select_option('AW-HE2');new.locator('[data-field=host]').fill('192.0.2.42');new.locator('[data-field=host]').press('Tab');expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                page.locator('#addcamera').click();new=page.locator('#roster > details').last;new.locator('[data-field=enabled]').uncheck();new.locator('[data-field=manufacturer]').select_option('Sony');expect(new.locator('[data-field=model]')).to_have_value('PXW-Z200');new.locator('[data-field=manufacturer]').select_option('Panasonic');new.locator('[data-field=model]').select_option('AW-HE2');new.locator('[data-field=host]').fill('192.0.2.42');new.locator('[data-field=host]').press('Tab');expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
                 assert api('api/config',token=token)['cameras'][1]['model']=='AW-HE2'
                 new.locator('[data-field=model]').select_option('AK-HC1800G + AW-PH360N')
                 expect(new.locator('[data-field=host]').locator('..')).to_contain_text('USR Gateway IP')

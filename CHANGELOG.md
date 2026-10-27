@@ -1,5 +1,14 @@
 # Change record
 
+## 0.3.0rc19
+
+- Add measured Panasonic head and lens feedback for experimental FreeD output.
+- Set receiver ports, camera ID, fixed mount position, and encoder calibration per camera.
+- Show measured rate and data age separately from output packet counts.
+- Stop output after invalid or stale camera feedback.
+- Add a Windows FreeD-to-XPression Automation API adapter and a calibration guide.
+- Include the persistent TouchDrive deployment, system monitor, and bottom bar toggle.
+
 ## 0.3.0rc18
 
 - Remove the obsolete TouchDrive page from Panasonic control panels.

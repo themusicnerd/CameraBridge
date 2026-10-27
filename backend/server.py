@@ -145,6 +145,18 @@ def validate_config(c):
         if camera['driver']=='marshall-lab' and camera.get('manufacturer')!='Marshall':raise ValueError('Driver/manufacturer mismatch')
         if type(camera.get('pivotcam',False)) is not bool or type(camera.get('allow_store',False)) is not bool:raise ValueError('Invalid PIVOTCam option')
         if camera.get('pivotcam') and camera['driver'] not in ('panasonic','panasonic-serial','sony-sdk'):raise ValueError('PIVOTCam requires Panasonic or Sony')
+        from .tracking import validate as validate_tracking
+        validate_tracking(camera)
+    tracking_ids=set()
+    from .tracking import settings as tracking_settings
+    for camera in c['cameras']:
+        t=tracking_settings(camera)
+        if camera.get('enabled',True) and (t['enabled'] or t['xpression_enabled']):
+            for switch,port in [('enabled','port'),('xpression_enabled','xpression_port')]:
+                if t[switch]:
+                    key=(t['host'],t[port],t['camera_id'])
+                    if key in tracking_ids:raise ValueError('Tracking camera IDs must be unique at each destination')
+                    tracking_ids.add(key)
     endpoints=[(camera['host'].lower(),camera['port']) for camera in c['cameras'] if camera['driver']=='panasonic-serial' and camera.get('enabled',True)]
     if len(endpoints)!=len(set(endpoints)):raise ValueError('Use one Panasonic head per serial gateway TCP endpoint')
     tally=c.get('tally',{})

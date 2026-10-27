@@ -76,6 +76,9 @@ class Engine:
             self.events.append(dict(time=time.time(),camera=camera,kind=kind,**data))
 
     def start(self):
+        from .tracking import Tracking
+        self.tracking=Tracking(self)
+        self.tracking.start()
         for cid in self.cameras:
             thread=threading.Thread(target=self.worker,args=(cid,),daemon=True,name='camera-'+cid)
             thread.start();self.threads.append(thread)
@@ -96,6 +99,7 @@ class Engine:
                 result.append(dict(c['config'],parameters=parameters,preset_names=dict(self.preset_names.get(cid,{})),preset_speeds=dict(self.preset_speeds.get(cid,{})),white_balance_once=c['white_balance_once'],health=c['health'],error=c['error'],locked=c['locked'],
                     owner=c['owner'] if c['lease_until']>time.monotonic() else None,generation=c['generation'],moving=c['moving'],active_preset=c['active_preset'],tally=dict(c['tally'])))
                 if isinstance(c['driver'],Panasonic):result[-1]['capabilities']=dict(c['driver'].capabilities)
+                result[-1]['tracking_status']=dict(c.get('tracking_status',{}))
             tsl=dict(self.tsl)
             tsl['age_seconds']=None if tsl['last_packet'] is None else max(0,now-tsl['last_packet'])
             tsl['state']='disabled' if not tsl['enabled'] else 'not listening' if not tsl['listening'] else 'waiting' if tsl['last_packet'] is None else 'receiving' if tsl['age_seconds']<=10 else 'stale'
