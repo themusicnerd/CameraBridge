@@ -1,9 +1,9 @@
-# CameraBridge 0.3.0rc20
+# CameraBridge 0.3.0rc21
 
-This development release adds experimental measured FreeD output for supported Panasonic PTZ profiles. The setup page has separate Unreal and Windows XPression adapter ports. It shows measurement rate, age, and packet counts. Stale or invalid measurements stop output.
+This development release adds a guided calibration workflow. Capture stationary Panasonic head and lens feedback, save a reference direction, and measure a target to estimate lens field of view at multiple zoom positions.
 
-The XPression adapter uses the installed Ross Automation API. It updates an existing output scene camera and can use a measured lens field-of-view table. Read docs/camera-tracking.md before a test.
+Save and restore camera profiles with JSON. Export lens tables for the Windows XPression adapter. Receiver addresses, ports, output switches, and camera numbers are preserved on import. Read docs/calibration.md before calibration.
 
-HE40 CGI feedback is slow. Output repetition does not provide frame-synchronized tracking. Lens calibration, scene alignment, and receiver testing are required.
+The measured-target table is not a distortion solve or an Unreal Lens File. Optical center, distortion, nodal offset, focus dependence, and video timing still need image-based receiver calibration. CGI feedback does not provide frame synchronization.
 
-Windows x64 and Linux x64 packages are included. This release also includes the persistent TouchDrive deployment, system statistics, and bottom bar toggle.
+Windows x64 and Linux x64 packages are included.

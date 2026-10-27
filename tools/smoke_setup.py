@@ -51,6 +51,20 @@ def main():
                     page.screenshot(path=str(args.screenshots/'CameraBridge-Tracking-Setup.png'),full_page=True)
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                     page.set_viewport_size({'width':1366,'height':872})
+                guide=tracking.locator('.calibration-guide');guide.locator(':scope > summary').click()
+                from backend.tracking import DEFAULTS
+                from backend.calibration import horizontal_fov
+                keys=('pan_zero','tilt_zero','degrees_per_count','pan_invert','tilt_invert','x_mm','y_mm','z_mm','roll')
+                points=[dict(zoom=z,focus=2800,hfov=horizontal_fov(1920,w,1000,1920),target_width_mm=w,distance_mm=1000,target_pixels=1920,captured_at=1) for z,w in [(1365,2000),(4095,1000)]]
+                bundle=dict(format='CameraBridgeCalibration',version=1,model='AW-HE130',head={k:DEFAULTS[k] for k in keys},lens=dict(version=1,name='Browser Test Lens',model='AW-HE130',video_width=1920,video_height=1080,lens_points=points))
+                guide.locator('input[type=file]').set_input_files(dict(name='lens.json',mimeType='application/json',buffer=json.dumps(bundle).encode()))
+                expect(guide.locator('table tr')).to_have_count(3)
+                expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                assert len(api('api/config',token=token)['cameras'][0]['tracking_calibration']['lens_points'])==2
+                with page.expect_download() as received:guide.get_by_role('button',name='Export XPression Lens CSV',exact=True).click()
+                assert '1365,90' in pathlib.Path(received.value.path()).read_text()
+                if args.screenshots:page.screenshot(path=str(args.screenshots/'CameraBridge-Calibration-Guide.png'),full_page=True)
+                guide.locator(':scope > summary').click()
                 tracking.locator(':scope > summary').click()
                 expect(row.locator('[data-field=host]').locator('..').locator('a')).to_have_attribute('href',f'http://127.0.0.1:{camera_port}/')
                 send_tsl(2);expect(row).to_have_attribute('data-tally','program',timeout=10000);expect(row.locator('.tally-feedback')).to_contain_text('Camera Tally Lamp: On',timeout=10000);expect(page.locator('#tslbadge')).to_have_text('TSL Receiving')

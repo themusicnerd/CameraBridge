@@ -13,6 +13,25 @@ from camerabridge import export_panels
 
 
 class SetupTests(unittest.TestCase):
+    def test_calibration_endpoints_require_admin_and_validate_without_changing_camera(self):
+        from .test_calibration import configuration,profile
+        from backend.core import Engine
+        from backend.tracking import DEFAULTS
+        from unittest.mock import Mock
+        self.server.engine=Engine(configuration(),self.storage)
+        driver=self.server.engine.cameras['cam']['driver'];driver.send=Mock(side_effect=['aPC80008000','lPI777B5DF94']*2)
+        self.assertEqual(self.api(dict(camera='cam'),token=self.operator,path='/api/calibration/capture')[0],403)
+        driver.send.assert_not_called()
+        status,result=self.api(dict(camera='cam'),path='/api/calibration/capture')
+        self.assertEqual(status,200);self.assertEqual(result['pan'],32768)
+        keys=('pan_zero','tilt_zero','degrees_per_count','pan_invert','tilt_invert','x_mm','y_mm','z_mm','roll')
+        payload=dict(camera='cam',profile=profile(),head={k:DEFAULTS[k] for k in keys})
+        self.assertEqual(self.api(payload,token=self.operator,path='/api/calibration/validate')[0],403)
+        self.assertEqual(self.api(payload,path='/api/calibration/validate')[0],200)
+        self.assertNotIn('tracking_calibration',self.server.engine.cameras['cam']['config'])
+        payload['head']['enabled']=True
+        self.assertEqual(self.api(payload,path='/api/calibration/validate')[0],400)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.storage = pathlib.Path(self.temp.name)
         self.config = validate_config(json.loads((ROOT/'tests/fixtures/cameras-lab.json').read_text()))

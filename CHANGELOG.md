@@ -1,5 +1,14 @@
 # Change record
 
+## 0.3.0rc21
+
+- Add stationary encoder capture and reference-direction capture.
+- Add a guided measured-target lens calibration table per camera.
+- Save profile names, video dimensions, target measurements, and focus encoder values.
+- Export and import camera calibration profiles without changing receiver settings.
+- Export lens tables for the Windows XPression adapter.
+- Explain the remaining image distortion, nodal offset, and timing calibration steps.
+
 ## 0.3.0rc20
 
 - Add measured Panasonic head and lens feedback for experimental FreeD output.

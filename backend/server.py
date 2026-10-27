@@ -147,6 +147,9 @@ def validate_config(c):
         if camera.get('pivotcam') and camera['driver'] not in ('panasonic','panasonic-serial','sony-sdk'):raise ValueError('PIVOTCam requires Panasonic or Sony')
         from .tracking import validate as validate_tracking
         validate_tracking(camera)
+        if 'tracking_calibration' in camera:
+            from .calibration import validate as validate_calibration
+            validate_calibration(camera['tracking_calibration'])
     tracking_ids=set()
     from .tracking import settings as tracking_settings
     for camera in c['cameras']:
@@ -264,6 +267,23 @@ class Handler(BaseHTTPRequestHandler):
                 if role!='admin':raise PermissionError('Administrator required for camera setup')
                 from .setup import roster
                 self.send(roster(self.server,data));return
+            if path=='/api/calibration/capture':
+                if role!='admin':raise PermissionError('Administrator required for calibration capture')
+                if self.server.reconfiguring:raise ValueError('Camera setup is changing. Try again.')
+                from .calibration import capture
+                self.send(capture(self.server.engine,data['camera']));return
+            if path=='/api/calibration/validate':
+                if role!='admin':raise PermissionError('Administrator required for calibration import')
+                from .calibration import validate as validate_calibration
+                from .tracking import validate as validate_tracking
+                profile=data['profile'];head=data['head']
+                validate_calibration(profile)
+                camera=self.server.engine.cameras[data['camera']]['config']
+                if profile['model']!=camera['model']:raise ValueError('Calibration model does not match this camera')
+                keys={'pan_zero','tilt_zero','degrees_per_count','pan_invert','tilt_invert','x_mm','y_mm','z_mm','roll'}
+                if not isinstance(head,dict) or set(head)!=keys:raise ValueError('Invalid head calibration')
+                validate_tracking(dict(camera,tracking_output={**camera.get('tracking_output',{}),**head}))
+                self.send(dict(profile=profile,head=head));return
             if path in ('/api/sony/credentials','/api/sony/fingerprint'):
                 if role!='admin':raise PermissionError('Administrator required for Sony access setup')
                 from .sony import SonyCredentials,fingerprint

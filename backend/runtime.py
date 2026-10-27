@@ -9,7 +9,7 @@ class Runtime:
         result=copy.deepcopy(config)
         result.pop('authentication_enabled',None)
         for camera in result['cameras']:
-            for key in ('name','carbonite_input','tally_address','tally_enabled','tracking_output'):camera.pop(key,None)
+            for key in ('name','carbonite_input','tally_address','tally_enabled','tracking_output','tracking_calibration'):camera.pop(key,None)
         return result
 
     def update_metadata(self,config):

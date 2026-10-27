@@ -48,6 +48,9 @@ Output is off by default. Changes apply without restarting the Carbonite connect
 
 ## Calibrate the head and lens
 
+Use **Guided Camera and Lens Calibration** in the camera tracking foldout for stationary encoder capture and a measured-target lens table.
+Read the [guided calibration procedure](calibration.md) before taking measurements.
+
 1. Point the real camera at the reference direction for the virtual scene.
 2. Read `pan` and `tilt` in `tracking_status.raw` from the diagnostic download.
 3. Enter these counts in **Pan Encoder At Zero Degrees** and **Tilt Encoder At Zero Degrees**.

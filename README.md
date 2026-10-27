@@ -5,7 +5,7 @@ New installations start with an empty camera list.
 Use the [quick-start guide](docs/quick-start.md) for cameras, Carbonite, TouchDrive, panel installation, and tally.
 The [Panasonic catalog](docs/panasonic-models.md) includes AW-HE2 and model-specific control limits.
 
-**Version 0.3.0rc20 is a development release.**
+**Version 0.3.0rc21 is a development release.**
 
 Read the [camera tracking guide](docs/camera-tracking.md) for FreeD output, Unreal setup, and the Windows XPression adapter.
 
