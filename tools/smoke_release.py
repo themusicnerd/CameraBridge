@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+import re
 
 def free_port():
     with socket.socket() as s:s.bind(('127.0.0.1',0));return s.getsockname()[1]
@@ -16,6 +17,23 @@ def main():
     subprocess.run([exe,'--version'],check=True)
     video=subprocess.run([exe,'calibration','--check-dependencies'],capture_output=True,text=True,check=True,timeout=30)
     assert json.loads(video.stdout)['opencv'] and json.loads(video.stdout)['numpy']
+    video_port=free_port()
+    workstation=subprocess.Popen([exe,'calibration','--port',str(video_port),'--no-browser'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    try:
+        base=f'http://127.0.0.1:{video_port}'
+        deadline=time.monotonic()+20
+        while True:
+            try:html=urllib.request.urlopen(base,timeout=2).read().decode();break
+            except OSError:
+                if workstation.poll() is not None or time.monotonic()>deadline:raise RuntimeError('Packaged video workstation did not start')
+                time.sleep(.2)
+        assert 'USB Capture (Magewell)' in html
+        assert b'<svg' in urllib.request.urlopen(base+'/assets/camerabridge.svg').read()
+        token=re.search("window.workstationToken='([^']+)'",html).group(1)
+        request=urllib.request.Request(base+'/api/state',headers={'Authorization':'Bearer '+token})
+        assert json.load(urllib.request.urlopen(request))['state']=='Stopped'
+    finally:
+        workstation.terminate();workstation.wait(timeout=10)
     with tempfile.TemporaryDirectory() as tmp:
         root=pathlib.Path(tmp);config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'tests/fixtures/cameras-lab.json').read_text(encoding='utf-8'))
         ports=set()

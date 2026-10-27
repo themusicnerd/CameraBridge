@@ -98,10 +98,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send(html.encode(),mime='text/html; charset=utf-8');return
         if self.path=='/workstation.js':self.send((ROOT/'web/workstation.js').read_bytes(),mime='application/javascript');return
         if self.path=='/setup.css':self.send((ROOT/'web/setup.css').read_bytes(),mime='text/css');return
-        if self.path=='/assets/camerabridge.svg':self.send((ROOT/'web/assets/camerabridge.svg').read_bytes(),mime='image/svg+xml');return
+        if self.path=='/assets/camerabridge.svg':self.send((ROOT/'dashboard/assets/camerabridge.svg').read_bytes(),mime='image/svg+xml');return
         if not self.authorized():self.send({'error':'Workstation access required'},403);return
         try:
-            if self.path=='/api/state':self.send(dict(self.server.video.snapshot(),bridge_connected=bool(self.server.bridge.token),cameras=self.server.bridge.cameras,tag=self.server.tag))
+            if self.path=='/api/state':self.send(dict(self.server.video.snapshot(),bridge_connected=bool(self.server.bridge.token),bridge_url=self.server.bridge.url,cameras=self.server.bridge.cameras,tag=self.server.tag))
             elif self.path=='/api/preview':self.send(self.server.video.preview(),mime='image/jpeg')
             else:self.send({'error':'Not found'},404)
         except ValueError as exc:self.send({'error':str(exc)},400)

@@ -1,5 +1,11 @@
 # Change record
 
+## 0.3.0rc23
+
+- Correct the workstation logo asset path in native packages.
+- Restore source type, board settings, camera link, and lens tags when the workstation page reloads.
+- Verify the packaged workstation page, logo, and authenticated state during release checks.
+
 ## 0.3.0rc22
 
 - Add a local video calibration workstation to the tray and console.

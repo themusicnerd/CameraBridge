@@ -183,7 +183,8 @@ class VideoSession:
             state='Stale' if self.state=='Receiving' and age is not None and age>2 else self.state
             return dict(state=state,error=self.error,type=self.kind,age_seconds=None if age is None else round(age,2),
                         width=None if self.frame is None else self.frame.shape[1],height=None if self.frame is None else self.frame.shape[0],
-                        samples=len(self.samples),busy=self.busy,result=copy.deepcopy(self.result))
+                        samples=len(self.samples),busy=self.busy,result=copy.deepcopy(self.result),
+                        board=None if self.board is None else dict(columns=self.board[0],rows=self.board[1],square_mm=self.board[2]))
 
     def current(self):
         with self.lock:

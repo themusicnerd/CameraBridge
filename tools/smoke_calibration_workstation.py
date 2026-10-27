@@ -48,6 +48,9 @@ def main():
             page.locator('#solve').click();expect(page.locator('#resultsummary')).to_contain_text('RMS',timeout=15000)
             assert v.result['rms_pixels']<.7,v.result
             assert abs(v.result['camera_matrix'][0][0]-950)<40,v.result
+            page.reload();expect(page.locator('#resultsummary')).to_contain_text('RMS');expect(page.locator('#samples')).to_have_text('12 Board Images Saved')
+            expect(page.locator('#zoom')).to_have_value('1911');expect(page.locator('#focus')).to_have_value('2873');expect(page.locator('#type')).to_have_value('usb')
+            assert page.locator('.app-logo').evaluate('(img)=>img.complete&&img.naturalWidth>0')
             with page.expect_download() as received:page.locator('#export').click()
             bundle=json.loads(pathlib.Path(received.value.path()).read_text())
             assert bundle['format']=='CameraBridgeOpticalCalibration';validate(bundle['lens'])

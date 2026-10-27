@@ -1,6 +1,6 @@
-# CameraBridge 0.3.0rc22
+# CameraBridge 0.3.0rc23
 
-This development release adds a local video calibration workstation. Select Open Video Calibration in the CameraBridge tray on the computer that receives video.
+This development release fixes the workstation logo and restores calibration state after a page reload. It includes a local video calibration workstation. Select Open Video Calibration in the CameraBridge tray on the computer that receives video.
 
 Choose NDI, RTSP, or USB Capture (Magewell). Capture at least 12 varied checkerboard views at a fixed lens setting. Inspect the optical solve and save tagged results to CameraBridge. Head calibration, camera numbers, receiver addresses, and output switches are preserved.
 

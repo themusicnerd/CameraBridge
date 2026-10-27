@@ -17,6 +17,7 @@ class WorkstationTests(unittest.TestCase):
         try:
             url='http://127.0.0.1:'+str(server.server_address[1])
             self.assertIn(b'USB Capture (Magewell)',urllib.request.urlopen(url).read())
+            self.assertIn(b'<svg',urllib.request.urlopen(url+'/assets/camerabridge.svg').read())
             with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(url+'/api/state')
             request=urllib.request.Request(url+'/api/state',headers={'Authorization':'Bearer '+server.token})
             self.assertEqual(json.load(urllib.request.urlopen(request))['state'],'Stopped')
