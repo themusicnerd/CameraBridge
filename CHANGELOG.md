@@ -1,5 +1,12 @@
 # Change record
 
+## 0.3.0rc24
+
+- Add optional buffered interpolation to FreeD and XPression tracking output.
+- Timestamp head and lens replies separately. Do not extrapolate movement.
+- Show buffering, interpolating, and holding states in camera setup.
+- Document the HE130 to Unreal live logo workflow and its remaining venue checks.
+
 ## 0.3.0rc23
 
 - Correct the workstation logo asset path in native packages.

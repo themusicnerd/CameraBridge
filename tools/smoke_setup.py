@@ -44,6 +44,13 @@ def main():
                 tracking.locator('[data-tracking=host]').fill('127.0.0.1');tracking.locator('[data-tracking=host]').press('Tab')
                 expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
                 assert api('api/config',token=token)['cameras'][0]['tracking_output']['host']=='127.0.0.1'
+                tracking.locator('[data-tracking=interpolation_delay]').fill('0.85')
+                tracking.locator('[data-tracking=interpolation_delay]').press('Tab')
+                tracking.locator('[data-tracking=interpolation_enabled]').check()
+                expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                saved_tracking=api('api/config',token=token)['cameras'][0]['tracking_output']
+                assert saved_tracking['interpolation_enabled'] is True
+                assert saved_tracking['interpolation_delay']==.85
                 expect(tracking.locator('.tracking-feedback')).to_contain_text('Disabled')
                 if args.screenshots:
                     args.screenshots.mkdir(parents=True,exist_ok=True)

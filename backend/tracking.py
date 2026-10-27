@@ -1,4 +1,4 @@
-"""Measured Panasonic pose to FreeD D1. Output repetition is not a new measurement."""
+"""Measured Panasonic pose to FreeD D1, with optional delayed interpolation."""
 import copy
 import ipaddress
 import math
@@ -10,7 +10,8 @@ import time
 SUPPORTED = {'AW-HE40', 'AW-HE130', 'AW-HE120', 'AW-HE50', 'AW-HE60', 'AW-UE70', 'AW-HE42', 'AW-UE150'}
 DEFAULTS = dict(enabled=False, xpression_enabled=False, host='', port=40000,
                 xpression_port=40001, camera_id=1, rate=50, sample_rate=2,
-                stale_seconds=1.5, pan_zero=32768, tilt_zero=32768,
+                stale_seconds=1.5, interpolation_enabled=False, interpolation_delay=.75,
+                pan_zero=32768, tilt_zero=32768,
                 degrees_per_count=0.00825, pan_invert=False, tilt_invert=True,
                 x_mm=0, y_mm=0, z_mm=0, roll=0)
 
@@ -24,18 +25,20 @@ def validate(camera):
     if not isinstance(supplied, dict) or set(supplied) - set(DEFAULTS):
         raise ValueError('Invalid tracking output settings')
     cfg = settings(camera)
-    for key in ('enabled', 'xpression_enabled', 'pan_invert', 'tilt_invert'):
+    for key in ('enabled', 'xpression_enabled', 'pan_invert', 'tilt_invert', 'interpolation_enabled'):
         if type(cfg[key]) is not bool: raise ValueError('Invalid tracking switch: ' + key)
     for key, low, high in [('port',1024,65535),('xpression_port',1024,65535),('camera_id',0,255),
                            ('rate',1,60),('pan_zero',0,65535),('tilt_zero',0,65535)]:
         if type(cfg[key]) is not int or not low <= cfg[key] <= high:
             raise ValueError('Invalid tracking value: ' + key)
-    for key, low, high in [('sample_rate',0.2,3),('stale_seconds',0.5,5),('degrees_per_count',0.00001,0.02),
+    for key, low, high in [('sample_rate',0.2,3),('stale_seconds',0.5,5),('interpolation_delay',0.05,2),('degrees_per_count',0.00001,0.02),
                           ('x_mm',-131071,131071),('y_mm',-131071,131071),('z_mm',-131071,131071),('roll',-180,180)]:
         if type(cfg[key]) not in (int,float) or not math.isfinite(cfg[key]) or not low <= cfg[key] <= high:
             raise ValueError('Invalid tracking value: ' + key)
     if cfg['stale_seconds'] < 1/cfg['sample_rate']:
         raise ValueError('Tracking stale limit must be at least one sample interval')
+    if cfg['interpolation_enabled'] and cfg['interpolation_delay'] >= cfg['stale_seconds']:
+        raise ValueError('Interpolation delay must be less than the tracking stale limit')
     if not isinstance(cfg['host'],str): raise ValueError('Invalid tracking destination')
     if cfg['enabled'] or cfg['xpression_enabled']:
         address = ipaddress.IPv4Address(cfg['host'])
@@ -83,10 +86,48 @@ def encode_d1(camera_id, value):
     return bytes(packet)
 
 
+def interpolated_pose(history, cfg, now):
+    """Interpolate measured channels at one past time. Never predict future motion.
+
+    Entries contain (raw, head reply time, lens reply time). The separate clocks
+    avoid treating the sequential lens request as simultaneous with the head.
+    The caller holds the engine lock and checks freshness/configuration first.
+    """
+    target = now - cfg['interpolation_delay']
+    if len(history) < 2:
+        return None, 'Buffering'
+    values = {}
+    holding = False
+    for keys, clock in ((('pan', 'tilt'), 1), (('zoom', 'focus'), 2)):
+        if target < history[0][clock]:
+            return None, 'Buffering'
+        if target > history[-1][clock]:
+            values.update({key: history[-1][0][key] for key in keys})
+            holding = True
+            continue
+        for left, right in zip(history, history[1:]):
+            if left[clock] <= target <= right[clock]:
+                span = right[clock] - left[clock]
+                if span <= 0 or span > cfg['stale_seconds']:
+                    return None, 'Buffering'
+                fraction = (target - left[clock]) / span
+                for key in keys:
+                    values[key] = left[0][key] + fraction * (right[0][key] - left[0][key])
+                break
+        if any(key not in values for key in keys):
+            return None, 'Buffering'
+    # Interpolate native encoder counts before wrapping pan into FreeD angles.
+    # Physical encoder limits are not a circular 16-bit counter.
+    for key in ('zoom', 'focus'):
+        values[key] = round(values[key])
+    return pose(values, cfg), 'Holding Latest' if holding else 'Interpolating'
+
+
 class Tracking:
     def __init__(self, engine):
         self.engine=engine
         self.samples={}
+        self.history={}
         for cid,c in engine.cameras.items():
             c['tracking_status']=dict(state='Disabled', packets=0, samples=0, error=None,
                                       measured_hz=None, age_seconds=None)
@@ -104,7 +145,8 @@ class Tracking:
             with e.lock: cfg=copy.deepcopy(settings(c['config']))
             if not (cfg['enabled'] or cfg['xpression_enabled']):
                 with e.lock:
-                    self.samples.pop(cid,None);c['tracking_status'].update(state='Disabled',error=None,age_seconds=None)
+                    self.samples.pop(cid,None);self.history.pop(cid,None)
+                    c['tracking_status'].update(state='Disabled',error=None,age_seconds=None)
                 e.closed.wait(.2);previous=None;continue
             started=time.monotonic()
             try:
@@ -113,16 +155,26 @@ class Tracking:
                 measured=time.monotonic()
                 if e.closed.is_set():break
                 with c['io'].priority(15): zoom,focus,iris=parse_lens(c['driver'].send('#LPI'))
+                lens_measured=time.monotonic()
                 with e.lock:
                     if cfg==settings(c['config']):
+                        old=self.samples.get(cid)
+                        if not old or old[0]!=cfg or measured-old[2]>cfg['stale_seconds']:
+                            self.history[cid]=[]
                         self.samples[cid]=(cfg,dict(pan=pan,tilt=tilt,zoom=zoom,focus=focus,iris=iris),measured)
+                        history=self.history.setdefault(cid,[])
+                        history.append((self.samples[cid][1],measured,lens_measured))
+                        # Retain more than the maximum delay and stale interval.
+                        while len(history)>2 and (len(history)>128 or history[1][1]<measured-8):
+                            history.pop(0)
                         c['tracking_status'].update(state='Measured',error=None,raw=dict(self.samples[cid][1]),
                             samples=c['tracking_status']['samples']+1,
                             measured_hz=None if previous is None else round(1/max(.001,measured-previous),2))
                         previous=measured
             except Exception as exc:
                 with e.lock:
-                    self.samples.pop(cid,None);c['tracking_status'].update(state='Read Error',error=str(exc),age_seconds=None)
+                    self.samples.pop(cid,None);self.history.pop(cid,None)
+                    c['tracking_status'].update(state='Read Error',error=str(exc),age_seconds=None)
                 previous=None
             e.closed.wait(max(.01,1/cfg['sample_rate']-(time.monotonic()-started)))
 
@@ -137,14 +189,20 @@ class Tracking:
                     if sample:
                         age=time.monotonic()-sample[2];c['tracking_status']['age_seconds']=round(age,3)
                         if age>cfg['stale_seconds']:
+                            self.history.pop(cid,None)
                             c['tracking_status']['state']='Stale';sample=None
                     if sample:
                         try:
-                            packet=encode_d1(cfg['camera_id'],pose(sample[1],cfg))
-                            # Hold the lock through send to prevent an old destination after disable/save.
-                            for enabled,port in [('enabled','port'),('xpression_enabled','xpression_port')]:
-                                if cfg[enabled]:udp.sendto(packet,(cfg['host'],cfg[port]));c['tracking_status']['packets']+=1
-                            c['tracking_status'].update(state='Sending',error=None)
+                            value=pose(sample[1],cfg);state='Sending'
+                            if cfg['interpolation_enabled']:
+                                value,state=interpolated_pose(self.history.get(cid,[]),cfg,time.monotonic())
+                            c['tracking_status'].update(state=state,error=None,
+                                interpolation_delay_seconds=cfg['interpolation_delay'] if cfg['interpolation_enabled'] else 0)
+                            if value is not None:
+                                packet=encode_d1(cfg['camera_id'],value)
+                                # Hold the lock through send to prevent an old destination after disable/save.
+                                for enabled,port in [('enabled','port'),('xpression_enabled','xpression_port')]:
+                                    if cfg[enabled]:udp.sendto(packet,(cfg['host'],cfg[port]));c['tracking_status']['packets']+=1
                         except Exception as exc:
                             c['tracking_status'].update(state='Output Error',error=str(exc))
                 e.closed.wait(1/cfg['rate'])

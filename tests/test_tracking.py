@@ -10,7 +10,7 @@ import sys
 from backend.core import Engine
 from backend.runtime import Runtime
 from backend.server import validate_config
-from backend.tracking import Tracking, settings, parse_pan_tilt, parse_lens, pose, encode_d1
+from backend.tracking import Tracking, settings, parse_pan_tilt, parse_lens, pose, encode_d1, interpolated_pose
 
 
 def config(**tracking):
@@ -19,6 +19,63 @@ def config(**tracking):
 
 
 class TrackingTests(unittest.TestCase):
+    def test_interpolation_uses_separate_head_and_lens_clocks_without_prediction(self):
+        cfg=settings({});cfg.update(interpolation_enabled=True,interpolation_delay=.75)
+        first=dict(pan=32768,tilt=32768,zoom=1500,focus=2000)
+        last=dict(pan=32868,tilt=32668,zoom=2500,focus=3000)
+        history=[(first,10,10.2),(last,10.5,10.7)]
+        value,state=interpolated_pose(history,cfg,11.1) # target 10.35
+        self.assertEqual(state,'Interpolating')
+        self.assertAlmostEqual(value['pan'],.5775)
+        self.assertAlmostEqual(value['tilt'],.5775)
+        self.assertEqual(value['zoom'],1800)
+        self.assertEqual(value['focus'],2300)
+        self.assertEqual(len(encode_d1(1,value)),29)
+        value,state=interpolated_pose(history,cfg,12)
+        self.assertEqual(state,'Holding Latest')
+        self.assertEqual(value,pose(last,cfg))
+        self.assertEqual(interpolated_pose(history[:1],cfg,11.1),(None,'Buffering'))
+        self.assertEqual(interpolated_pose(history,cfg,10.8),(None,'Buffering'))
+
+    def test_interpolation_handles_pan_angle_wrap_and_rejects_feedback_gaps(self):
+        cfg=settings({});cfg.update(pan_zero=0,degrees_per_count=.01,interpolation_delay=.5)
+        a=dict(pan=17900,tilt=32768,zoom=1500,focus=2000)
+        b=dict(a,pan=18100)
+        value,state=interpolated_pose([(a,10,10),(b,11,11)],cfg,11)
+        self.assertEqual(state,'Interpolating');self.assertAlmostEqual(value['pan'],-180)
+        self.assertEqual(interpolated_pose([(a,10,10),(b,12,12)],cfg,11.5),(None,'Buffering'))
+
+    def test_interpolated_udp_stops_when_stale_and_configuration_changes(self):
+        with tempfile.TemporaryDirectory() as folder, socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as udp:
+            udp.bind(('127.0.0.1',0));udp.settimeout(.5)
+            e=Engine(config(enabled=True,host='127.0.0.1',port=udp.getsockname()[1],
+                            interpolation_enabled=True,interpolation_delay=.25,stale_seconds=.5),folder)
+            manager=Tracking(e);c=e.cameras['cam'];cfg=settings(c['config']);now=time.monotonic()
+            a=dict(pan=32768,tilt=32768,zoom=1500,focus=2000)
+            b=dict(a,pan=32868)
+            manager.samples['cam']=(cfg,b,now)
+            manager.history['cam']=[(a,now-.4,now-.4),(b,now,now)]
+            t=threading.Thread(target=manager.transmit,args=('cam',));t.start()
+            try:
+                packet=udp.recv(100)
+                pan=int.from_bytes(packet[2:5],'big',signed=True)/32768
+                self.assertGreater(pan,0);self.assertLess(pan,.825)
+                with e.lock:c['config']['tracking_output']['interpolation_delay']=.3
+                udp.setblocking(False)
+                while True:
+                    try:udp.recv(100)
+                    except BlockingIOError:break
+                udp.settimeout(.12)
+                with self.assertRaises(socket.timeout):udp.recv(100)
+                with e.lock:
+                    c['config']['tracking_output']['interpolation_delay']=.25
+                    manager.samples['cam']=(cfg,b,time.monotonic()-1)
+                time.sleep(.05)
+                with self.assertRaises(socket.timeout):udp.recv(100)
+                self.assertEqual(c['tracking_status']['state'],'Stale')
+                self.assertNotIn('cam',manager.history)
+            finally:e.closed.set();t.join(2)
+
     @unittest.skipUnless(sys.platform=='win32' and pathlib.Path('C:/Program Files/XPressionStudio/net/xpression.net.dll').exists(),'Requires the locally installed Ross SDK')
     def test_xpression_adapter_compiles_and_decodes_independent_golden_packet(self):
         source=pathlib.Path(__file__).resolve().parents[1]/'deployment/xpression/CameraBridgeTracking.cs'
@@ -65,7 +122,9 @@ if($null -ne [CameraBridgeTracking]::LensFov($points,999)){throw 'extrapolation 
         config();config(enabled=True,host='127.0.0.1',camera_id=9)
         for fields in (dict(enabled=True),dict(rate=0),dict(sample_rate=10),dict(rate=True),dict(stale_seconds=float('nan')),
                        dict(enabled=True,host='0.0.0.0'),dict(enabled=True,host='239.1.2.3'),
-                       dict(enabled=True,xpression_enabled=True,host='127.0.0.1',xpression_port=40000)):
+                       dict(enabled=True,xpression_enabled=True,host='127.0.0.1',xpression_port=40000),
+                       dict(interpolation_enabled=1),dict(interpolation_delay=0),dict(interpolation_delay=float('nan')),
+                       dict(interpolation_enabled=True,interpolation_delay=1.5)):
             with self.assertRaises(ValueError):config(**fields)
         for model in ('AW-HE2','AG-CX350','Other'):
             c=config();c['cameras'][0].update(model=model,tracking_output=dict(enabled=True,host='127.0.0.1'))

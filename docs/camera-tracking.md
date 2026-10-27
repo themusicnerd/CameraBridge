@@ -16,7 +16,8 @@ XPression does not receive this stream directly.
 - The default requested measurement rate is 2 Hz. Camera traffic can reduce this rate.
 - Panasonic requests keep the existing 130 ms minimum interval. Control and stop requests have priority.
 - The default output rate is 50 packets per second. These packets repeat the last measurement.
-- Repeated packets do not supply new measurements or frame synchronization.
+- Buffered interpolation can supply intermediate positions between measurements.
+- Interpolation adds delay. It does not supply new measurements or frame synchronization.
 - The default stale limit is 1.5 seconds. Output stops when the pan measurement exceeds this age.
 - A failed or invalid head or lens query stops output until a complete valid sample is available.
 - FreeD has no delivery acknowledgement. A packet count confirms transmission, not reception.
@@ -24,6 +25,42 @@ XPression does not receive this stream directly.
 This output is experimental. Use it for static shots and slow test moves first.
 Fast moves can cause a visible delay or a stepped overlay.
 Do not use this CGI feedback as a substitute for a synchronized tracking system.
+
+## Set buffered interpolation
+
+This option is off by default. Existing camera outputs keep their previous behavior.
+It applies to FreeD and the XPression adapter stream.
+
+1. Open **Virtual Camera Tracking** in the camera row.
+2. Set **Interpolation Delay (Seconds)** to 0.75 for the first test.
+3. Keep the stale limit greater than the interpolation delay.
+4. Enable **Buffered Interpolation Enabled**.
+5. Wait for **All Changes Saved**.
+6. Check for **Interpolating** in the tracking status.
+7. Match the camera video delay to the rendered tracking.
+8. Check the audio timing against the delayed picture.
+9. Test starts, stops, reversals, tilt, and zoom before a live overlay.
+
+The buffer uses monotonic timestamps from head and lens replies separately.
+These timestamps are receipt times, not camera exposure timestamps.
+The output uses linear interpolation of native encoder counts at a delayed time.
+The pan angle wraps only after interpolation. Lens values are rounded to encoder counts.
+No velocity prediction or extrapolation is applied.
+Interpolation cannot reconstruct acceleration or a reversal between two measurements.
+
+**Buffering** means the buffer does not yet cover the requested time for both head and lens.
+No packets are sent in that state.
+**Holding Latest** means the requested time is newer than the latest measurement for at least one channel.
+The affected channel holds its last measured value. Increase the buffer delay if this happens repeatedly.
+An output delay longer than the source interval usually provides room for interpolation.
+Camera traffic and network delay can require a larger buffer.
+
+A read error clears the buffer and stops output.
+Stale feedback also clears the buffer and stops output.
+Configuration changes discard the previous sample sequence.
+Stopping output does not remove a graphic from the receiver. Provide an independent graphics removal control.
+
+For an event preparation procedure, read [Unreal live logo workflow](unreal-live-logo.md).
 
 ## Set the output
 
