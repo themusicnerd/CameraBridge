@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Rebuild the ICMS crest with smooth vector geometry, brass detail, and blue and red paint.
+- Add 2x GPU supersampling for smoother crest edges in the NDI output.
 - Increase ICMS browser preview quality and add selectable preview resolution with explicit output dimensions.
 - Show current ICMS input, processing, and output rates instead of startup averages.
 - Add an Unreal 5.6 editor workflow for the ICMS crest and live camera graphics.
