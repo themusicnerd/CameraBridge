@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reduce the collapsed TouchDrive toolbar button height to keep the DashBoard menu clear.
 - Allow horizontal dragging of the collapsed TouchDrive toolbar button and remember its position.
 - Move the TouchDrive launcher bar, system readings, and show/hide arrow to the top of the touchscreen.
 - Move Unreal rendering, NDI compositing, client assets, and renderer tests into the independent SWVirtualProduction repository.
