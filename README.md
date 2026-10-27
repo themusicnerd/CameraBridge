@@ -1,11 +1,14 @@
 # CameraBridge
 
 CameraBridge connects native Ross DashBoard panels to one camera control service.
+This repository contains camera control, tracking configuration, and tracking-data output.
+Unreal rendering, NDI compositing, and client scene content are in the separate private [SWVirtualProduction repository](https://github.com/themusicnerd/SWVirtualProduction).
+CameraBridge sends FreeD to that renderer. It does not require the Unreal project to run.
 New installations start with an empty camera list.
 Use the [quick-start guide](docs/quick-start.md) for cameras, Carbonite, TouchDrive, panel installation, and tally.
 The [Panasonic catalog](docs/panasonic-models.md) includes AW-HE2 and model-specific control limits.
 
-**Version 0.3.0rc23 is a development release.**
+**Version 0.3.0rc24 is a development release.**
 
 Select **Open Video Calibration** in the tray for NDI, RTSP, and Magewell USB capture.
 Read the [video calibration guide](docs/video-calibration.md) for checkerboard captures and optical lens profiles.

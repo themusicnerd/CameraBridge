@@ -2,15 +2,9 @@
 
 ## Unreleased
 
-- Rebuild the ICMS crest with smooth vector geometry, brass detail, and blue and red paint.
-- Add 2x GPU supersampling for smoother crest edges in the NDI output.
-- Increase ICMS browser preview quality and add selectable preview resolution with explicit output dimensions.
-- Show current ICMS input, processing, and output rates instead of startup averages.
-- Add an Unreal 5.6 editor workflow for the ICMS crest and live camera graphics.
-- Add a local FreeD receiver, measured lens mapping, bounded video delay, and NDI output controls.
-- Add full composite, premultiplied fill/key, and straight-alpha graphics output modes.
-- Remove graphics on stale tracking and output black when camera video is lost.
-- Supply project preparation, launch controls, crest source meshes, and an operator guide.
+- Move Unreal rendering, NDI compositing, client assets, and renderer tests into the independent SWVirtualProduction repository.
+- Keep camera control, tracking calibration, FreeD output, and XPression tracking output in CameraBridge.
+- Link to the separate renderer installation and operator procedures.
 
 
 ## 0.3.0rc24

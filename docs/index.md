@@ -1,6 +1,6 @@
 # Documentation index
 
-This manual describes CameraBridge 0.2.0rc3.
+This manual describes the CameraBridge development release.
 Read the feature table before you connect a physical camera.
 
 | Task | Document |
@@ -11,8 +11,7 @@ Read the feature table before you connect a physical camera.
 | Add, remove and number cameras | [Camera setup](camera-setup.md) |
 | Set up Sony camera control | [Sony PXW-Z200](sony-pxw-z200.md) |
 | Set up camera tally | [Tally lights](tally.md) |
-| Run the ICMS graphics project | [ICMS operator](unreal-operator.md) |
-| Prepare a tracked Unreal logo | [Unreal live logo workflow](unreal-live-logo.md) |
+| Render tracked client graphics | [SWVirtualProduction](https://github.com/themusicnerd/SWVirtualProduction) |
 | Set addresses and camera profiles | [Configuration](configuration.md) |
 | Open the web interface from a TouchDrive | [TouchDrive host](touchdrive-panel-host.md) |
 | Read implementation and test status | [Feature table](feature-matrix.md) |

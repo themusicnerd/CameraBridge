@@ -60,7 +60,7 @@ Stale feedback also clears the buffer and stops output.
 Configuration changes discard the previous sample sequence.
 Stopping output does not remove a graphic from the receiver. Provide an independent graphics removal control.
 
-For an event preparation procedure, read [Unreal live logo workflow](unreal-live-logo.md).
+For client scenes and NDI compositing, use the separate [SWVirtualProduction project](https://github.com/themusicnerd/SWVirtualProduction).
 
 ## Set the output
 
