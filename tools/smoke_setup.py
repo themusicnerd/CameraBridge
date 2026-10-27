@@ -63,6 +63,17 @@ def main():
                 assert len(api('api/config',token=token)['cameras'][0]['tracking_calibration']['lens_points'])==2
                 with page.expect_download() as received:guide.get_by_role('button',name='Export XPression Lens CSV',exact=True).click()
                 assert '1365,90' in pathlib.Path(received.value.path()).read_text()
+                from tests.test_calibration_video import optical_fixture
+                optical=optical_fixture();optical['width']=1920;optical['height']=1080
+                optical['camera_matrix']=[[1425.0,0,960.0],[0,1417.5,540.0],[0,0,1]]
+                optical_bundle=dict(format='CameraBridgeOpticalCalibration',version=1,model='AW-HE130',lens=dict(version=1,name='Optical Test Lens',model='AW-HE130',video_width=1920,video_height=1080,lens_points=[],optical_solutions=[optical]))
+                previous_head=api('api/config',token=token)['cameras'][0]['tracking_output']
+                guide.locator('input[type=file]').set_input_files(dict(name='optical.json',mimeType='application/json',buffer=json.dumps(optical_bundle).encode()))
+                expect(guide.get_by_text('Image-Based Optical Calibration',exact=True)).to_be_visible()
+                expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                merged=api('api/config',token=token)['cameras'][0]
+                assert len(merged['tracking_calibration']['lens_points'])==2 and len(merged['tracking_calibration']['optical_solutions'])==1
+                assert merged['tracking_output']==previous_head
                 if args.screenshots:page.screenshot(path=str(args.screenshots/'CameraBridge-Calibration-Guide.png'),full_page=True)
                 guide.locator(':scope > summary').click()
                 tracking.locator(':scope > summary').click()

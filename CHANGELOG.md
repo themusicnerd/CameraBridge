@@ -1,5 +1,17 @@
 # Change record
 
+## 0.3.0rc22
+
+- Add a local video calibration workstation to the tray and console.
+- Receive NDI through the installed runtime.
+- Receive RTSP and Magewell USB capture through an external FFmpeg executable.
+- Show source selection, requested USB capture dimensions, and live preview.
+- Capture checkerboard views at native resolution and solve pinhole lens intrinsics and distortion.
+- Reject stale frames, repeated views, and unconstrained flat-view batches.
+- Export optical profiles and save linked camera results to CameraBridge.
+- Preserve head, receiver, and camera-number settings when importing optical-only results.
+- Prefer solved field of view in exported XPression lens tables.
+
 ## 0.3.0rc21
 
 - Add stationary encoder capture and reference-direction capture.

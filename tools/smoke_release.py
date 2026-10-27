@@ -14,6 +14,8 @@ def free_port():
 def main():
     p=argparse.ArgumentParser();p.add_argument('executable');a=p.parse_args();exe=str(pathlib.Path(a.executable).resolve())
     subprocess.run([exe,'--version'],check=True)
+    video=subprocess.run([exe,'calibration','--check-dependencies'],capture_output=True,text=True,check=True,timeout=30)
+    assert json.loads(video.stdout)['opencv'] and json.loads(video.stdout)['numpy']
     with tempfile.TemporaryDirectory() as tmp:
         root=pathlib.Path(tmp);config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'tests/fixtures/cameras-lab.json').read_text(encoding='utf-8'))
         ports=set()

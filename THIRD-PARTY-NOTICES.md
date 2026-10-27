@@ -45,3 +45,16 @@ The module uses the MIT license, copyright 2018 Bitfocus AS.
 Read the [included license](docs/third-party/bitfocus-panasonic-MIT.txt).
 CameraBridge implements its own Python transport and control logic.
 The reference project is [companion-module-panasonic-ptz](https://github.com/bitfocus/companion-module-panasonic-ptz).
+## Video calibration components
+
+Native packages include NumPy and OpenCV Python wheels.
+Their license files and included-component notices are copied to the package `licenses` directory.
+OpenCV wheel notices include the third-party components supplied in that wheel.
+
+The NDI receive integration uses the installed NDI runtime.
+CameraBridge does not include NDI runtime binaries or SDK files.
+Install the applicable runtime from the NDI provider.
+
+RTSP and USB capture use a separately installed FFmpeg executable.
+CameraBridge does not redistribute that executable.
+The selected FFmpeg build remains subject to its own license terms.

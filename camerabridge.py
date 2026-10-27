@@ -32,6 +32,9 @@ def main():
         args=args[1:];sys.argv=[sys.argv[0]]+args
     if args and args[0]=='--version':
         print('CameraBridge '+tomllib.loads((ROOT/'pyproject.toml').read_text(encoding='utf-8'))['project']['version']);return
+    if args and args[0]=='calibration':
+        from backend.calibration_workstation import main as calibration
+        sys.argv=[sys.argv[0]]+args[1:];calibration();return
     if args and args[0]=='panels':
         p=argparse.ArgumentParser(description='Export native DashBoard panels and local logo files.')
         p.add_argument('--output',required=True);a=p.parse_args(args[1:]);export_panels(a.output);return
@@ -46,7 +49,7 @@ def main():
     if args and args[0] in commands:
         import importlib
         module=importlib.import_module(commands[args[0]]);sys.argv=[sys.argv[0]]+args[1:];module.main();return
-    if '--help' in args or '-h' in args:print('Desktop: --tray. Console service: --serve. Commands: panels, panel-host, ross-relay, diagnostic.\n')
+    if '--help' in args or '-h' in args:print('Desktop: --tray. Console service: --serve. Commands: panels, panel-host, ross-relay, diagnostic, calibration.\n')
     from backend.server import main as serve
     serve()
 

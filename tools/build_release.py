@@ -66,7 +66,7 @@ collection = COLLECT(gui, cli, a.binaries, a.datas, strip=False, upx=False, name
     if python_license.is_file():
         (bundle/'licenses/Python').mkdir(parents=True,exist_ok=True)
         shutil.copy2(python_license,bundle/'licenses/Python/LICENSE.txt')
-    for package in ('pyinstaller','PySide6-Essentials','shiboken6'):
+    for package in ('pyinstaller','PySide6-Essentials','shiboken6','numpy','opencv-python-headless'):
         distribution=importlib.metadata.distribution(package)
         for file in distribution.files or []:
             if 'licenses' not in file.parts:continue
@@ -74,6 +74,10 @@ collection = COLLECT(gui, cli, a.binaries, a.datas, strip=False, upx=False, name
             if source.is_file():
                 target=bundle/'licenses'/package/pathlib.Path(*file.parts[file.parts.index('licenses')+1:])
                 target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
+    import cv2
+    for source in pathlib.Path(cv2.__file__).parent.glob('LICENSE*'):
+        target=bundle/'licenses/opencv-python-headless'/source.name
+        target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
     (bundle/'BUILD.json').write_text(json.dumps(dict(version=version,target=a.target,python=platform.python_version(),
         os=platform.platform(),signed=False,hardware_accepted=False),indent=2)+'\n',encoding='utf-8')
     output=ROOT/'release';output.mkdir(exist_ok=True);stem='CameraBridge-'+version+'-'+a.target

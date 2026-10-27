@@ -26,7 +26,7 @@ def camera_icon():
 class ControlPanel(QWidget):
     def __init__(self,storage,auto_start=True,create_tray=True):
         super().__init__();self.storage=pathlib.Path(storage);self.storage.mkdir(parents=True,exist_ok=True)
-        self.settings=DesktopSettings.load(storage);self.quitting=False;self.restart_pending=False;self.tray=None
+        self.settings=DesktopSettings.load(storage);self.quitting=False;self.restart_pending=False;self.tray=None;self.calibration_workstation=None
         self.running_settings=None;self.service=QProcess(self);self.service.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.service.readyReadStandardOutput.connect(self.read_log);self.service.finished.connect(self.service_finished)
         self.stop_timer=QTimer(self);self.stop_timer.setSingleShot(True);self.stop_timer.setInterval(20000);self.stop_timer.timeout.connect(self.force_stop)
@@ -48,6 +48,7 @@ class ControlPanel(QWidget):
         for text,callback in [('Save and Restart',self.apply),('Start',self.start_service),('Stop',self.stop_service),('Open Setup Page',self.open_web)]:
             b=QPushButton(text);b.setMinimumHeight(36);b.clicked.connect(callback);actions.addWidget(b)
         layout.addLayout(actions)
+        calibration_button=QPushButton('Open Video Calibration');calibration_button.clicked.connect(self.open_calibration);layout.addWidget(calibration_button)
         pending_button=QPushButton('Apply Saved Camera Setup');pending_button.clicked.connect(self.apply_pending);layout.addWidget(pending_button)
         account=QFormLayout();self.username=QLineEdit('admin');account.addRow('Local account',self.username)
         self.password=QLineEdit();self.password.setEchoMode(QLineEdit.EchoMode.Password);account.addRow('New password',self.password)
@@ -59,7 +60,7 @@ class ControlPanel(QWidget):
         if create_tray:
             self.tray=QSystemTrayIcon(camera_icon(),self);self.tray.setToolTip('CameraBridge - stopped')
             menu=QMenu(self)
-            for text,callback in [('Control Panel',self.show_panel),('Open Setup Page',self.open_web),('Start Service',self.start_service),('Stop Service',self.stop_service)]:
+            for text,callback in [('Control Panel',self.show_panel),('Open Setup Page',self.open_web),('Open Video Calibration',self.open_calibration),('Start Service',self.start_service),('Stop Service',self.stop_service)]:
                 action=QAction(text,self);action.triggered.connect(callback);menu.addAction(action)
             menu.addSeparator();action=QAction('Quit',self);action.triggered.connect(self.quit_app);menu.addAction(action)
             self.tray.setContextMenu(menu)
@@ -168,6 +169,15 @@ class ControlPanel(QWidget):
         settings=self.running_settings or self.settings
         if not QDesktopServices.openUrl(QUrl(settings.web_url())):self.message.setText('Open this address manually: '+settings.web_url())
 
+    def open_calibration(self):
+        try:
+            if self.calibration_workstation is None:
+                from .calibration_workstation import start
+                self.calibration_workstation=start()
+            url='http://127.0.0.1:'+str(self.calibration_workstation.server_address[1])+'/'
+            if not QDesktopServices.openUrl(QUrl(url)):self.message.setText('Open calibration at '+url)
+        except Exception as exc:self.message.setText('Cannot open video calibration: '+str(exc))
+
     def create_account(self):
         name=self.username.text().strip();password=self.password.text()
         if not name or not password or password!=self.repeat.text():self.message.setText('Enter an account name and matching non-empty passwords.');return
@@ -177,6 +187,10 @@ class ControlPanel(QWidget):
         auth.add(name,password,'admin');self.password.clear();self.repeat.clear();self.message.setText('Account saved. Start the service when ready.')
 
     def quit_app(self):
+        if self.calibration_workstation is not None:
+            try:self.calibration_workstation.close()
+            except Exception:pass
+            self.calibration_workstation=None
         self.quitting=True;self.restart_pending=False
         if self.service.state()!=QProcess.ProcessState.NotRunning:self.stop_service()
         else:
@@ -184,18 +198,24 @@ class ControlPanel(QWidget):
             QApplication.instance().quit()
 
 def main():
-    p=argparse.ArgumentParser(description='CameraBridge desktop tray application.');p.add_argument('--storage',default=str(default_storage()));a=p.parse_args(sys.argv[2:] if len(sys.argv)>1 and sys.argv[1]=='--tray' else sys.argv[1:])
+    p=argparse.ArgumentParser(description='CameraBridge desktop tray application.');p.add_argument('--storage',default=str(default_storage()));p.add_argument('--open-calibration',action='store_true');a=p.parse_args(sys.argv[2:] if len(sys.argv)>1 and sys.argv[1]=='--tray' else sys.argv[1:])
     app=QApplication(sys.argv);app.setApplicationName('CameraBridge');app.setQuitOnLastWindowClosed(False)
     name='CameraBridge-'+hashlib.sha256(str(pathlib.Path(a.storage).resolve()).encode()).hexdigest()[:20]
     socket=QLocalSocket();socket.connectToServer(name)
-    if socket.waitForConnected(300):socket.write(b'show');socket.flush();socket.waitForBytesWritten(300);return
+    if socket.waitForConnected(300):socket.write(b'calibration' if a.open_calibration else b'show');socket.flush();socket.waitForBytesWritten(300);return
     server=QLocalServer();server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption);QLocalServer.removeServer(name)
     if not server.listen(name):raise SystemExit('Cannot create the desktop control socket.')
     panel=ControlPanel(a.storage)
     def activate():
         connection=server.nextPendingConnection()
-        if connection:connection.close();connection.deleteLater()
-        panel.show_panel()
-    server.newConnection.connect(activate);panel.show_panel();app.exec();server.close()
+        command=b''
+        if connection:
+            if not connection.bytesAvailable():connection.waitForReadyRead(300)
+            command=bytes(connection.readAll());connection.close();connection.deleteLater()
+        if command==b'calibration':panel.open_calibration()
+        else:panel.show_panel()
+    server.newConnection.connect(activate);panel.show_panel()
+    if a.open_calibration:QTimer.singleShot(0,panel.open_calibration)
+    app.exec();server.close()
 
 if __name__=='__main__':main()

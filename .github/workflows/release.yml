@@ -54,6 +54,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install video calibration dependencies
+        run: python -m pip install -r requirements-video.txt
       - name: Test source and documents
         run: |
           python dashboard/build_panels.py
@@ -79,6 +81,7 @@ jobs:
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
           python tools/smoke_setup.py
+          python tools/smoke_calibration_workstation.py
           python tools/smoke_sony_dashboard.py
       - name: Install build tools
         run: python -m pip install -r requirements-build.txt

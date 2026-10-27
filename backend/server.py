@@ -244,7 +244,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send({'error':'Cross-origin request denied'},403);return
         try:
             length=int(self.headers.get('Content-Length','0'))
-            if not 0<length<=65536:raise ValueError('Request body must be 1..65536 bytes')
+            if not 0<length<=1048576:raise ValueError('Request body must be 1..1048576 bytes')
             raw=self.rfile.read(length).decode('utf-8')
             if self.headers.get('Content-Type','').startswith('application/x-www-form-urlencoded') or raw.startswith('request='):
                 data=json.loads(parse_qs(raw)['request'][0])

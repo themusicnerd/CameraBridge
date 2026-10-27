@@ -4,6 +4,10 @@ This procedure saves a camera reference direction and a measured-target lens tab
 The table estimates horizontal field of view at a fixed focus setting.
 It is not an image-based distortion solve.
 
+For image-based calibration, use the [video workstation](video-calibration.md).
+It accepts NDI, RTSP, and Magewell USB capture, then solves checkerboard images with OpenCV.
+It can save optical results to the camera profile without changing the head or receiver settings.
+
 ## Prepare the camera
 
 1. Attach the camera to its fixed mount.
@@ -95,6 +99,10 @@ FreeD continues to transmit the native zoom and focus encoders.
 The calibration table does not change those wire values.
 
 ## Complete optical and timing calibration
+
+Use the video workstation to estimate image distortion and optical center from camera images.
+Use those results with the correct lens model in your renderer.
+Nodal offset and video timing still need separate calibration.
 
 1. Supply camera images to the rendering computer.
 2. Use a measured checkerboard or another supported calibration target.

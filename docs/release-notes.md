@@ -1,9 +1,11 @@
-# CameraBridge 0.3.0rc21
+# CameraBridge 0.3.0rc22
 
-This development release adds a guided calibration workflow. Capture stationary Panasonic head and lens feedback, save a reference direction, and measure a target to estimate lens field of view at multiple zoom positions.
+This development release adds a local video calibration workstation. Select Open Video Calibration in the CameraBridge tray on the computer that receives video.
 
-Save and restore camera profiles with JSON. Export lens tables for the Windows XPression adapter. Receiver addresses, ports, output switches, and camera numbers are preserved on import. Read docs/calibration.md before calibration.
+Choose NDI, RTSP, or USB Capture (Magewell). Capture at least 12 varied checkerboard views at a fixed lens setting. Inspect the optical solve and save tagged results to CameraBridge. Head calibration, camera numbers, receiver addresses, and output switches are preserved.
 
-The measured-target table is not a distortion solve or an Unreal Lens File. Optical center, distortion, nodal offset, focus dependence, and video timing still need image-based receiver calibration. CGI feedback does not provide frame synchronization.
+Native packages include NumPy and OpenCV. NDI requires an installed NDI runtime. RTSP and USB require an external FFmpeg executable. Read docs/video-calibration.md for setup.
+
+The optical solve covers pinhole intrinsics and five OpenCV distortion coefficients. Nodal offset, video timing, and renderer-specific lens integration remain separate steps. The JSON export is not an Unreal Lens File asset. XPression CSV export uses solved field of view but does not convert OpenCV distortion to XPression lens-correction parameters.
 
 Windows x64 and Linux x64 packages are included.
