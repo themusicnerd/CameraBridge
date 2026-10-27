@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Show current ICMS input, processing, and output rates instead of startup averages.
 - Add an Unreal 5.6 editor workflow for the ICMS crest and live camera graphics.
 - Add a local FreeD receiver, measured lens mapping, bounded video delay, and NDI output controls.
 - Add full composite, premultiplied fill/key, and straight-alpha graphics output modes.
