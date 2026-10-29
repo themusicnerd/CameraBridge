@@ -16,6 +16,7 @@ It does not implement every camera feature.
 | Red gain | `ORI:hhh`; hexadecimal 000 through 12C | `QRI` |
 | Blue gain | `OBI:hhh`; hexadecimal 000 through 12C | `QBI` |
 | White-balance mode | `OAW:n` | `QAW` |
+| VAR colour temperature | `OSD:B1:hhh`; model-specific index | `QSD:B1` |
 | Detail | `ODT:n`; 0 off, 1 on | `QDT` |
 | Shot recall | `#Rnn` | Physical completion is not queried |
 | Shot store | `#Mnn` | Physical completion is not queried |
@@ -30,6 +31,22 @@ Shot numbers 1 through 100 map to wire numbers 00 through 99.
 Red and blue gain value 150 is the reference value.
 The panel displays that reference as zero.
 White-balance query values 2 and 3 map to control values 1 and 2.
+
+## VAR White Balance
+
+1. Select the camera.
+2. Open Paint in the native panel, or expand the camera row in web setup.
+3. Select VAR / Kelvin.
+4. Wait for confirmed VAR feedback.
+5. Enter the colour temperature in Kelvin.
+6. Check the confirmed camera readback.
+
+HE130 accepts 2000 through 15000 K through a nonlinear table of 121 settings.
+HE40 accepts 2400 through 9900 K in steps of 100 K.
+CameraBridge uses the nearest supported setting and reports the actual value.
+The transmitted value is a camera table index, not a Kelvin number.
+Kelvin entry is disabled outside VAR mode.
+HE2 does not have VAR or adjustable Kelvin control in its documented white-balance command set.
 
 Manual iris and focus changes require fresh confirmed manual mode.
 Red and blue changes require a fresh supported manual white-balance memory.

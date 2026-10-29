@@ -173,7 +173,8 @@ function jog(pan,tilt,zoom,focus) {
     cbMotionHeld=cbMotionIntent;pumpMotion();
 }
 function whiteBalance(mode) {
-    if(cbCapabilities.pan_tilt_type=='digital' &amp;&amp; mode&gt;0)mode--;
+    if(mode==9 &amp;&amp; (!cbAllowed.wb_mode || cbAllowed.wb_mode.indexOf(9)&lt;0)){status('VAR White Balance Is Unavailable On This Camera');return;}
+    if(cbCapabilities.pan_tilt_type=='digital' &amp;&amp; (mode==2 || mode==3))mode--;
     send('write',{parameter:'wb_mode',value:mode},function(r){if(r)poll();});
 }
 function oneShot() {
@@ -220,7 +221,8 @@ function poll() {
         if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
         if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
-        ogscript.rename('connection',''+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        var endpoint=((r.ross||{}).endpoints||{})[c.id]||{};
+        ogscript.rename('connection','CAM '+c.number+' | '+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available')+(c.pivotcam?' | TCP '+(endpoint.port||'?')+' '+(endpoint.connected?'Connected':'Waiting')+' | Frames '+(endpoint.packets||0)+(endpoint.last_control?' | Last Control '+Math.round(new Date().getTime()/1000-endpoint.last_control)+'s Ago':' | No Control Received'):''));
         for(var n=0;n&lt;6;n++) {
             var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' - ')[0]:'';
             ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'-');
@@ -231,7 +233,7 @@ function poll() {
         if(CB_MANUFACTURER=='Panasonic') {
             cbPresetSpeeds=c.preset_speeds||{};
             ogscript.rename('shot_number_label','Shot Number (1 to '+(cbCapabilities.preset_max||100)+') / Name');
-            ogscript.rename('paint_help','Auto ATW follows the scene. Manual A / B hold white balance and allow gain adjustment.');
+            ogscript.rename('paint_help','ATW follows the scene. A / B hold white balance. VAR enables Kelvin entry; the camera uses its nearest supported value.');
             if(c.white_balance_once)ogscript.rename('awb_result','One Shot: '+c.white_balance_once.status+(c.white_balance_once.error?' | '+c.white_balance_once.error:' | completion not reported'));
             var active=c.active_preset||{};
             ogscript.rename('preset_feedback',active.number?'Shot '+active.number+' | Speed '+(active.speed||'Camera Default')+' | '+active.state:'No Shot Recalled');
@@ -276,7 +278,7 @@ function tick() {
     if(cbLastFeedback &amp;&amp; new Date().getTime()-cbLastFeedback&gt;4000)status('STALE - no bridge feedback for '+Math.round((new Date().getTime()-cbLastFeedback)/1000)+'s');
 }
 
-cbNumberFields={"speed": true, "iris": true, "zoom": true, "focus": true, "recall_speed": true, "shot_number": true, "red_gain": true, "blue_gain": true, "detail": true, "wb_mode": true};cbRangeFields={"iris": true, "zoom": true, "focus": true, "red_gain": true, "blue_gain": true, "detail": true, "wb_mode": true};</api>
+cbNumberFields={"speed": true, "iris": true, "zoom": true, "focus": true, "recall_speed": true, "shot_number": true, "red_gain": true, "blue_gain": true, "detail": true, "colour_temperature": true};cbRangeFields={"iris": true, "zoom": true, "focus": true, "red_gain": true, "blue_gain": true, "detail": true, "colour_temperature": true};</api>
   <meta>
     <params>
       <param oid="bridge" name="Backend URL" type="STRING" value="http://127.0.0.1:8088" widget="3" access="1" maxlength="256" />
@@ -304,6 +306,7 @@ cbNumberFields={"speed": true, "iris": true, "zoom": true, "focus": true, "recal
       <param oid="red_gain" name="RED GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
       <param oid="blue_gain" name="BLUE GAIN" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;300;-150;150;" />
       <param oid="wb_mode" name="WHITE BALANCE" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;9;" />
+      <param oid="colour_temperature" name="COLOUR TEMPERATURE" type="INT32" value="2000" access="0" constrainttype="INT_RANGE" constraint="2000;15000;" />
       <param oid="detail" name="DETAIL" type="INT32" value="0" access="0" constrainttype="INT_RANGE" constraint="0;1;" />
       <param oid="number_value" name="New Value" type="STRING" value="" access="1" widget="3" maxlength="24" />
       <param oid="number_title" name="number_title" type="STRING" value="Enter Value" access="1" widget="100" />
@@ -326,6 +329,7 @@ cbNumberFields={"speed": true, "iris": true, "zoom": true, "focus": true, "recal
   <ogscript handles="onchange" oid="red_gain" element="0">changed('red_gain');</ogscript>
   <ogscript handles="onchange" oid="blue_gain" element="0">changed('blue_gain');</ogscript>
   <ogscript handles="onchange" oid="wb_mode" element="0">changed('wb_mode');</ogscript>
+  <ogscript handles="onchange" oid="colour_temperature" element="0">changed('colour_temperature');</ogscript>
   <ogscript handles="onchange" oid="detail" element="0">changed('detail');</ogscript>
   <ogscript handles="onload">highlightPage('PTZ');poll();</ogscript>
   <ogscript handles="onclose">if(cbToken)request('command',{camera:selected(),action:'stop',data:{}},null);</ogscript>
@@ -584,7 +588,7 @@ cbNumberFields={"speed": true, "iris": true, "zoom": true, "focus": true, "recal
         </button>
         <label name="unknown · never read" left="16" top="462" width="176" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_detail" />
       </abs>
-      <abs left="700" top="12" width="474" height="246" style="bg#2c3037;bdr:line;bdr#383d45;">
+      <abs left="700" top="12" width="474" height="366" style="bg#2c3037;bdr:line;bdr#383d45;">
         <label name="WHITE BALANCE" left="16" top="10" width="442" height="28" style="fg#e2e4e9;size:17;txt-align:west;" />
         <button name="Auto ATW" left="16" top="48" width="138" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">whiteBalance(0);</task>
@@ -598,32 +602,37 @@ cbNumberFields={"speed": true, "iris": true, "zoom": true, "focus": true, "recal
         <button name="One Shot" left="16" top="106" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">oneShot();</task>
         </button>
-        <button id="number_entry_wb_mode" name="..." buttontype="push" left="244" top="106" width="214" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
-          <task tasktype="ogscript">numberOpen('wb_mode');</task>
+        <button name="VAR / Kelvin" left="244" top="106" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+          <task tasktype="ogscript">whiteBalance(9);</task>
         </button>
-        <label name="Range 0 to 9" left="244" top="156" width="214" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_wb_mode" />
-        <label name="unknown · never read" left="16" top="182" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_wb_mode" />
-        <label name="One Shot: Not Requested" left="16" top="216" width="442" height="26" style="fg#e2e4e9;size:12;txt-align:west;" id="awb_result" />
+        <label name="unknown · never read" left="16" top="160" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_wb_mode" />
+        <label name="Colour Temperature (K)" left="16" top="194" width="442" height="24" style="fg#e2e4e9;size:15;txt-align:west;" />
+        <button id="number_entry_colour_temperature" name="..." buttontype="push" left="16" top="222" width="442" height="48" style="bg#1b1e23;fg#ffffff;bdr:line;bdr#383d45;size:18;txt-align:center;">
+          <task tasktype="ogscript">numberOpen('colour_temperature');</task>
+        </button>
+        <label name="Range 2000 to 15000 K" left="16" top="274" width="442" height="22" style="fg#e2e4e9;size:12;txt-align:west;" id="range_colour_temperature" />
+        <label name="unknown · never read" left="16" top="296" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_colour_temperature" />
+        <label name="One Shot: Not Requested" left="16" top="332" width="442" height="26" style="fg#e2e4e9;size:12;txt-align:west;" id="awb_result" />
       </abs>
-      <abs left="700" top="270" width="474" height="116" style="bg#2c3037;bdr:line;bdr#383d45;">
-        <label name="IRIS MODE" left="16" top="4" width="442" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
-        <button name="Manual" left="16" top="34" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+      <abs left="700" top="390" width="230" height="116" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="IRIS MODE" left="12" top="4" width="206" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+        <button name="Manual" left="12" top="34" width="98" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">send('write',{parameter:'iris_auto',value:0},null);</task>
         </button>
-        <button name="Auto" left="244" top="34" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <button name="Auto" left="120" top="34" width="98" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">send('write',{parameter:'iris_auto',value:1},null);</task>
         </button>
-        <label name="unknown · never read" left="16" top="84" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_iris_auto" />
+        <label name="unknown · never read" left="12" top="84" width="206" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_iris_auto" />
       </abs>
-      <abs left="700" top="394" width="474" height="116" style="bg#2c3037;bdr:line;bdr#383d45;">
-        <label name="FOCUS MODE" left="16" top="4" width="442" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
-        <button name="Manual" left="16" top="34" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+      <abs left="944" top="390" width="230" height="116" style="bg#2c3037;bdr:line;bdr#383d45;">
+        <label name="FOCUS MODE" left="12" top="4" width="206" height="26" style="fg#e2e4e9;size:16;txt-align:west;" />
+        <button name="Manual" left="12" top="34" width="98" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">send('write',{parameter:'focus_auto',value:0},null);</task>
         </button>
-        <button name="Auto" left="244" top="34" width="214" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
+        <button name="Auto" left="120" top="34" width="98" height="48" buttontype="push" style="bg#494f5b;fg#ffffff;bdr:none;size:16;">
           <task tasktype="ogscript">send('write',{parameter:'focus_auto',value:1},null);</task>
         </button>
-        <label name="unknown · never read" left="16" top="84" width="442" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_focus_auto" />
+        <label name="unknown · never read" left="12" top="84" width="206" height="30" style="fg#a9bbc8;size:12;txt-align:west;" id="actual_focus_auto" />
       </abs>
       <label name="White balance values depend on the selected model." left="12" top="528" width="1162" height="30" style="fg#a9bbc8;size:13;txt-align:west;" id="paint_help" />
     </abs>

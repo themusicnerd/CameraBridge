@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.0rc25
+
+- Add Panasonic VAR white balance and Kelvin entry with confirmed camera readback.
+- Use model-specific temperature tables for HE130 and HE40.
+- Add Kelvin controls to CameraBridge web setup and native DashBoard panels.
+- Show each PIVOTCam connection, frame count, last control, and control result in web setup.
+- Reject duplicate active Panasonic camera addresses and ports.
+- Use fresh focus feedback for Carbonite inquiries without an extra camera request.
+- Release camera access during background polling and tracking pacing waits.
+
 - Move custom TouchDrive desktop tools into an independent private project.
 - Keep standard camera panels, control, and tracking in CameraBridge.
 

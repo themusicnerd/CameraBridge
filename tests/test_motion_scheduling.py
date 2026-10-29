@@ -3,14 +3,31 @@ import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock
 from backend.core import Engine
+from backend.tracking import Tracking
 from backend.ross import FixedCameraController,PivotCamServer
 from backend.scheduling import CameraAccess
 from backend.simulator import server as simulator
 from tests.test_system import wait_for
 
 class CameraAccessTests(unittest.TestCase):
+    def test_tracking_waits_for_pacing_without_holding_camera_access(self):
+        waiting=threading.Event();ready=time.monotonic()+.25
+        def delay():
+            waiting.set();return max(0,ready-time.monotonic())
+        sent=[]
+        camera={'io':CameraAccess(),'driver':SimpleNamespace(pacing_delay=delay,send=lambda cmd:sent.append(time.monotonic()) or 'reply')}
+        engine=SimpleNamespace(closed=threading.Event(),cameras={})
+        tracking=Tracking(engine);result=[]
+        thread=threading.Thread(target=lambda:result.append(tracking.query(camera,'#APC')))
+        thread.start();self.assertTrue(waiting.wait(1))
+        started=time.monotonic()
+        with camera['io'].priority(-10):self.assertLess(time.monotonic()-started,.08)
+        thread.join(1);self.assertFalse(thread.is_alive())
+        self.assertEqual(result,['reply']);self.assertGreaterEqual(sent[0],ready)
+
     def test_stop_precedes_motion_and_poll_and_access_is_reentrant(self):
         access=CameraAccess();order=[];threads=[]
         def take(priority,label):

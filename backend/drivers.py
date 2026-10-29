@@ -37,13 +37,16 @@ class Panasonic:
         return {'supported':name in self.supported,'writable':name in self.supported,
                 'display_divisor':self.capabilities['gain_display_divisor'] if name in ('red_gain','blue_gain') else 1}
 
+    def pacing_delay(self):
+        return max(0,0.13-(time.monotonic()-self.last))
+
     def send(self, command, response=True):
         started=time.monotonic()
         record('camera-request',target=self.url,command=command)
         with self.lock:
             record('camera-lock',command=command,wait_ms=round((time.monotonic()-started)*1000,3))
             # Panasonic recommends a minimum 130ms between requests to one camera.
-            delay = 0.13 - (time.monotonic() - self.last)
+            delay = self.pacing_delay()
             if delay > 0:
                 time.sleep(delay)
             endpoint = 'aw_ptz' if command.startswith('#') else 'aw_cam'

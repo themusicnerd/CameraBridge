@@ -173,7 +173,8 @@ function jog(pan,tilt,zoom,focus) {
     cbMotionHeld=cbMotionIntent;pumpMotion();
 }
 function whiteBalance(mode) {
-    if(cbCapabilities.pan_tilt_type=='digital' &amp;&amp; mode&gt;0)mode--;
+    if(mode==9 &amp;&amp; (!cbAllowed.wb_mode || cbAllowed.wb_mode.indexOf(9)&lt;0)){status('VAR White Balance Is Unavailable On This Camera');return;}
+    if(cbCapabilities.pan_tilt_type=='digital' &amp;&amp; (mode==2 || mode==3))mode--;
     send('write',{parameter:'wb_mode',value:mode},function(r){if(r)poll();});
 }
 function oneShot() {
@@ -220,7 +221,8 @@ function poll() {
         if(!c &amp;&amp; cbCameras.length){c=cbCameras[0];cbIndex=0;cbEpoch++;cbPending={};cbTouchEnabled=false;params.setAccess('camera',1);params.setValue('camera',0,c.id);params.setAccess('camera',0);if(CB_MANUFACTURER!='Marshall')ogscript.rename('touch_enable','Touch control DISABLED');}
         if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
-        ogscript.rename('connection',''+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available'));
+        var endpoint=((r.ross||{}).endpoints||{})[c.id]||{};
+        ogscript.rename('connection','CAM '+c.number+' | '+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available')+(c.pivotcam?' | TCP '+(endpoint.port||'?')+' '+(endpoint.connected?'Connected':'Waiting')+' | Frames '+(endpoint.packets||0)+(endpoint.last_control?' | Last Control '+Math.round(new Date().getTime()/1000-endpoint.last_control)+'s Ago':' | No Control Received'):''));
         for(var n=0;n&lt;6;n++) {
             var caption=n&lt;cbCameras.length?String(cbCameras[n].name).split(' - ')[0]:'';
             ogscript.rename('camera_pick_'+n,n&lt;cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'-');
@@ -231,7 +233,7 @@ function poll() {
         if(CB_MANUFACTURER=='Panasonic') {
             cbPresetSpeeds=c.preset_speeds||{};
             ogscript.rename('shot_number_label','Shot Number (1 to '+(cbCapabilities.preset_max||100)+') / Name');
-            ogscript.rename('paint_help','Auto ATW follows the scene. Manual A / B hold white balance and allow gain adjustment.');
+            ogscript.rename('paint_help','ATW follows the scene. A / B hold white balance. VAR enables Kelvin entry; the camera uses its nearest supported value.');
             if(c.white_balance_once)ogscript.rename('awb_result','One Shot: '+c.white_balance_once.status+(c.white_balance_once.error?' | '+c.white_balance_once.error:' | completion not reported'));
             var active=c.active_preset||{};
             ogscript.rename('preset_feedback',active.number?'Shot '+active.number+' | Speed '+(active.speed||'Camera Default')+' | '+active.state:'No Shot Recalled');

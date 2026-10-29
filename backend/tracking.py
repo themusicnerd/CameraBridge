@@ -138,6 +138,16 @@ class Tracking:
                 t=threading.Thread(target=target,args=(cid,),daemon=True,name='tracking-'+target.__name__+'-'+cid)
                 self.engine.threads.append(t);t.start()
 
+    def query(self,c,command):
+        while not self.engine.closed.is_set():
+            with c['io'].priority(15):
+                delay=getattr(c['driver'],'pacing_delay',lambda:0)()
+                if delay<=0:return c['driver'].send(command)
+            # Leave access available to control while the camera's minimum
+            # request interval expires. Recheck after any intervening command.
+            if self.engine.closed.wait(min(delay,.03)):break
+        raise RuntimeError('Tracking stopped')
+
     def sample(self,cid):
         e=self.engine;c=e.cameras[cid]
         previous=None
@@ -151,10 +161,10 @@ class Tracking:
             started=time.monotonic()
             try:
                 # Release access after each request. Stop and movement have priority.
-                with c['io'].priority(15): pan,tilt=parse_pan_tilt(c['driver'].send('#APC'))
+                pan,tilt=parse_pan_tilt(self.query(c,'#APC'))
                 measured=time.monotonic()
                 if e.closed.is_set():break
-                with c['io'].priority(15): zoom,focus,iris=parse_lens(c['driver'].send('#LPI'))
+                zoom,focus,iris=parse_lens(self.query(c,'#LPI'))
                 lens_measured=time.monotonic()
                 with e.lock:
                     if cfg==settings(c['config']):

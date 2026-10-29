@@ -44,6 +44,24 @@ class RossLabTests(unittest.TestCase):
         epoch=self.follower.epoch;camera=self.follower.selected
         self.follower.apply_motion(camera,'pan_tilt',{'pan':0,'tilt':0},epoch,time.monotonic())
         self.follower.apply_motion(camera,'zoom',{'zoom':0},epoch,time.monotonic())
+
+    def test_focus_query_uses_fresh_feedback_without_waiting_for_camera_io(self):
+        controller=FixedCameraController(self.engine,'p1')
+        service=PivotCamServer(('127.0.0.1',0),self.engine,'p1',controller,'127.0.0.1')
+        threading.Thread(target=service.serve_forever,daemon=True).start()
+        try:
+            with self.engine.cameras['p1']['io']:
+                with self.engine.lock:
+                    self.engine.cameras['p1']['params']['focus_auto'].update(value=1,confirmation='confirmed',last_query=time.time())
+                with socket.create_connection(service.server_address,timeout=.5) as client:
+                    client.sendall(bytes.fromhex('81 09 04 38 FF'))
+                    self.assertEqual(client.recv(4),bytes.fromhex('90 50 02 FF'))
+                    endpoint=self.engine.snapshot()['ross']['endpoints']['p1']
+                    self.assertTrue(endpoint['connected']);self.assertEqual(endpoint['port'],service.server_address[1])
+                    self.assertEqual(endpoint['packets'],1)
+                    controller.update_status()
+                    self.assertTrue(self.engine.snapshot()['ross']['endpoints']['p1']['connected'])
+        finally:service.shutdown();service.server_close()
     def test_preset_only_handover_and_stale_motion(self):
         result=self.follower.bus_event('preset','p1');epoch=result['epoch'];self.neutral()
         self.follower.apply_motion('p1','pan_tilt',{'pan':20,'tilt':10},epoch,time.monotonic())

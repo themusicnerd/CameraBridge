@@ -1,6 +1,7 @@
 """AW-HE130 protocol subset. See docs/panasonic-aw-he130.md for provenance."""
 from dataclasses import dataclass, asdict, replace
 import re
+from .panasonic_temperature import HE130_KELVIN, HE40_KELVIN
 
 @dataclass(frozen=True)
 class Parameter:
@@ -17,6 +18,11 @@ class Parameter:
     modes: tuple = ()
     dependency: str = ''
     allowed: tuple = ()
+    wire_values: tuple = ()
+
+    def snap(self, value):
+        self.validate(value)
+        return min(self.wire_values, key=lambda candidate: abs(candidate-value)) if self.wire_values else value
 
     def validate(self, value):
         if type(value) is not int or not self.low <= value <= self.high:
@@ -27,17 +33,22 @@ class Parameter:
 
     def encode(self, value):
         self.validate(value)
+        if self.wire_values:value = self.wire_values.index(self.snap(value))
         return self.write + (f'{value:0{self.width}X}' if self.base == 16 else f'{value:0{self.width}d}')
 
     def decode(self, response):
         pattern = re.escape(self.reply) + ('[0-9A-Fa-f]' if self.base == 16 else '[0-9]') + '{' + str(self.width) + '}'
         if not re.fullmatch(pattern, response):
             raise ValueError(f'{self.id}: malformed query reply')
-        return self.validate(int(response[len(self.reply):], self.base))
+        value = int(response[len(self.reply):], self.base)
+        if self.wire_values:
+            if value >= len(self.wire_values):raise ValueError(f'{self.id}: invalid temperature index')
+            value = self.wire_values[value]
+        return self.validate(value)
 
     def metadata(self):
         data = asdict(self)
-        for key in ('write','query','reply','width','base'):
+        for key in ('write','query','reply','width','base','wire_values'):
             data.pop(key)
         return dict(data, writable=True, readback=True)
 
@@ -52,6 +63,7 @@ PANASONIC = {
         Parameter('red_gain','Red gain (150 = reference)',0,300,'ORI:','QRI','ORI:',3,dependency='wb_mode=2,3'),
         Parameter('blue_gain','Blue gain (150 = reference)',0,300,'OBI:','QBI','OBI:',3,dependency='wb_mode=2,3'),
         Parameter('wb_mode','WB: ATW 0 / A 2 / B 3 / 3200K 4 / 5600K 5 / VAR 9',0,9,'OAW:','QAW','OAW:',1,10,allowed=(0,2,3,4,5,9)),
+        Parameter('colour_temperature','Colour Temperature (K)',2000,15000,'OSD:B1:','QSD:B1','OSD:B1:',3,16,units='K',dependency='wb_mode=9',wire_values=HE130_KELVIN),
         Parameter('detail','Detail: 0 off / 1 on',0,1,'ODT:','QDT','ODT:',1,10),
     ]
 }
@@ -62,6 +74,8 @@ def panasonic_parameters(model='AW-HE130'):
     from .panasonic_models import MODELS
     if model not in MODELS:raise ValueError('Unknown Panasonic model profile')
     result=dict(PANASONIC)
+    if MODELS[model] in ('HE40','HE42','UE70'):
+        result['colour_temperature']=replace(result['colour_temperature'],low=2400,high=9900,wire_values=HE40_KELVIN)
     if MODELS[model] in ('HE40','HE42','UE70','HE50','HE60','HE120'):
         result['detail']=replace(result['detail'],label='Detail: 0 off / 1 low / 2 high',high=2)
     if MODELS[model] in ('HE40','HE42','UE70','HE50','HE60'):

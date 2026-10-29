@@ -108,7 +108,7 @@ def validate_config(c):
     ipaddress.ip_address(c.get('bind','127.0.0.1'))
     if not 1024<=c.get('port',8088)<=65535:raise ValueError('Invalid port')
     if not 1<=c.get('poll_seconds',4)<=60:raise ValueError('Poll interval must be 1..60 seconds')
-    ids=set();numbers=set()
+    ids=set();numbers=set();endpoints={}
     for index,camera in enumerate(c['cameras'],1):
         cid=camera['id']
         if not isinstance(cid,str) or not cid.isascii() or not cid.replace('_','').isalnum() or cid in ids:raise ValueError('Invalid or duplicate camera ID')
@@ -130,6 +130,10 @@ def validate_config(c):
             if camera['driver']=='marshall-pending' and camera.get('model') not in ('CV226','CV228'):raise ValueError('Unknown Marshall profile')
         if camera['driver']=='marshall-lab' and not camera.get('simulator'):raise ValueError('Marshall lab must be labelled simulator')
         if camera['driver']=='panasonic' and camera['model'] not in PANASONIC_MODELS:raise ValueError('Unknown Panasonic model profile')
+        if camera['driver']=='panasonic' and camera.get('enabled',True) and not camera.get('simulator'):
+            endpoint=(str(camera.get('host','')).lower(),camera.get('port',80))
+            if endpoint[0] and endpoint in endpoints:raise ValueError('Camera address and port already used by camera '+str(endpoints[endpoint]))
+            endpoints[endpoint]=number
         if camera['driver']=='panasonic' and camera.get('simulator') and camera['model']!='AW-HE130':raise ValueError('The Panasonic simulator uses the HE130 profile')
         if camera['driver']=='panasonic-serial':
             from .panasonic_serial import MODEL
@@ -220,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/':self.send((ROOT/'web/admin.html').read_bytes(),mime='text/html; charset=utf-8');return
         if path=='/sony':self.send((ROOT/'web/sony.html').read_bytes(),mime='text/html; charset=utf-8');return
         if path=='/help':self.send((ROOT/'web/help.html').read_bytes(),mime='text/html; charset=utf-8');return
-        if path in ('/setup.js','/setup.css'):
+        if path in ('/setup.js','/setup.css','/panasonic-white-balance.js'):
             self.send((ROOT/'web'/path[1:]).read_bytes(),mime='application/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8');return
         if path in ('/assets/camerabridge.svg','/assets/ross.png'):
             self.send((ROOT/'dashboard/assets'/path.rsplit('/',1)[-1]).read_bytes(),mime='image/svg+xml' if path.endswith('.svg') else 'image/png');return

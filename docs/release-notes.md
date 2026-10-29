@@ -1,17 +1,19 @@
-# CameraBridge 0.3.0rc24
+# CameraBridge 0.3.0rc25
 
-This development release adds optional buffered interpolation for FreeD and XPression tracking output.
-Enable Buffered Interpolation Enabled in Virtual Camera Tracking. Set the delay in seconds.
-Existing outputs keep interpolation off until you enable it.
+This development release adds Panasonic VAR white balance and Kelvin entry.
+Use Paint in CameraBridge.grid, or expand the camera row in the web setup page.
+Select VAR / Kelvin, wait for confirmed feedback, then enter the colour temperature.
 
-The converter timestamps head and lens replies separately and interpolates measured encoder counts.
-It does not predict future movement. Stale feedback and read errors clear the buffer and stop output.
-The setup page reports Buffering, Interpolating, and Holding Latest states.
+HE130 supports 2000 through 15000 K through a camera-specific lookup table.
+HE40 supports 2400 through 9900 K in steps of 100 K.
+The bridge uses the nearest supported value and checks the camera readback.
+HE2 retains its documented white-balance modes and does not offer VAR Kelvin entry.
 
-Start with a 0.75-second buffer for testing. Match the video delay and check audio timing.
-Interpolation does not add source measurements or exposure synchronization.
-Read docs/unreal-live-logo.md for the HE130 to Unreal live logo workflow and the remaining venue checks.
+PIVOTCam feedback now reports the connection, frame count, and last camera control result.
+Duplicate active Panasonic camera endpoints are rejected during setup.
+Background polling and tracking release camera access during pacing waits.
+Fresh focus feedback answers Carbonite inquiries without an extra camera request.
 
-The crest mesh, Unreal Lens File integration, and complete broadcast signal path still need preparation and rehearsal.
+Read the [Panasonic guide](panasonic-aw-he130.md) for commands and operating limits.
 
 Windows x64 and Linux x64 packages are included.

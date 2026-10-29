@@ -145,8 +145,8 @@ class FixedCameraController(PresetFollower):
         if self.selected is None:return
         with self.engine.lock:
             endpoints=self.engine.ross_status.setdefault('endpoints',{})
-            endpoints[self.selected]={'number':self.engine.cameras[self.selected]['config'].get('number'),
-                'neutral_ready':True,'selection':'fixed endpoint'}
+            endpoints.setdefault(self.selected,{}).update(number=self.engine.cameras[self.selected]['config'].get('number'),
+                neutral_ready=True,selection='fixed endpoint')
             self.engine.ross_status.update(state='Configured PIVOTCam endpoints — equipment acceptance pending',preset_follow='fixed camera per TCP port')
 
 class LabViscaServer(socketserver.ThreadingTCPServer):
@@ -164,6 +164,8 @@ class LabViscaServer(socketserver.ThreadingTCPServer):
         self.active=0
         self.stopping=threading.Event();self.clients=set();self.client_condition=threading.Condition()
         super().__init__(address,ViscaHandler)
+        with engine.lock:
+            engine.ross_status.setdefault('endpoints',{}).setdefault(camera,{}).update(port=self.server_address[1],connected=False)
 
     def server_close(self):
         self.stopping.set()
@@ -187,11 +189,18 @@ class PivotCamServer(LabViscaServer):
         return client_address[0]==self.controller and not self.stopping.is_set()
 
 class ViscaHandler(socketserver.BaseRequestHandler):
+    def endpoint_update(self, **values):
+        with self.server.engine.lock:
+            endpoint=self.server.engine.ross_status.setdefault('endpoints',{}).setdefault(self.server.camera,{})
+            endpoint.update(values)
+
     def handle(self):
         if not self.server.slots.acquire(False):return
         with self.server.client_condition:
             self.server.active+=1;self.server.clients.add(self.request)
         self.request.settimeout(.2)
+        self.request.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,1)
+        self.endpoint_update(connected=True,port=self.server.server_address[1],peer=self.client_address[0],connected_at=time.time())
         queue=collections.deque();condition=threading.Condition();alive=threading.Event();alive.set()
         def read():
             buffer=bytearray()
@@ -206,6 +215,11 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                         try:kind,data=decode(frame)
                         except (ValueError,IndexError):kind,data='invalid',{}
                         stamp=time.monotonic()
+                        with self.server.engine.lock:
+                            endpoint=self.server.engine.ross_status['endpoints'][self.server.camera]
+                            endpoint.update(packets=endpoint.get('packets',0)+1,last_packet=time.time(),last_kind=kind)
+                            if kind in ('pan_tilt','zoom','focus','preset'):
+                                endpoint.update(last_control=time.time(),last_control_kind=kind)
                         record('pivot-rx',camera=self.server.camera,peer=self.client_address[0],port=self.server.server_address[1],hex=frame.hex(' '),kind=kind,decoded=data,received=stamp)
                         with condition:
                             # Coalesce motion only after the last non-motion barrier.
@@ -244,7 +258,12 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                         self.server.engine.event(self.server.camera,'visca-lab-initialized',command=kind);continue
                     if kind=='focus_query':
                         c=self.server.engine.cameras[self.server.camera]
-                        with c['io']:value=c['driver'].query('focus_auto')
+                        with self.server.engine.lock:cached=dict(c['params']['focus_auto'])
+                        if cached['confirmation']=='confirmed' and cached['last_query'] and time.time()-cached['last_query']<10:
+                            value=cached['value']
+                        else:
+                            with c['io'].priority(10):value=c['driver'].query('focus_auto')
+                        if value is None:raise ViscaError('Focus mode query unavailable on this camera',0x02)
                         with self.server.engine.lock:c['params']['focus_auto'].update(value=value,last_query=time.time(),confirmation='confirmed')
                         auto=value==1 if c['config']['driver']=='sony-sdk' else bool(value)
                         self.request.sendall(bytes([0x90,0x50,2 if auto else 3,0xff]));continue
@@ -265,19 +284,24 @@ class ViscaHandler(socketserver.BaseRequestHandler):
                         self.server.follower.recalled[self.server.camera]=data['number']
                     self.request.sendall(bytes.fromhex('90 41 FF 90 51 FF'))
                     record('pivot-accepted',camera=self.server.camera,kind=kind,total_ms=round((time.monotonic()-received)*1000,3))
+                    self.endpoint_update(last_control_result='accepted',last_control_ms=round((time.monotonic()-received)*1000,1))
                     self.server.engine.event(self.server.camera,'visca-lab-accepted',command=kind)
                 except ViscaError as exc:
+                    if kind in ('pan_tilt','zoom','focus','preset'):self.endpoint_update(last_control_result='rejected: '+str(exc))
                     record('pivot-rejected',camera=self.server.camera,error=str(exc),code=exc.code)
                     self.request.sendall(bytes([0x90,0x60,exc.code,0xff]))
                 except (ValueError,PermissionError,KeyError) as exc:
+                    if kind in ('pan_tilt','zoom','focus','preset'):self.endpoint_update(last_control_result='rejected: '+str(exc))
                     record('pivot-rejected',camera=self.server.camera,error=str(exc),code=65)
                     self.request.sendall(bytes.fromhex('90 60 41 FF'))
                 except OSError as exc:
+                    self.endpoint_update(last_control_result='transport error: '+str(exc))
                     record('pivot-transport-error',camera=self.server.camera,error=str(exc))
                     break
                 finally:context(None)
         finally:
             alive.clear()
+            self.endpoint_update(connected=False,disconnected_at=time.time())
             # A dropped controller connection cannot leave its selected target moving.
             if self.server.follower.selected==self.server.camera:
                 try:self.server.follower.halt(self.server.camera)

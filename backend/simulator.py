@@ -32,10 +32,11 @@ class PanasonicModel:
             for name,p in PANASONIC.items():
                 if command==p.query:
                     v=self.values[name]
+                    if p.wire_values:v=p.wire_values.index(v)
                     return p.reply+(f'{v:0{p.width}X}' if p.base==16 else f'{v:0{p.width}d}')
             for name,p in PANASONIC.items():
                 if command.startswith(p.write) and len(command)==len(p.write)+p.width:
-                    v=int(command[len(p.write):],p.base)
+                    v=p.decode(command) if p.wire_values else int(command[len(p.write):],p.base)
                     if name=='wb_mode' and v in (1,2):v+=1
                     self.values[name]=p.validate(v)
                     return command[1:].replace('AX','ax',1) if command.startswith('#') else command

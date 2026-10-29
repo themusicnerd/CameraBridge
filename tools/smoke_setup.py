@@ -40,6 +40,14 @@ def main():
                 token=page.evaluate('localStorage.getItem("camerabridge-device-session")')
                 assert api('api/config',token=token)['cameras'][0]['name']=='Studio Camera'
                 expect(row.locator('[data-field=name]')).to_have_value('Studio Camera');assert row.get_attribute('open') is not None
+                wb=row.locator('.white-balance-controls')
+                expect(wb.locator('[data-wb-mode]')).to_be_enabled(timeout=15000)
+                expect(wb.locator('[data-wb-kelvin]')).to_be_disabled()
+                wb.locator('[data-wb-mode]').select_option('9')
+                expect(wb.locator('[data-wb-kelvin]')).to_be_enabled(timeout=15000)
+                wb.locator('[data-wb-kelvin]').fill('4500');wb.locator('[data-wb-kelvin]').press('Tab')
+                expect(wb.locator('[data-wb-kelvin]')).to_have_value('4520',timeout=15000)
+                expect(wb.locator('[data-wb-feedback]')).to_contain_text('4520 K | confirmed')
                 tracking=row.locator('.tracking-settings');tracking.locator(':scope > summary').click()
                 tracking.locator('[data-tracking=host]').fill('127.0.0.1');tracking.locator('[data-tracking=host]').press('Tab')
                 expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)

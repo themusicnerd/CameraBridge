@@ -140,6 +140,7 @@ class Engine:
                 return {'status':'name saved'}
             if action=='write':
                 key=data['parameter'];value=c['defs'][key].validate(data['value'])
+                if c['defs'][key].wire_values:value=c['defs'][key].snap(value)
                 if isinstance(c['driver'],Panasonic) and not c['driver'].metadata(key)['writable']:raise ValueError('Control unavailable in this camera profile')
                 if isinstance(c['driver'],Sony) and data.get('snap') is True:value=c['defs'][key].validate(c['driver'].snap(key,value))
                 self.check_mode(c,key)
@@ -294,6 +295,10 @@ class Engine:
                     if moving:
                         self.closed.wait(.03);continue
                     with c['io'].priority(10):
+                        # Wait between background requests without holding access
+                        # that a new positioner move or stop needs immediately.
+                        if isinstance(driver,Panasonic) and driver.pacing_delay()>0:
+                            next_poll=time.monotonic()+driver.pacing_delay();continue
                         # Motion may have started while this poll waited. Never
                         # sleep with camera access held, or poll ahead of a jog.
                         with self.lock:moving=c['moving']
