@@ -229,7 +229,7 @@ function poll() {
         if(!c){status('No enabled '+CB_MANUFACTURER+' cameras; add one in CameraBridge setup');return;}
         ogscript.rename('identity',c.name+' | '+c.model+' | input '+c.carbonite_input);
         var endpoint=((r.ross||{}).endpoints||{})[c.id]||{};
-        ogscript.rename('connection','CAM '+c.number+' | '+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available')+(c.pivotcam?' | TCP '+(endpoint.port||'?')+' '+(endpoint.connected?'Connected':'Waiting')+' | Frames '+(endpoint.packets||0)+(endpoint.last_control?' | Last Control '+Math.round(new Date().getTime()/1000-endpoint.last_control)+'s Ago':' | No Control Received'):''));
+        ogscript.rename('connection','CAM '+c.number+' | '+c.health+' | '+(c.host || c.gateway || '')+' | '+(c.locked?'LOCKED':'Available')+(c.pivotcam?' | TCP '+(endpoint.port||'?')+' '+(endpoint.connected?'Connected':'Waiting')+' | Frames '+(endpoint.packets||0)+(endpoint.last_control?' | Last Control '+Math.round(r.time-endpoint.last_control)+'s Ago':' | No Control Received'):''));
         for(var n=0;n<6;n++) {
             var caption=n<cbCameras.length?String(cbCameras[n].name).split(' - ')[0]:'';
             ogscript.rename('camera_pick_'+n,n<cbCameras.length?'CAM '+(cbCameras[n].number || (n+1))+'\n'+caption.slice(0,12):'-');

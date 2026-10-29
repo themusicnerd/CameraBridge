@@ -1,4 +1,4 @@
-# CameraBridge 0.3.0rc25
+# CameraBridge 0.3.0rc26
 
 This development release adds Panasonic VAR white balance and Kelvin entry.
 Use Paint in CameraBridge.grid, or expand the camera row in the web setup page.
@@ -12,6 +12,7 @@ HE2 retains its documented white-balance modes and does not offer VAR Kelvin ent
 PIVOTCam feedback now reports the connection, frame count, and last camera control result.
 Duplicate active Panasonic camera endpoints are rejected during setup.
 Background polling and tracking release camera access during pacing waits.
+Their queue positions are retained so feedback cannot be starved by tracking queries.
 Fresh focus feedback answers Carbonite inquiries without an extra camera request.
 
 Read the [Panasonic guide](panasonic-aw-he130.md) for commands and operating limits.

@@ -1,6 +1,7 @@
 """Reentrant camera access with FIFO ordering within each priority."""
 from contextlib import contextmanager
 import threading
+import time
 
 class CameraAccess:
     def __init__(self):
@@ -11,7 +12,7 @@ class CameraAccess:
         self.sequence=0
 
     @contextmanager
-    def priority(self,priority=0):
+    def priority(self,priority=0,ready_at=None):
         ident=threading.get_ident()
         with self.condition:
             if self.owner==ident:
@@ -21,11 +22,16 @@ class CameraAccess:
                 ticket=(priority,self.sequence)
                 self.waiters.append(ticket)
                 try:
-                    self.condition.wait_for(lambda:self.owner is None and ticket==min(self.waiters))
+                    while True:
+                        eligible=self.owner is None and ticket==min(self.waiters)
+                        delay=max(0,ready_at()-time.monotonic()) if eligible and ready_at is not None else 0
+                        if eligible and delay<=0:break
+                        self.condition.wait(delay if eligible and delay>0 else None)
                     self.owner=ident
                     self.depth=1
                 finally:
                     self.waiters.remove(ticket)
+                    self.condition.notify_all()
         try:
             yield self
         finally:

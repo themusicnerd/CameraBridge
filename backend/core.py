@@ -1,5 +1,6 @@
 """Central state, exclusive camera ownership, write coalescing and motion watchdog."""
 import collections
+import copy
 import json
 import pathlib
 import threading
@@ -103,7 +104,7 @@ class Engine:
             tsl=dict(self.tsl)
             tsl['age_seconds']=None if tsl['last_packet'] is None else max(0,now-tsl['last_packet'])
             tsl['state']='disabled' if not tsl['enabled'] else 'not listening' if not tsl['listening'] else 'waiting' if tsl['last_packet'] is None else 'receiving' if tsl['age_seconds']<=10 else 'stale'
-            return {'revision':self.revision,'time':now,'cameras':result,'ross':dict(self.ross_status),'tsl':tsl,'events':list(self.events)}
+            return {'revision':self.revision,'time':now,'cameras':result,'ross':copy.deepcopy(self.ross_status),'tsl':tsl,'events':list(self.events)}
 
     def claim(self,c,owner):
         if not isinstance(owner,str) or not 1<=len(owner)<=100:raise ValueError('Invalid owner')
@@ -294,11 +295,7 @@ class Engine:
                     with self.lock:moving=c['moving']
                     if moving:
                         self.closed.wait(.03);continue
-                    with c['io'].priority(10):
-                        # Wait between background requests without holding access
-                        # that a new positioner move or stop needs immediately.
-                        if isinstance(driver,Panasonic) and driver.pacing_delay()>0:
-                            next_poll=time.monotonic()+driver.pacing_delay();continue
+                    with c['io'].priority(10,ready_at=driver.ready_at if isinstance(driver,Panasonic) else None):
                         # Motion may have started while this poll waited. Never
                         # sleep with camera access held, or poll ahead of a jog.
                         with self.lock:moving=c['moving']

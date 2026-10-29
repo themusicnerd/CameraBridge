@@ -38,7 +38,10 @@ class Panasonic:
                 'display_divisor':self.capabilities['gain_display_divisor'] if name in ('red_gain','blue_gain') else 1}
 
     def pacing_delay(self):
-        return max(0,0.13-(time.monotonic()-self.last))
+        return max(0,self.ready_at()-time.monotonic())
+
+    def ready_at(self):
+        return self.last+0.13
 
     def send(self, command, response=True):
         started=time.monotonic()

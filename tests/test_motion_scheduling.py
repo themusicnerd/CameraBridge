@@ -9,16 +9,33 @@ from backend.core import Engine
 from backend.tracking import Tracking
 from backend.ross import FixedCameraController,PivotCamServer
 from backend.scheduling import CameraAccess
-from backend.simulator import server as simulator
+from backend.simulator import server as simulator, PanasonicModel
 from tests.test_system import wait_for
 
 class CameraAccessTests(unittest.TestCase):
+    def test_feedback_completes_repeatedly_under_continuous_tracking_load(self):
+        with tempfile.TemporaryDirectory() as folder:
+            configuration={'poll_seconds':1,'cameras':[dict(id='p',number=1,manufacturer='Panasonic',model='AW-HE130',driver='panasonic',host='127.0.0.1',tracking_output={'enabled':True,'host':'127.0.0.1','sample_rate':3})]}
+            engine=Engine(configuration,folder);camera=engine.cameras['p'];driver=camera['driver'];model=PanasonicModel()
+            def send(command):
+                time.sleep(driver.pacing_delay());time.sleep(.055)
+                reply='aPC80008000' if command=='#APC' else 'lPI777777777' if command=='#LPI' else model.command(command)
+                driver.last=time.monotonic();return reply
+            driver.send=send
+            engine.start()
+            try:
+                wait_for(lambda:all(p['confirmation']=='confirmed' for p in camera['params'].values()),timeout=12)
+                first_round=time.time()
+                wait_for(lambda:all(p['last_query']>first_round for p in camera['params'].values()),timeout=12)
+                self.assertGreater(camera['tracking_status']['samples'],2)
+            finally:engine.close()
+
     def test_tracking_waits_for_pacing_without_holding_camera_access(self):
         waiting=threading.Event();ready=time.monotonic()+.25
-        def delay():
-            waiting.set();return max(0,ready-time.monotonic())
+        def ready_at():
+            waiting.set();return ready
         sent=[]
-        camera={'io':CameraAccess(),'driver':SimpleNamespace(pacing_delay=delay,send=lambda cmd:sent.append(time.monotonic()) or 'reply')}
+        camera={'io':CameraAccess(),'driver':SimpleNamespace(ready_at=ready_at,send=lambda cmd:sent.append(time.monotonic()) or 'reply')}
         engine=SimpleNamespace(closed=threading.Event(),cameras={})
         tracking=Tracking(engine);result=[]
         thread=threading.Thread(target=lambda:result.append(tracking.query(camera,'#APC')))
@@ -27,6 +44,20 @@ class CameraAccessTests(unittest.TestCase):
         with camera['io'].priority(-10):self.assertLess(time.monotonic()-started,.08)
         thread.join(1);self.assertFalse(thread.is_alive())
         self.assertEqual(result,['reply']);self.assertGreaterEqual(sent[0],ready)
+
+    def test_pacing_preserves_feedback_priority_and_admits_new_motion(self):
+        access=CameraAccess();order=[];ready=time.monotonic()+.12;threads=[]
+        def take(priority,label,when=None):
+            with access.priority(priority,ready_at=when):order.append(label)
+        with access:
+            for priority,label in ((15,'tracking'),(10,'feedback')):
+                t=threading.Thread(target=take,args=(priority,label,lambda:ready));t.start();threads.append(t)
+            wait_for(lambda:len(access.waiters)==2)
+        started=time.monotonic()
+        with access.priority(-10):order.append('motion')
+        self.assertLess(time.monotonic()-started,.06)
+        for t in threads:t.join(1);self.assertFalse(t.is_alive())
+        self.assertEqual(order,['motion','feedback','tracking'])
 
     def test_stop_precedes_motion_and_poll_and_access_is_reentrant(self):
         access=CameraAccess();order=[];threads=[]

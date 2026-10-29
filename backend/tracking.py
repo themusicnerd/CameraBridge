@@ -139,14 +139,9 @@ class Tracking:
                 self.engine.threads.append(t);t.start()
 
     def query(self,c,command):
-        while not self.engine.closed.is_set():
-            with c['io'].priority(15):
-                delay=getattr(c['driver'],'pacing_delay',lambda:0)()
-                if delay<=0:return c['driver'].send(command)
-            # Leave access available to control while the camera's minimum
-            # request interval expires. Recheck after any intervening command.
-            if self.engine.closed.wait(min(delay,.03)):break
-        raise RuntimeError('Tracking stopped')
+        with c['io'].priority(15,ready_at=getattr(c['driver'],'ready_at',None)):
+            if self.engine.closed.is_set():raise RuntimeError('Tracking stopped')
+            return c['driver'].send(command)
 
     def sample(self,cid):
         e=self.engine;c=e.cameras[cid]

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0rc26
+
+- Preserve background request priority while waiting for the camera request interval.
+- Prevent tracking queries from starving paint and lens feedback.
+- Calculate endpoint ages from the service clock for remote computers.
+- Copy endpoint state before API serialization to avoid concurrent changes.
+
 ## 0.3.0rc25
 
 - Add Panasonic VAR white balance and Kelvin entry with confirmed camera readback.
