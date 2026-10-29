@@ -10,7 +10,7 @@ New installations start with an empty camera list.
 Use the [quick-start guide](docs/quick-start.md) for cameras, Carbonite, TouchDrive, panel installation, and tally.
 The [Panasonic catalog](docs/panasonic-models.md) includes AW-HE2 and model-specific control limits.
 
-**Version 0.3.0rc26 is a development release.**
+**Version 0.3.0rc27 is a development release.**
 
 Select **Open Video Calibration** in the tray for NDI, RTSP, and Magewell USB capture.
 Read the [video calibration guide](docs/video-calibration.md) for checkerboard captures and optical lens profiles.

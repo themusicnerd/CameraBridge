@@ -4,3 +4,5 @@
 .sony-logo,summary img[alt="Sony"],summary img[alt="Marshall"]{filter:none!important;mix-blend-mode:screen}.camera-row[data-tally=program] .section-body{background:#3d292f}.camera-row[data-tally=preview] .section-body{background:#25382f}
 
 .calibration-guide>div{padding:0 14px 14px}.calibration-guide table{width:100%;border-collapse:collapse;margin-top:16px}.calibration-guide th,.calibration-guide td{text-align:left;padding:10px;border-bottom:1px solid #555d6c}
+
+.camera-order{display:flex;gap:6px;flex-shrink:0}.camera-order button{min-width:46px;padding:6px;font-size:24px}

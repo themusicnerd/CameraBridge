@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.0rc27
+
+- Add automatically saved up/down camera ordering in web setup.
+- Preserve camera numbers, PIVOTCam ports, and Carbonite inputs while reordering.
+- Apply display-order changes without restarting camera control connections.
+
 ## 0.3.0rc26
 
 - Preserve background request priority while waiting for the camera request interval.

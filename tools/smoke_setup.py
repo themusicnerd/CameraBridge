@@ -104,6 +104,22 @@ def main():
                 process.communicate('quit\n',timeout=20);assert process.returncode==0;process=start();ready();page.reload();expect(page.locator('#login')).to_be_hidden();expect(page.locator('#savestatus')).to_have_text('All Changes Saved')
                 page.locator('#addcamera').click();new=page.locator('#roster > details').last;new.locator('[data-field=enabled]').uncheck();new.locator('[data-field=manufacturer]').select_option('Sony');expect(new.locator('[data-field=model]')).to_have_value('PXW-Z200');new.locator('[data-field=manufacturer]').select_option('Panasonic');new.locator('[data-field=model]').select_option('AW-HE2');new.locator('[data-field=host]').fill('192.0.2.42');new.locator('[data-field=host]').press('Tab');expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
                 assert api('api/config',token=token)['cameras'][1]['model']=='AW-HE2'
+                original_order=api('api/config',token=token)['cameras']
+                new=page.locator('#camera-'+original_order[-1]['id'])
+                original_open=row.get_attribute('open')
+                new.locator('summary').get_by_role('button',name='Move Camera Up').click()
+                expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                reordered=api('api/config',token=token)['cameras']
+                assert [c['id'] for c in reordered]==[c['id'] for c in reversed(original_order)]
+                assert [(c['id'],c['number'],c['carbonite_input']) for c in reordered]==[(c['id'],c['number'],c['carbonite_input']) for c in reversed(original_order)]
+                assert row.get_attribute('open')==original_open and new.get_attribute('open') is not None
+                expect(new.locator('summary').get_by_role('button',name='Move Camera Up')).to_be_disabled()
+                page.reload();expect(page.locator('#savestatus')).to_have_text('All Changes Saved')
+                expect(page.locator('#roster > details').first).to_have_attribute('id','camera-'+reordered[0]['id'])
+                new=page.locator('#camera-'+reordered[0]['id']);new.locator(':scope > summary').click()
+                new.locator('summary').get_by_role('button',name='Move Camera Down').click()
+                expect(page.locator('#savestatus')).to_have_text('All Changes Saved',timeout=20000)
+                assert [c['id'] for c in api('api/config',token=token)['cameras']]==[c['id'] for c in original_order]
                 new.locator('[data-field=model]').select_option('AK-HC1800G + AW-PH360N')
                 expect(new.locator('[data-field=host]').locator('..')).to_contain_text('USR Gateway IP')
                 expect(new.locator('[data-field=port]').locator('..')).to_contain_text('Gateway TCP Port')

@@ -45,3 +45,13 @@ Camera lamp feedback is separate from the received TSL indicators.
 An unknown lamp state is not shown as Off.
 
 See [Panasonic model details](panasonic-models.md), [Sony access](sony-pxw-z200.md), and [tally](tally.md).
+
+## Change the Camera Order
+
+1. Open camera setup in the web interface.
+2. Select the up or down arrow in a camera row.
+3. Wait for All Changes Saved.
+
+The display order is saved for all clients and remains after a restart.
+Camera numbers, PIVOTCam ports, and Carbonite inputs stay with each camera.
+Control connections remain active while the display order changes.

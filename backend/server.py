@@ -224,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/':self.send((ROOT/'web/admin.html').read_bytes(),mime='text/html; charset=utf-8');return
         if path=='/sony':self.send((ROOT/'web/sony.html').read_bytes(),mime='text/html; charset=utf-8');return
         if path=='/help':self.send((ROOT/'web/help.html').read_bytes(),mime='text/html; charset=utf-8');return
-        if path in ('/setup.js','/setup.css','/panasonic-white-balance.js'):
+        if path in ('/setup.js','/setup.css','/panasonic-white-balance.js','/camera-order.js'):
             self.send((ROOT/'web'/path[1:]).read_bytes(),mime='application/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8');return
         if path in ('/assets/camerabridge.svg','/assets/ross.png'):
             self.send((ROOT/'dashboard/assets'/path.rsplit('/',1)[-1]).read_bytes(),mime='image/svg+xml' if path.endswith('.svg') else 'image/png');return

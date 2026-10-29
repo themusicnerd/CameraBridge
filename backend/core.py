@@ -89,7 +89,10 @@ class Engine:
         now=time.time()
         with self.lock:
             result=[]
-            for cid,c in self.cameras.items():
+            for configuration in self.config['cameras']:
+                cid=configuration['id']
+                if cid not in self.cameras:continue
+                c=self.cameras[cid]
                 parameters={}
                 for key,v in c['params'].items():
                     age=None if v['last_query'] is None else now-v['last_query']

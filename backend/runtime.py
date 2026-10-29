@@ -10,6 +10,7 @@ class Runtime:
         result.pop('authentication_enabled',None)
         for camera in result['cameras']:
             for key in ('name','carbonite_input','tally_address','tally_enabled','tracking_output','tracking_calibration'):camera.pop(key,None)
+        result['cameras'].sort(key=lambda camera:camera['id'])
         return result
 
     def update_metadata(self,config):

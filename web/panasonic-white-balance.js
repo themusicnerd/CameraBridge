@@ -1,5 +1,5 @@
 function cameraWhiteBalanceControls(camera) {
-    const section=document.createElement('section');section.className='white-balance-controls';
+    const section=document.createElement('div');section.className='white-balance-controls';
     section.hidden=camera.driver!=='panasonic';
     section.innerHTML='<h3>White Balance</h3><div class="fields"><label>White Balance Mode<select data-wb-mode disabled></select></label><label>Colour Temperature (K)<input data-wb-kelvin type="number" inputmode="numeric" step="10" disabled></label><p class="feedback wide" data-wb-feedback role="status">Waiting For Camera Feedback</p></div><p class="hint" data-wb-hint>Select VAR To Set Kelvin. The Camera Uses Its Nearest Supported Value.</p>';
     async function write(parameter,value){

@@ -1,6 +1,9 @@
-# CameraBridge 0.3.0rc26
+# CameraBridge 0.3.0rc27
 
 This development release adds Panasonic VAR white balance and Kelvin entry.
+Use the up and down arrow buttons in each web camera row to change its display order.
+The order is saved automatically. Camera numbers and switcher assignments stay with each camera.
+Reordering does not restart camera control connections.
 Use Paint in CameraBridge.grid, or expand the camera row in the web setup page.
 Select VAR / Kelvin, wait for confirmed feedback, then enter the colour temperature.
 
