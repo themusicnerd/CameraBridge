@@ -58,6 +58,7 @@ jobs:
         run: python -m pip install -r requirements-video.txt
       - name: Test source and documents
         run: |
+          python -c "from pathlib import Path; assert not any(Path(p).exists() for p in ('deployment/touchdrive', 'deployment/unreal', 'docs/touchdrive-installation.md')), 'Private project files must not enter public release packages'"
           python dashboard/build_panels.py
           python -m unittest discover -v
           python tools/check_docs.py
